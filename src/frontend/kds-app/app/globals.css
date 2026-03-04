@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-900 text-white;
+}
+
+@layer utilities {
+  .order-card {
+    @apply bg-gray-800 rounded-xl shadow-lg p-6 border-l-4 transition-all;
+  }
+  
+  .order-new {
+    @apply border-yellow-500 animate-pulse;
+  }
+  
+  .order-preparing {
+    @apply border-blue-500;
+  }
+  
+  .order-ready {
+    @apply border-green-500;
+  }
+  
+  .order-urgent {
+    @apply border-red-500 bg-red-900/20;
+  }
+}

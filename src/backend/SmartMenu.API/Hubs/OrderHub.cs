@@ -1,0 +1,31 @@
+using Microsoft.AspNetCore.SignalR;
+
+namespace SmartMenu.API.Hubs;
+
+public class OrderHub : Hub
+{
+    public async Task NotifyNewOrder(int orderId, int tableId)
+    {
+        await Clients.All.SendAsync("NewOrderCreated", new { orderId, tableId, timestamp = DateTime.UtcNow });
+    }
+
+    public async Task NotifyOrderStatusChanged(int orderId, string newStatus)
+    {
+        await Clients.All.SendAsync("OrderStatusChanged", new { orderId, status = newStatus, timestamp = DateTime.UtcNow });
+    }
+
+    public async Task NotifyOrderCompleted(int orderId)
+    {
+        await Clients.All.SendAsync("OrderCompleted", new { orderId, timestamp = DateTime.UtcNow });
+    }
+
+    public async Task JoinOrderGroup(int orderId)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"order_{orderId}");
+    }
+
+    public async Task LeaveOrderGroup(int orderId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"order_{orderId}");
+    }
+}

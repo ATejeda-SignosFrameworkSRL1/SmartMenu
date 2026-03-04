@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+@layer utilities {
+  .table-card {
+    @apply bg-white rounded-xl shadow-md p-6 border-2 transition-all cursor-pointer;
+  }
+  
+  .table-available {
+    @apply border-green-500 hover:shadow-lg;
+  }
+  
+  .table-occupied {
+    @apply border-orange-500 hover:shadow-lg;
+  }
+  
+  .table-reserved {
+    @apply border-blue-500 hover:shadow-lg;
+  }
+}

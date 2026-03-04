@@ -1,0 +1,79 @@
+namespace SmartMenu.Application.DTOs;
+
+// Request DTOs
+public record CreateOrderDto
+{
+    public int TableId { get; init; }
+    public string SessionId { get; init; } = string.Empty;
+    public string? CustomerName { get; init; }
+    public string? SpecialInstructions { get; init; }
+    public List<CreateOrderItemDto> Items { get; init; } = new();
+}
+
+public record CreateOrderItemDto
+{
+    public int DishId { get; init; }
+    public int Quantity { get; init; }
+    public decimal UnitPrice { get; init; }
+    public string? Notes { get; init; }
+    
+    // Customer preferences
+    public string? DrinkTiming { get; init; }
+    public bool? WithAlcohol { get; init; }
+    public string? MeatCooking { get; init; }
+    public string? SideDish { get; init; }
+    public string? Customizations { get; init; }
+    public string? Allergies { get; init; }
+}
+
+public record UpdateOrderStatusDto
+{
+    public string NewStatus { get; init; } = string.Empty;
+}
+
+// Response DTOs
+public record OrderDto
+{
+    public int Id { get; init; }
+    public string OrderNumber { get; init; } = string.Empty;
+    public int TableId { get; init; }
+    public string TableNumber { get; init; } = string.Empty;
+    public string? CustomerName { get; init; }
+    public decimal Subtotal { get; init; }
+    public decimal Tax { get; init; }
+    public decimal Total { get; init; }
+    public string Status { get; init; } = string.Empty;
+    public bool KitchenPreparing { get; init; }
+    public bool KitchenReady { get; init; }
+    public bool KitchenServed { get; init; }
+    public bool BarPreparing { get; init; }
+    public bool BarReady { get; init; }
+    public bool BarServed { get; init; }
+    public string? SpecialInstructions { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public List<OrderItemDto> Items { get; init; } = new();
+    /// <summary>True si el mesero ya registró el cobro de esta orden (solo para órdenes Completed).</summary>
+    public bool PaymentCollectedByWaiter { get; init; }
+    /// <summary>Propina del pago (solo para órdenes Completed con pago creado por el cliente).</summary>
+    public decimal PaymentTipAmount { get; init; }
+}
+
+public record OrderItemDto
+{
+    public int Id { get; init; }
+    public int DishId { get; init; }
+    public string DishName { get; init; } = string.Empty;
+    public string? CategoryName { get; init; }
+    public int Quantity { get; init; }
+    public decimal UnitPrice { get; init; }
+    public decimal Subtotal { get; init; }
+    public string? Notes { get; init; }
+    public string? Customizations { get; init; }
+    public string? Allergies { get; init; }
+    public string? SideDish { get; init; }
+    /// <summary>Preferencia (ej. término de carne) en texto.</summary>
+    public string? PreferenceText { get; init; }
+    public bool IsReady { get; init; }
+    public int? KitchenZoneId { get; init; }
+    public string? KitchenZoneName { get; init; }
+}

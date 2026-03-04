@@ -1,0 +1,24 @@
+using SmartMenu.Application.DTOs;
+
+namespace SmartMenu.Application.Services;
+
+public interface IOrderService
+{
+    Task<OrderDto> CreateOrderAsync(CreateOrderDto dto);
+    Task<OrderDto?> GetOrderByIdAsync(int id);
+    Task<IEnumerable<OrderDto>> GetActiveOrdersAsync();
+    Task<IEnumerable<OrderDto>> GetAllOrdersAsync();
+    Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus);
+    Task MarkCustomerFinishedAsync(int orderId);
+    Task AssignWaiterAsync(int orderId, int waiterId);
+    Task UnassignWaiterAsync(int orderId);
+    Task<IEnumerable<OrderDto>> GetUnassignedOrdersAsync();
+    Task<IEnumerable<OrderDto>> GetOrdersByWaiterAsync(int waiterId);
+    Task<OrderDto> SetKitchenPreparingAsync(int orderId);
+    Task<OrderDto> SetKitchenReadyAsync(int orderId);
+    Task<OrderDto> SetBarPreparingAsync(int orderId);
+    Task<OrderDto> SetBarReadyAsync(int orderId);
+    Task<OrderDto> SetKitchenServedAsync(int orderId);
+    Task<OrderDto> SetBarServedAsync(int orderId);
+    Task MoveOrderToTableAsync(int orderId, int newTableId);
+}

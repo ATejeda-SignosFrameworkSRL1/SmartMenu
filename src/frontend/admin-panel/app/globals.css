@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Colores base - Guía de Colores Smart Menu */
+    --background: 0 0% 96%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    /* Primario: #8B0000 (vino/burgundy) */
+    --primary: 0 100% 27%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secundario: #2C2C2C (negro suave) */
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 92%;
+    --muted-foreground: 0 0% 45%;
+
+    /* Acento: #C9A24D (dorado) */
+    --accent: 41 54% 55%;
+    --accent-foreground: 0 0% 10%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 0 100% 27%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 10%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    /* Estados de mesa */
+    --table-available: 142 71% 45%;
+    --table-occupied: 0 100% 27%;
+    --table-cleaning: 45 93% 47%;
+    --table-reserved: 199 89% 48%;
+
+    /* Sidebar con colores del tema */
+    --sidebar-background: 0 0% 17%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 0 100% 27%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 25%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 0 0% 22%;
+    --sidebar-ring: 0 100% 27%;
+
+    /* Gradientes con colores del tema */
+    --gradient-warm: linear-gradient(135deg, hsl(0 100% 27%) 0%, hsl(0 80% 35%) 100%);
+    --gradient-dark: linear-gradient(180deg, hsl(0 0% 17%) 0%, hsl(0 0% 10%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 98%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(41 54% 55%) 0%, hsl(41 60% 62%) 100%);
+  }
+
+  .dark {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 96%;
+
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 0 0% 15%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 0 100% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 41 54% 60%;
+    --accent-foreground: 0 0% 10%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --ring: 0 100% 35%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-warm {
+    background: var(--gradient-warm);
+  }
+  
+  .gradient-dark {
+    background: var(--gradient-dark);
+  }
+
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .gradient-gold {
+    background: var(--gradient-gold);
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-md bg-white/80 border border-white/20;
+  }
+
+  .kds-card {
+    @apply rounded-xl border-2 p-4 transition-all duration-300;
+  }
+
+  .kds-card-normal {
+    @apply border-success/50 bg-success/5;
+  }
+
+  .kds-card-warning {
+    @apply border-warning/50 bg-warning/5;
+  }
+
+  .kds-card-urgent {
+    @apply border-destructive/50 bg-destructive/5 animate-pulse;
+  }
+
+  .table-marker {
+    @apply rounded-lg p-3 text-center font-semibold transition-all duration-300 cursor-pointer hover:scale-105;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  /* Estados de mesa */
+  .table-available {
+    @apply bg-success/10 border-success/30 text-success;
+  }
+
+  .table-occupied {
+    @apply bg-primary/10 border-primary/30 text-primary;
+  }
+
+  .table-cleaning {
+    @apply bg-warning/10 border-warning/30 text-warning;
+  }
+
+  .table-reserved {
+    @apply bg-info/10 border-info/30 text-info;
+  }
+}

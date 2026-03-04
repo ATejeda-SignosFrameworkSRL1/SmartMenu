@@ -1,0 +1,14 @@
+**/.git
+**/.gitignore
+**/.vscode
+**/.idea
+**/node_modules
+**/npm-debug.log
+**/obj
+**/bin
+**/.next
+**/out
+**/dist
+**/coverage
+**/*.md
+!README.md

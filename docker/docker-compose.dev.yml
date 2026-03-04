@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # SQL Server - Solo para desarrollo
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: smartmenu-sqlserver-dev
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: YourPassword123!
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-dev-data:/var/opt/mssql
+    networks:
+      - smartmenu-dev-network
+
+  # Redis - Solo para desarrollo
+  redis:
+    image: redis:7-alpine
+    container_name: smartmenu-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - smartmenu-dev-network
+    command: redis-server --appendonly yes
+
+networks:
+  smartmenu-dev-network:
+    driver: bridge
+
+volumes:
+  sqlserver-dev-data:
+  redis-dev-data:

@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # SQL Server
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: smartmenu-sqlserver
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: YourPassword123!
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - smartmenu-network
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourPassword123! -Q "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: smartmenu-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - smartmenu-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ../src/backend
+      dockerfile: ../../docker/Dockerfile.backend
+    container_name: smartmenu-backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=SmartMenuDB;User Id=sa;Password=YourPassword123!;TrustServerCertificate=True;
+      - ConnectionStrings__Redis=redis:6379
+      - JwtSettings__Secret=your-super-secret-key-minimum-32-characters-long-for-jwt-token-generation
+      - JwtSettings__Issuer=SmartMenuAPI
+      - JwtSettings__Audience=SmartMenuClient
+      - JwtSettings__ExpirationMinutes=60
+    ports:
+      - "5000:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - smartmenu-network
+    restart: unless-stopped
+
+  # Frontend - Client App
+  client-app:
+    build:
+      context: ../src/frontend/client-app
+      dockerfile: ../../../docker/Dockerfile.frontend
+    container_name: smartmenu-client-app
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+      - NEXT_PUBLIC_WS_URL=http://localhost:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - smartmenu-network
+    restart: unless-stopped
+
+networks:
+  smartmenu-network:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
+  redis-data:
