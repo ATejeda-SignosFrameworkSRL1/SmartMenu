@@ -21,4 +21,5 @@ public interface IOrderService
     Task<OrderDto> SetKitchenServedAsync(int orderId);
     Task<OrderDto> SetBarServedAsync(int orderId);
     Task MoveOrderToTableAsync(int orderId, int newTableId);
+    Task<OrderDto> AddItemsToOrderAsync(int orderId, List<CreateOrderItemDto> items);
 }

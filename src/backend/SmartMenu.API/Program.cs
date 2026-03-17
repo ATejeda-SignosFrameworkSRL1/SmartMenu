@@ -13,6 +13,7 @@ var devCertPath = Path.Combine(Directory.GetCurrentDirectory(), "dev-cert.pfx");
 const string devCertPassword = "SmartMenuDev";
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
+    serverOptions.Limits.MaxRequestBodySize = 20_971_520; // 20 MB
     serverOptions.ListenAnyIP(5041); // HTTP
     serverOptions.ListenAnyIP(5042, listenOptions =>
     {
@@ -21,6 +22,13 @@ builder.WebHost.ConfigureKestrel(serverOptions =>
         else
             listenOptions.UseHttps(); // certificado .NET dev (solo localhost)
     });
+});
+
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 20_971_520; // 20 MB
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartHeadersLengthLimit = int.MaxValue;
 });
 
 // ===== DATABASE =====
@@ -84,7 +92,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "https://172.31.98.64:3000" })
+        policy.WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "https://172.31.98.88:3000" })
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Para SignalR
@@ -169,7 +177,12 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
+// En producción redirige HTTP → HTTPS. En desarrollo no, porque el proxy
+// de Next.js envía HTTP a localhost:5041 y la redirección rompe SignalR.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 var wwwRoot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 if (!Directory.Exists(wwwRoot))
@@ -187,6 +200,7 @@ app.MapControllers();
 app.MapHub<SmartMenu.API.Hubs.OrderHub>("/hubs/orders");
 app.MapHub<SmartMenu.API.Hubs.KitchenHub>("/hubs/kitchen");
 app.MapHub<SmartMenu.API.Hubs.TableHub>("/hubs/tables");
+app.MapHub<SmartMenu.API.Hubs.ReservationHub>("/hubs/reservations");
 
 // Health Check
 app.MapGet("/health", () => Results.Ok(new
@@ -210,6 +224,13 @@ if (app.Environment.IsDevelopment())
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureZoneTypeColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureOrderServedColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureKitchenZoneColumnsAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCourseTimingColumnsAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBarUserAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureAdvanceBlockAndSourceColumnsAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFiscalReceiptColumnsAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishImagesTableAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureWaiterShiftsTableAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureReservationPreOrderTablesAsync(context);
 }
 
 app.Run();

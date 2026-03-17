@@ -28,4 +28,27 @@ public class OrderHub : Hub
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"order_{orderId}");
     }
+
+    public async Task JoinWaiterGroup(int waiterId)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"waiter_{waiterId}");
+    }
+
+    public async Task LeaveWaiterGroup(int waiterId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"waiter_{waiterId}");
+    }
+
+    /// <summary>
+    /// El panel de admin se une a este grupo para recibir solicitudes de mesa en tiempo real.
+    /// </summary>
+    public async Task JoinAdminGroup()
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, "admin");
+    }
+
+    public async Task LeaveAdminGroup()
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, "admin");
+    }
 }

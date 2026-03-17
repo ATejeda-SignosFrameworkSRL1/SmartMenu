@@ -3,140 +3,135 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { useState } from 'react';
-import { CreditCard, DollarSign, Smartphone, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CreditCard, DollarSign, Smartphone, CheckCircle, ArrowLeftRight, Clock, FileText, Building2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const paymentMethods = [
-  { id: 'Cash', name: 'Efectivo', icon: DollarSign },
-  { id: 'Card', name: 'Tarjeta', icon: CreditCard },
+  { id: 'Cash',     name: 'Efectivo',      icon: DollarSign },
+  { id: 'Card',     name: 'Tarjeta',       icon: CreditCard },
   { id: 'Transfer', name: 'Transferencia', icon: Smartphone },
+  { id: 'Mixed',    name: 'Mixto',         icon: ArrowLeftRight },
 ];
 
 export default function PaymentPage() {
-  const params = useParams();
-  const router = useRouter();
+  const params  = useParams();
+  const router  = useRouter();
   const orderId = params?.id ? parseInt(params.id as string) : null;
-  const [selectedMethod, setSelectedMethod] = useState('Cash');
-  const [tipPercentage, setTipPercentage] = useState(0);
-  const [customTip, setCustomTip] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [splitType, setSplitType] = useState<'None' | 'ByTime' | 'ByComensal' | 'Proportional' | 'ByCategory'>('None');
-  const [splitParts, setSplitParts] = useState(2);
-  const [byTimePart1, setByTimePart1] = useState('');
-  const [byTimePart2, setByTimePart2] = useState('');
-  const [proportionalAssignments, setProportionalAssignments] = useState<Record<number, number>>({});
-  const [payAsPerson, setPayAsPerson] = useState(1);
-  const [payCategory, setPayCategory] = useState('');
-  const [byTimePayPart, setByTimePayPart] = useState<1 | 2>(1);
+
+  const [selectedMethod,  setSelectedMethod]  = useState('Cash');
+  const [tipPercentage,   setTipPercentage]   = useState(0);
+  const [customTip,       setCustomTip]       = useState('');
+  const [processing,      setProcessing]      = useState(false);
+  const [stage, setStage] = useState<'idle' | 'waiting' | 'paid'>('idle');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Comprobante fiscal
+  const [needsReceipt,    setNeedsReceipt]    = useState(false);
+  const [rnc,             setRnc]             = useState('');
+  const [rncBusiness,     setRncBusiness]     = useState('');
+  const [rncValidating,   setRncValidating]   = useState(false);
+  const [rncError,        setRncError]        = useState('');
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['order', orderId],
-    queryFn: () => apiClient.getOrder(orderId!),
-    enabled: !!orderId,
+    queryFn:  () => apiClient.getOrder(orderId!),
+    enabled:  !!orderId,
   });
 
-  const order = orderData?.data;
+  // Al abrir la página, la mesa pasa a "Por Cobrar"
+  useEffect(() => {
+    if (!orderId) return;
+    apiClient.requestBilling(orderId).catch(() => {});
+  }, [orderId]);
 
-  // API puede devolver PascalCase o camelCase; soportar ambos y evitar undefined
-  const orderTotal = order ? (Number((order as any).total) || Number((order as any).Total) || 0) : 0;
-  const orderSubtotal = order ? (Number((order as any).subtotal) || Number((order as any).Subtotal) || Number((order as any).subTotal) || 0) : 0;
-  const orderTax = order ? (Number((order as any).tax) || Number((order as any).Tax) || Number((order as any).taxAmount) || 0) : 0;
+  // Polling: revisar cada 3s si la orden ya fue completada por el mesero
+  useEffect(() => {
+    if (stage !== 'waiting' || !orderId) return;
+    const check = async () => {
+      try {
+        const res = await apiClient.getOrder(orderId);
+        const status: string = (res.data as any)?.status ?? (res.data as any)?.Status ?? '';
+        if (status === 'Completed') {
+          setStage('paid');
+          if (pollRef.current) clearInterval(pollRef.current);
+          localStorage.removeItem('current_order_id');
+          setTimeout(() => router.push('/menu'), 4000);
+        }
+      } catch { /* ignorar errores de red */ }
+    };
+    pollRef.current = setInterval(check, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [stage, orderId, router]);
 
-  const orderItems = order?.items ?? [];
-  const categoryTotals: Record<string, number> = {};
-  orderItems.forEach((item: any) => {
-    const cat = item.categoryName ?? item.CategoryName ?? 'Otros';
-    const sub = Number(item.subtotal ?? item.Subtotal ?? 0);
-    categoryTotals[cat] = (categoryTotals[cat] ?? 0) + sub;
-  });
-  const taxRate = orderSubtotal > 0 ? orderTax / orderSubtotal : 0.18;
-  Object.keys(categoryTotals).forEach(cat => {
-    const subtotalCat = categoryTotals[cat];
-    categoryTotals[cat] = subtotalCat + subtotalCat * taxRate;
-  });
+  const order       = orderData?.data;
+  const orderTotal    = order ? (Number((order as any).total)    || Number((order as any).Total)    || 0) : 0;
+  const orderSubtotal = order ? (Number((order as any).subtotal) || Number((order as any).Subtotal) || 0) : 0;
+  const orderTax      = order ? (Number((order as any).tax)      || Number((order as any).Tax)      || 0) : 0;
 
-  let myPortion = orderTotal;
-  if (splitType === 'ByComensal' && splitParts > 0) myPortion = orderTotal / splitParts;
-  else if (splitType === 'ByTime') {
-    const p1 = parseFloat(byTimePart1) || 0;
-    const p2 = parseFloat(byTimePart2) || 0;
-    myPortion = byTimePayPart === 1 ? p1 : p2;
-    if (p1 + p2 <= 0) myPortion = orderTotal;
-  } else if (splitType === 'Proportional' && splitParts > 0) {
-    const perPerson: Record<number, number> = {};
-    for (let i = 1; i <= splitParts; i++) perPerson[i] = 0;
-    orderItems.forEach((item: any) => {
-      const sub = Number(item.subtotal ?? item.Subtotal ?? 0);
-      const person = proportionalAssignments[item.id ?? item.Id] ?? 1;
-      perPerson[person] = (perPerson[person] ?? 0) + sub;
-    });
-    const subtotalPerson = perPerson[payAsPerson] ?? 0;
-    myPortion = subtotalPerson + subtotalPerson * taxRate;
-  } else if (splitType === 'ByCategory' && payCategory) {
-    myPortion = categoryTotals[payCategory] ?? 0;
-  }
+  const activeTipAmount = () => {
+    if (tipPercentage > 0) return orderTotal * (tipPercentage / 100);
+    if (customTip && parseFloat(customTip) > 0) return parseFloat(customTip);
+    return 0;
+  };
+  const totalWithTip = () => orderTotal + activeTipAmount();
 
-  const calculateTotal = () => {
-    if (!order || orderTotal <= 0) return myPortion;
-    let tipAmount = 0;
-    const base = myPortion;
-    if (tipPercentage > 0) {
-      tipAmount = base * (tipPercentage / 100);
-    } else if (customTip && parseFloat(customTip) > 0) {
-      tipAmount = parseFloat(customTip);
+  // Validar RNC contra la DGII
+  const validateRnc = async () => {
+    const cleaned = rnc.replace(/-/g, '').trim();
+    if (cleaned.length < 9) { setRncError('El RNC debe tener al menos 9 dígitos'); return; }
+    setRncValidating(true);
+    setRncError('');
+    setRncBusiness('');
+    try {
+      const res = await apiClient.validateRnc(cleaned);
+      const name: string = (res.data as any)?.businessName ?? (res.data as any)?.nombre ?? '';
+      if (!name) { setRncError('RNC no encontrado'); return; }
+      setRncBusiness(name);
+      toast.success(`RNC válido: ${name}`);
+    } catch {
+      setRncError('RNC no encontrado en la DGII');
+    } finally {
+      setRncValidating(false);
     }
-    return base + tipAmount;
   };
 
-  const handlePayment = async () => {
+  const handleRequestBill = async () => {
     if (!order || orderTotal <= 0) return;
+
+    // Validar: si pide comprobante, el RNC debe estar validado
+    if (needsReceipt && !rncBusiness) {
+      toast.error('Valida el RNC antes de continuar');
+      return;
+    }
 
     setProcessing(true);
     try {
-      const amountToPay = myPortion;
-      let tipAmount = 0;
-      let tipPct = 0;
+      const tipAmt = activeTipAmount();
+      const tipPct = tipPercentage > 0
+        ? tipPercentage
+        : (customTip && orderTotal > 0 ? (parseFloat(customTip) / orderTotal) * 100 : 0);
 
-      if (tipPercentage > 0) {
-        tipPct = tipPercentage;
-        tipAmount = amountToPay * (tipPercentage / 100);
-      } else if (customTip && parseFloat(customTip) > 0) {
-        tipAmount = parseFloat(customTip);
-        tipPct = amountToPay > 0 ? (tipAmount / amountToPay) * 100 : 0;
-      }
-
-      await apiClient.createPayment({
-        orderId: (order as any).id ?? (order as any).Id,
-        paymentMethod: selectedMethod,
-        amount: amountToPay,
-        tipAmount,
-        tipPercentage: tipPct,
-        billSplitType: splitType === 'None' ? undefined : splitType,
-        splitPartIndex: splitType === 'ByComensal' ? splitParts : splitType === 'ByTime' ? 2 : undefined,
+      await apiClient.requestBilling(orderId!, {
+        paymentMethod:         selectedMethod,
+        tipPercentage:         tipPct,
+        tipAmount:             tipAmt,
+        requiresFiscalReceipt: needsReceipt,
+        rnc:                   needsReceipt ? rnc.replace(/-/g, '').trim() : undefined,
+        businessName:          needsReceipt ? rncBusiness : undefined,
       });
 
-      setCompleted(true);
-      toast.success('¡Pago procesado exitosamente!');
-
-      // Notificar al mesero si es tarjeta
-      if (selectedMethod === 'Card') {
-        toast('Mesero notificado para recoger la tarjeta', { icon: '📱' });
-      }
-
-      // Redirigir al menú después de 3 segundos
-      setTimeout(() => {
-        router.push('/menu');
-      }, 3000);
+      setStage('waiting');
+      toast.success('¡Solicitud enviada! El mesero procesará tu pago.');
     } catch (error: any) {
-      const msg = error?.response?.data?.error ?? error?.message ?? 'Error al procesar pago';
+      const msg = error?.response?.data?.error ?? error?.message ?? 'Error al solicitar cuenta';
       toast.error(msg);
     } finally {
       setProcessing(false);
     }
   };
 
+  /* ── cargando ── */
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center">
@@ -150,10 +145,7 @@ export default function PaymentPage() {
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
           <p className="text-xl text-gray-700 mb-4">Orden no encontrada</p>
-          <button
-            onClick={() => router.push('/menu')}
-            className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
+          <button onClick={() => router.push('/menu')} className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
             Volver al Menú
           </button>
         </div>
@@ -161,298 +153,255 @@ export default function PaymentPage() {
     );
   }
 
-  if (completed) {
+  /* ── pago confirmado ── */
+  if (stage === 'paid') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="mb-6">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-12 h-12 text-green-600" />
+          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-14 h-14 text-green-600" />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">¡Pago Completado!</h1>
+          <p className="text-gray-600 mb-6">Gracias por tu preferencia</p>
+          <div className="bg-gray-50 rounded-xl p-5 mb-6 space-y-3 text-left">
+            <div className="flex justify-between text-gray-700">
+              <span>Orden</span>
+              <span className="font-bold">#{(order as any).orderNumber ?? (order as any).OrderNumber}</span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">¡Pago Exitoso!</h1>
-            <p className="text-gray-600">Gracias por tu preferencia</p>
+            <div className="flex justify-between text-gray-700">
+              <span>Total</span>
+              <span className="font-bold text-primary-600">RD$ {orderTotal.toFixed(2)}</span>
+            </div>
           </div>
-          <div className="bg-gray-50 rounded-lg p-6 mb-6">
-            <p className="text-sm text-gray-600 mb-1">Orden</p>
-            <p className="text-xl font-bold text-gray-900 mb-4">#{(order as any).orderNumber ?? (order as any).OrderNumber}</p>
-            <p className="text-sm text-gray-600 mb-1">Total pagado</p>
-            <p className="text-3xl font-bold text-primary-600">
-              RD$ {orderTotal.toFixed(2)}
-            </p>
-          </div>
-          <p className="text-sm text-gray-500">Redirigiendo al menú...</p>
+          <p className="text-sm text-gray-400 animate-pulse">Volviendo al menú...</p>
         </div>
       </div>
     );
   }
 
+  /* ── esperando al mesero ── */
+  if (stage === 'waiting') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Clock className="w-11 h-11 text-amber-500 animate-pulse" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Solicitud Enviada!</h1>
+          <p className="text-gray-600 mb-6">El mesero procesará tu pago en breve</p>
+          <div className="bg-gray-50 rounded-xl p-5 mb-6 space-y-3 text-left">
+            <div className="flex justify-between text-gray-700">
+              <span>Orden</span>
+              <span className="font-bold">#{(order as any).orderNumber ?? (order as any).OrderNumber}</span>
+            </div>
+            <div className="flex justify-between text-gray-700">
+              <span>Total</span>
+              <span className="font-bold text-primary-600">RD$ {orderTotal.toFixed(2)}</span>
+            </div>
+            {activeTipAmount() > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>Propina</span>
+                <span className="font-bold">RD$ {activeTipAmount().toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-gray-700">
+              <span>Método</span>
+              <span className="font-semibold">{paymentMethods.find(m => m.id === selectedMethod)?.name ?? selectedMethod}</span>
+            </div>
+            {needsReceipt && rncBusiness && (
+              <div className="flex justify-between text-indigo-700 pt-1 border-t border-gray-200">
+                <span>Comprobante</span>
+                <span className="font-semibold text-right text-sm">{rncBusiness}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            {[0, 150, 300].map(delay => (
+              <span key={delay} className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-3">Esperando confirmación del mesero...</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── pantalla principal ── */
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
+
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">
-            Solicitar Cuenta
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">Solicitar Cuenta</h1>
           <p className="text-gray-600 text-center">Orden #{(order as any).orderNumber ?? (order as any).OrderNumber}</p>
         </div>
 
-        {/* Order Summary */}
+        {/* Resumen */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Resumen</h2>
-          
           <div className="space-y-3 mb-6">
             {order.items?.map((item: any, idx: number) => {
-              const itemSub = Number(item.subtotal) ?? Number(item.Subtotal) ?? 0;
+              const sub = Number(item.subtotal ?? item.Subtotal ?? 0);
               return (
                 <div key={item.id ?? idx} className="flex justify-between text-gray-700">
                   <span>{item.quantity}x {item.dishName ?? item.DishName}</span>
-                  <span>RD$ {itemSub.toFixed(2)}</span>
+                  <span>RD$ {sub.toFixed(2)}</span>
                 </div>
               );
             })}
           </div>
-
           <div className="border-t-2 border-gray-200 pt-4 space-y-2">
-            <div className="flex justify-between text-gray-700">
-              <span>Subtotal</span>
-              <span>RD$ {orderSubtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-gray-700">
-              <span>ITBIS (18%)</span>
-              <span>RD$ {orderTax.toFixed(2)}</span>
-            </div>
+            <div className="flex justify-between text-gray-700"><span>Subtotal</span><span>RD$ {orderSubtotal.toFixed(2)}</span></div>
+            <div className="flex justify-between text-gray-700"><span>ITBIS (18%)</span><span>RD$ {orderTax.toFixed(2)}</span></div>
             <div className="flex justify-between text-xl font-bold text-gray-900 pt-2 border-t border-gray-200">
               <span>Total</span>
               <span className="text-primary-600">RD$ {orderTotal.toFixed(2)}</span>
             </div>
           </div>
-
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">División de cuenta</h3>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {[
-                { value: 'None', label: 'Cuenta única' },
-                { value: 'ByTime', label: 'Por tiempo' },
-                { value: 'ByComensal', label: 'Por comensal' },
-                { value: 'Proportional', label: 'Proporcional' },
-                { value: 'ByCategory', label: 'Por categoría' },
-              ].map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => { setSplitType(value as any); setSplitParts(2); setByTimePart1(''); setByTimePart2(''); setProportionalAssignments({}); setPayCategory(''); }}
-                  className={`px-3 py-2 rounded-lg border text-sm ${splitType === value ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-700'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {splitType === 'ByComensal' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <label className="text-sm text-gray-600">Entre</label>
-                <select value={splitParts} onChange={(e) => setSplitParts(parseInt(e.target.value, 10) || 2)} className="border rounded-lg px-3 py-2">
-                  {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} personas</option>)}
-                </select>
-                <span className="text-sm text-gray-600">→ Tu parte: <strong>RD$ {myPortion.toFixed(2)}</strong></span>
-              </div>
-            )}
-            {splitType === 'ByTime' && (
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600">Indica el monto de cada parte (deben sumar RD$ {orderTotal.toFixed(2)})</p>
-                <div className="flex gap-2 items-center flex-wrap">
-                  <input type="number" step="0.01" placeholder="Parte 1 (ej. primera ronda)" value={byTimePart1} onChange={(e) => { setByTimePart1(e.target.value); setByTimePart2((orderTotal - (parseFloat(e.target.value) || 0)).toFixed(2)); }} className="border rounded-lg px-3 py-2 w-40" />
-                  <input type="number" step="0.01" placeholder="Parte 2" value={byTimePart2} onChange={(e) => { setByTimePart2(e.target.value); setByTimePart1((orderTotal - (parseFloat(e.target.value) || 0)).toFixed(2)); }} className="border rounded-lg px-3 py-2 w-40" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Voy a pagar:</label>
-                  <select value={byTimePayPart} onChange={(e) => setByTimePayPart(parseInt(e.target.value, 10) as 1 | 2)} className="border rounded-lg px-3 py-2">
-                    <option value={1}>Parte 1 — RD$ {(parseFloat(byTimePart1) || 0).toFixed(2)}</option>
-                    <option value={2}>Parte 2 — RD$ {(parseFloat(byTimePart2) || 0).toFixed(2)}</option>
-                  </select>
-                </div>
-              </div>
-            )}
-            {splitType === 'Proportional' && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Entre</label>
-                  <select value={splitParts} onChange={(e) => { setSplitParts(parseInt(e.target.value, 10) || 2); setProportionalAssignments({}); }} className="border rounded-lg px-3 py-2">
-                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} personas</option>)}
-                  </select>
-                </div>
-                <p className="text-sm font-medium text-gray-700">Asigna cada ítem a quien lo consumió:</p>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {orderItems.map((item: any, idx: number) => {
-                    const id = item.id ?? item.Id ?? idx;
-                    return (
-                      <div key={id} className="flex justify-between items-center text-sm">
-                        <span className="truncate flex-1">{item.quantity}x {item.dishName ?? item.DishName}</span>
-                        <select value={proportionalAssignments[id] ?? 1} onChange={(e) => setProportionalAssignments(prev => ({ ...prev, [id]: parseInt(e.target.value, 10) }))} className="border rounded px-2 py-1 w-24">
-                          {Array.from({ length: splitParts }, (_, i) => i + 1).map((n) => <option key={n} value={n}>Persona {n}</option>)}
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Yo soy persona</label>
-                  <select value={payAsPerson} onChange={(e) => setPayAsPerson(parseInt(e.target.value, 10))} className="border rounded-lg px-3 py-2">
-                    {Array.from({ length: splitParts }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                  <span className="text-sm text-gray-600">→ Mi parte: <strong>RD$ {myPortion.toFixed(2)}</strong></span>
-                </div>
-              </div>
-            )}
-            {splitType === 'ByCategory' && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">Elige la categoría que vas a pagar:</p>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(categoryTotals).map(([cat, total]) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setPayCategory(cat)}
-                      className={`px-3 py-2 rounded-lg border text-sm ${payCategory === cat ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200'}`}
-                    >
-                      {cat}: RD$ {total.toFixed(2)}
-                    </button>
-                  ))}
-                </div>
-                {payCategory && <p className="text-sm text-gray-600">Tu parte (<strong>{payCategory}</strong>): <strong>RD$ {myPortion.toFixed(2)}</strong></p>}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Tip Section */}
+        {/* Propina */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">¿Deseas dejar propina?</h2>
-          
           <div className="grid grid-cols-4 gap-3 mb-4">
-            <button
-              onClick={() => { setTipPercentage(10); setCustomTip(''); }}
-              className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
-                tipPercentage === 10
-                  ? 'border-primary-600 bg-primary-50 text-primary-600'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              10%
-            </button>
-            <button
-              onClick={() => { setTipPercentage(15); setCustomTip(''); }}
-              className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
-                tipPercentage === 15
-                  ? 'border-primary-600 bg-primary-50 text-primary-600'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              15%
-            </button>
-            <button
-              onClick={() => { setTipPercentage(20); setCustomTip(''); }}
-              className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
-                tipPercentage === 20
-                  ? 'border-primary-600 bg-primary-50 text-primary-600'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              20%
-            </button>
-            <button
-              onClick={() => { setTipPercentage(0); setCustomTip(''); }}
-              className={`px-4 py-3 rounded-lg border-2 font-semibold transition-all ${
-                tipPercentage === 0 && !customTip
-                  ? 'border-primary-600 bg-primary-50 text-primary-600'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              Sin
-            </button>
+            {[{pct:10,label:'10%'},{pct:15,label:'15%'},{pct:20,label:'20%'},{pct:0,label:'Sin'}].map(({pct,label}) => (
+              <button key={label} onClick={() => { setTipPercentage(pct); setCustomTip(''); }}
+                className={`px-4 py-3 text-gray-900 rounded-lg border-2 font-semibold transition-all ${
+                  tipPercentage === pct && !customTip ? 'border-primary-600 bg-primary-50 text-primary-600' : 'border-gray-200 hover:border-gray-300'
+                }`}>
+                {label}
+              </button>
+            ))}
           </div>
-
-          <input
-            type="number"
-            placeholder="O ingresa un monto personalizado..."
-            value={customTip}
-            onChange={(e) => { setCustomTip(e.target.value); setTipPercentage(0); }}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary-600"
-          />
-
-          {(tipPercentage > 0 || customTip) && (
+          <input type="number" placeholder="O ingresa un monto personalizado..."
+            value={customTip} onChange={(e) => { setCustomTip(e.target.value); setTipPercentage(0); }}
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary-600" />
+          {activeTipAmount() > 0 && (
             <div className="mt-4 p-4 bg-green-50 rounded-lg">
               <div className="flex justify-between text-green-800 font-semibold">
-                <span>Propina:</span>
-                <span>RD$ {(
-                  tipPercentage > 0
-                    ? orderTotal * (tipPercentage / 100)
-                    : parseFloat(customTip || '0')
-                ).toFixed(2)}</span>
+                <span>Propina:</span><span>RD$ {activeTipAmount().toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-lg font-bold text-green-900 mt-2 pt-2 border-t border-green-200">
-                <span>Total con propina:</span>
-                <span>RD$ {calculateTotal().toFixed(2)}</span>
+                <span>Total con propina:</span><span>RD$ {totalWithTip().toFixed(2)}</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Payment Method */}
+        {/* Método de pago */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Método de Pago</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Método de Pago</h2>
+          <p className="text-sm text-gray-500 mb-4">El mesero realizará el cobro según el método que elijas</p>
+          <div className="grid grid-cols-2 gap-4">
             {paymentMethods.map((method) => {
               const Icon = method.icon;
               const isSelected = selectedMethod === method.id;
-
               return (
-                <button
-                  key={method.id}
-                  onClick={() => setSelectedMethod(method.id)}
-                  className={`p-6 rounded-xl border-2 transition-all ${
-                    isSelected
-                      ? 'border-primary-600 bg-primary-50 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
-                  }`}
-                >
-                  <Icon
-                    className={`w-12 h-12 mx-auto mb-3 ${
-                      isSelected ? 'text-primary-600' : 'text-gray-400'
-                    }`}
-                  />
-                  <p
-                    className={`font-semibold ${
-                      isSelected ? 'text-primary-600' : 'text-gray-700'
-                    }`}
-                  >
-                    {method.name}
-                  </p>
+                <button key={method.id} onClick={() => setSelectedMethod(method.id)}
+                  className={`p-5 rounded-xl border-2 transition-all ${isSelected ? 'border-primary-600 bg-primary-50 shadow-lg' : 'border-gray-200 hover:border-gray-300 hover:shadow-md'}`}>
+                  <Icon className={`w-10 h-10 mx-auto mb-2 ${isSelected ? 'text-primary-600' : 'text-gray-400'}`} />
+                  <p className={`font-semibold text-sm ${isSelected ? 'text-primary-600' : 'text-gray-700'}`}>{method.name}</p>
+                  {method.id === 'Mixed' && <p className="text-xs text-gray-500 mt-1">Efectivo + Tarjeta</p>}
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Comprobante fiscal */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <FileText className="w-6 h-6 text-gray-600" />
+              <h2 className="text-xl font-bold text-gray-900">Comprobante Fiscal</h2>
+            </div>
+            <span className="text-sm text-gray-500">Opcional</span>
+          </div>
+
+          <div className="flex gap-3 mb-4">
+            <button
+              onClick={() => { setNeedsReceipt(false); setRnc(''); setRncBusiness(''); setRncError(''); }}
+              className={`flex-1 py-3 rounded-xl border-2 font-semibold transition-all text-sm ${
+                !needsReceipt ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              No necesito
+            </button>
+            <button
+              onClick={() => setNeedsReceipt(true)}
+              className={`flex-1 py-3 rounded-xl border-2 font-semibold transition-all text-sm ${
+                needsReceipt ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              Sí, necesito comprobante
+            </button>
+          </div>
+
+          {needsReceipt && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">Ingresa el RNC de tu empresa para validarlo con la DGII</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Ej. 1-31-12345-6"
+                  value={rnc}
+                  onChange={(e) => { setRnc(e.target.value); setRncBusiness(''); setRncError(''); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') validateRnc(); }}
+                  maxLength={13}
+                  className={`flex-1 px-4 py-3 border-2 rounded-lg focus:outline-none text-gray-900 transition-colors ${
+                    rncBusiness ? 'border-green-500 bg-green-50' : rncError ? 'border-red-400' : 'border-gray-200 focus:border-primary-600'
+                  }`}
+                />
+                <button
+                  onClick={validateRnc}
+                  disabled={rncValidating || rnc.replace(/-/g,'').trim().length < 9}
+                  className="px-5 py-3 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+                >
+                  {rncValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {rncValidating ? 'Validando...' : 'Validar'}
+                </button>
+              </div>
+
+              {rncError && (
+                <p className="text-sm text-red-600 flex items-center gap-1">
+                  <span>⚠</span> {rncError}
+                </p>
+              )}
+
+              {rncBusiness && (
+                <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <Building2 className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-green-600 font-medium">Empresa verificada</p>
+                    <p className="text-green-800 font-bold">{rncBusiness}</p>
+                    <p className="text-xs text-green-600">RNC: {rnc}</p>
+                  </div>
+                  <CheckCircle className="w-5 h-5 text-green-500 ml-auto shrink-0" />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Acciones */}
         <div className="flex gap-4">
-          <button
-            onClick={() => router.back()}
-            className="flex-1 px-6 py-4 bg-white text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-lg"
-          >
+          <button onClick={() => router.back()}
+            className="flex-1 px-6 py-4 bg-white text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-lg">
             Cancelar
           </button>
           <button
-            onClick={handlePayment}
-            disabled={processing}
+            onClick={handleRequestBill}
+            disabled={processing || (needsReceipt && !rncBusiness)}
+            title={needsReceipt && !rncBusiness ? 'Valida el RNC primero' : ''}
             className="flex-1 px-6 py-4 bg-gradient-to-r from-primary-600 to-secondary-600 text-white rounded-xl font-semibold hover:from-primary-700 hover:to-secondary-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {processing ? 'Procesando...' : `Pagar RD$ ${orderTotal.toFixed(2)}`}
+            {processing ? 'Enviando...' : 'Solicitar Cuenta'}
           </button>
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          * El mesero procesará tu pago de acuerdo al método seleccionado
+          * El mesero se acercará para procesar tu pago
         </p>
       </div>
     </div>

@@ -7,6 +7,7 @@ import {
   OrderItem,
   TableStatus,
   OrderStatus,
+  OrderItemStatus,
   MenuItemStatus,
   UserRole
 } from '../types';
@@ -510,7 +511,7 @@ export function generateMockOrder(tableNumber: number): Order {
       quantity,
       unitPrice: item.price,
       totalPrice: item.price * quantity,
-      status: 'pending' as OrderStatus,
+      status: 'pending' as OrderItemStatus,
       createdAt: new Date(),
     };
   });

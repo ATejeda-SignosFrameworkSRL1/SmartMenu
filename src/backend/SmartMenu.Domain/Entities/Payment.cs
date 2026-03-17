@@ -19,6 +19,12 @@ public class Payment : BaseEntity
     public string? BillSplitType { get; set; } // None, ByTime, ByComensal, Proportional, ByCategory
     /// <summary>Índice de la parte (1-based) cuando hay división.</summary>
     public int? SplitPartIndex { get; set; }
+    /// <summary>Si el cliente solicita comprobante fiscal (NCF).</summary>
+    public bool RequiresFiscalReceipt { get; set; } = false;
+    /// <summary>RNC de la empresa (solo si RequiresFiscalReceipt).</summary>
+    public string? RNC { get; set; }
+    /// <summary>Nombre de la empresa obtenido con el RNC.</summary>
+    public string? BusinessName { get; set; }
     
     // Navigation properties
     public Order Order { get; set; } = null!;

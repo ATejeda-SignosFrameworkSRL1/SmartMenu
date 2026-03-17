@@ -1,2 +1,2 @@
 export { useTable } from './useTable';
-export { useMenu } from './useMenu';
+export { useMenu, useDishTags } from './useMenu';

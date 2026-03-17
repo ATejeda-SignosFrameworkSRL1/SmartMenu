@@ -41,6 +41,10 @@
     --radius: 0.75rem;
 
     /* Custom tokens */
+    --danger: 0 72% 51%;
+    --danger-foreground: 0 0% 100%;
+    --billing: 271 81% 56%;
+    --billing-foreground: 0 0% 100%;
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
     --warning: 45 93% 47%;

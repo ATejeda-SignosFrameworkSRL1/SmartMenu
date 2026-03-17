@@ -22,6 +22,8 @@ public class OrderItem : BaseEntity
     public string? Allergies { get; set; } // Customer allergies for this item
     /// <summary>Preferencia en texto (ej. "Término 3/4") enviada por el cliente.</summary>
     public string? PreferenceText { get; set; }
+    /// <summary>Curso en que se debe servir este ítem (heredado del plato o sobreescrito por el cliente).</summary>
+    public CourseTiming? CourseTiming { get; set; }
     
     // Navigation properties
     public Order Order { get; set; } = null!;

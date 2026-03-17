@@ -31,20 +31,49 @@ public class TableController : ControllerBase
     {
         try
         {
-            var tables = await _context.Tables
-                .Include(t => t.Zone)
-                .Select(t => new
-                {
-                    id = t.Id,
-                    tableNumber = t.TableNumber,
-                    capacity = t.Capacity,
-                    zoneName = t.Zone.Name,
-                    status = t.Status.ToString(),
-                    qrCode = t.QRCode
-                })
+            var now = DateTime.Now;
+            var reservedTableIds = await _context.TableReservations
+                .Where(r => !r.IsCancelled
+                         && r.IsConfirmed
+                         && r.ReservedUntil != null && r.ReservedUntil > now
+                         && r.ReservationDateTime <= now.AddMinutes(r.AdvanceBlockMinutes))
+                .Select(r => r.TableId)
+                .Distinct()
                 .ToListAsync();
 
-            return Ok(tables);
+            var tables = await _context.Tables
+                .Include(t => t.Zone)
+                .ToListAsync();
+
+            // Sincronizar status: si hay reserva activa y la mesa está Available, corregirla
+            bool changed = false;
+            foreach (var t in tables)
+            {
+                if (reservedTableIds.Contains(t.Id) && t.Status == TableStatus.Available)
+                {
+                    t.Status = TableStatus.Reserved;
+                    changed = true;
+                }
+                else if (!reservedTableIds.Contains(t.Id) && t.Status == TableStatus.Reserved)
+                {
+                    // No hay reserva activa pero está como Reserved → liberar
+                    t.Status = TableStatus.Available;
+                    changed = true;
+                }
+            }
+            if (changed) await _context.SaveChangesAsync();
+
+            var result = tables.Select(t => new
+            {
+                id = t.Id,
+                tableNumber = t.TableNumber,
+                capacity = t.Capacity,
+                zoneName = t.Zone?.Name,
+                status = t.Status.ToString(),
+                qrCode = t.QRCode
+            });
+
+            return Ok(result);
         }
         catch (Exception ex)
         {

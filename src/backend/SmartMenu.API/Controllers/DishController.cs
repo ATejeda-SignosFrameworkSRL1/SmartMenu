@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SmartMenu.Infrastructure.Data;
 using SmartMenu.Application.DTOs;
 using SmartMenu.Domain.Entities;
+using SmartMenu.Domain.Enums;
 
 namespace SmartMenu.API.Controllers;
 
@@ -25,6 +26,7 @@ public class DishController : ControllerBase
             .Include(d => d.KitchenZone)
             .Include(d => d.DishTags)
             .ThenInclude(dt => dt.DishTag)
+            .Include(d => d.Images)
             .AsQueryable();
         if (!all)
             query = query.Where(d => d.IsAvailable);
@@ -45,6 +47,7 @@ public class DishController : ControllerBase
             .Include(d => d.KitchenZone)
             .Include(d => d.DishTags)
             .ThenInclude(dt => dt.DishTag)
+            .Include(d => d.Images)
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (dish == null)
@@ -68,7 +71,8 @@ public class DishController : ControllerBase
             IsVegan = dto.IsVegan,
             IsGlutenFree = dto.IsGlutenFree,
             PreparationTimeMinutes = dto.PreparationTimeMinutes,
-            KitchenZoneId = dto.KitchenZoneId
+            KitchenZoneId = dto.KitchenZoneId,
+            DefaultCourse = dto.DefaultCourse
         };
 
         _context.Dishes.Add(dish);
@@ -89,6 +93,7 @@ public class DishController : ControllerBase
             .Include(d => d.KitchenZone)
             .Include(d => d.DishTags)
             .ThenInclude(dt => dt.DishTag)
+            .Include(d => d.Images)
             .FirstAsync(d => d.Id == dish.Id);
         return CreatedAtAction(nameof(GetDish), new { id = dish.Id }, MapToDishDto(created));
     }
@@ -110,6 +115,7 @@ public class DishController : ControllerBase
         dish.IsGlutenFree = dto.IsGlutenFree;
         dish.PreparationTimeMinutes = dto.PreparationTimeMinutes;
         dish.KitchenZoneId = dto.KitchenZoneId;
+        dish.DefaultCourse = dto.DefaultCourse;
 
         var newTagIds = dto.TagIds ?? new List<int>();
         var currentTagIds = dish.DishTags.Select(dt => dt.DishTagId).ToList();
@@ -152,6 +158,59 @@ public class DishController : ControllerBase
         return Ok(new { isAvailable = dish.IsAvailable });
     }
 
+    /// <summary>Add image to a dish</summary>
+    [HttpPost("{id}/images")]
+    public async Task<IActionResult> AddDishImage(int id, [FromBody] AddDishImageDto dto)
+    {
+        var dish = await _context.Dishes.Include(d => d.Images).FirstOrDefaultAsync(d => d.Id == id);
+        if (dish == null) return NotFound(new { message = "Dish not found" });
+
+        if (dto.IsMain)
+        {
+            foreach (var img in dish.Images) img.IsMain = false;
+            dish.ImageUrl = dto.ImageUrl;
+        }
+
+        var image = new DishImage
+        {
+            DishId = id,
+            ImageUrl = dto.ImageUrl,
+            DisplayOrder = dto.DisplayOrder,
+            IsMain = dto.IsMain
+        };
+        _context.DishImages.Add(image);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { id = image.Id, imageUrl = image.ImageUrl, isMain = image.IsMain });
+    }
+
+    /// <summary>Delete an image from a dish</summary>
+    [HttpDelete("{dishId}/images/{imageId}")]
+    public async Task<IActionResult> DeleteDishImage(int dishId, int imageId)
+    {
+        var image = await _context.DishImages.FirstOrDefaultAsync(i => i.Id == imageId && i.DishId == dishId);
+        if (image == null) return NotFound();
+
+        _context.DishImages.Remove(image);
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
+    /// <summary>Set main image</summary>
+    [HttpPut("{dishId}/images/{imageId}/set-main")]
+    public async Task<IActionResult> SetMainImage(int dishId, int imageId)
+    {
+        var dish = await _context.Dishes.Include(d => d.Images).FirstOrDefaultAsync(d => d.Id == dishId);
+        if (dish == null) return NotFound();
+
+        foreach (var img in dish.Images) img.IsMain = img.Id == imageId;
+        var mainImg = dish.Images.FirstOrDefault(i => i.Id == imageId);
+        if (mainImg != null) dish.ImageUrl = mainImg.ImageUrl;
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Main image updated" });
+    }
+
     private static DishDto MapToDishDto(Dish d)
     {
         return new DishDto
@@ -170,6 +229,7 @@ public class DishController : ControllerBase
             PreparationTimeMinutes = d.PreparationTimeMinutes,
             KitchenZoneId = d.KitchenZoneId,
             KitchenZoneName = d.KitchenZone?.Name,
+            DefaultCourse = d.DefaultCourse,
             Tags = (d.DishTags ?? new List<DishDishTag>())
                 .Select(dt => new DishTagDto
                 {
@@ -179,7 +239,24 @@ public class DishController : ControllerBase
                     Icon = dt.DishTag?.Icon ?? ""
                 })
                 .Where(t => t.Id != 0)
+                .ToList(),
+            Images = (d.Images ?? new List<DishImage>())
+                .OrderBy(i => i.DisplayOrder)
+                .Select(i => new DishImageDto
+                {
+                    Id = i.Id,
+                    ImageUrl = i.ImageUrl,
+                    DisplayOrder = i.DisplayOrder,
+                    IsMain = i.IsMain
+                })
                 .ToList()
         };
     }
+}
+
+public class AddDishImageDto
+{
+    public string ImageUrl { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; } = 0;
+    public bool IsMain { get; set; } = false;
 }

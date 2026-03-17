@@ -36,14 +36,14 @@ export default function LoginPage() {
 
       // Redirigir según el rol (mismo protocolo que la página: HTTPS en cel, HTTP en localhost)
       const role = user.role.toLowerCase();
-      const host = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}` : 'https://172.31.98.64';
+      const host = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}` : 'https://10.0.0.24';
 
       let redirectUrl = '';
       if (role === 'admin' || role === 'manager') {
         redirectUrl = `${host}:3001`;
-      } else if (role === 'chef' || role === 'kitchenstaff') {
+      } else if (role === 'chef' || role === 'kitchenstaff' || role === 'bartender') {
         redirectUrl = `${host}:3002`;
-      } else if (role === 'waiter' || role === 'bartender') {
+      } else if (role === 'waiter') {
         redirectUrl = `${host}:3003`;
       } else if (role === 'host' || role === 'hostess') {
         redirectUrl = `${host}:3004`;
@@ -73,7 +73,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50 flex items-center justify-center p-4">
+    <div suppressHydrationWarning className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo y Título */}
         <div className="text-center mb-8">
@@ -113,6 +113,8 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="tu-email@smartmenu.com"
                   required
+                  suppressHydrationWarning
+                  autoComplete="username"
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-gray-900 placeholder-gray-400"
                 />
               </div>
@@ -132,6 +134,8 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  suppressHydrationWarning
+                  autoComplete="current-password"
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-gray-900 placeholder-gray-400"
                 />
               </div>
@@ -172,8 +176,16 @@ export default function LoginPage() {
                 <span className="font-mono">chef@smartmenu.com / Chef123!</span>
               </div>
               <div className="flex justify-between">
+                <span>🍹 Bar:</span>
+                <span className="font-mono">bar@smartmenu.com / Bar123!</span>
+              </div>
+              <div className="flex justify-between">
                 <span>👔 Mesero:</span>
                 <span className="font-mono">waiter@smartmenu.com / Waiter123!</span>
+              </div>
+              <div className="flex justify-between">
+                <span>🚪 Host:</span>
+                <span className="font-mono">host@smartmenu.com / Host123!</span>
               </div>
               <div className="flex justify-between">
                 <span>💰 Cajero:</span>
@@ -189,7 +201,7 @@ export default function LoginPage() {
             ¿Eres cliente? Escanea el QR de tu mesa para ordenar.
           </p>
           <p className="text-xs text-gray-500">
-            Desde el celular (cámara): abre con <strong>https://</strong> (ej. <strong>https://</strong>172.31.98.54:3000). En la PC: API con <code className="bg-gray-100 px-1 rounded">dotnet run</code>, client y waiter con <code className="bg-gray-100 px-1 rounded">npm run dev:https</code>. Acepta el certificado en el navegador si lo pide.
+            Desde el celular (cámara): abre con <strong>https://</strong> (ej. <strong>https://</strong>10.0.0.24:3000). En la PC: API con <code className="bg-gray-100 px-1 rounded">dotnet run</code>, client y waiter con <code className="bg-gray-100 px-1 rounded">npm run dev:https</code>. Acepta el certificado en el navegador si lo pide.
           </p>
         </div>
       </div>

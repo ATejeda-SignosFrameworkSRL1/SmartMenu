@@ -16,6 +16,9 @@ export interface CartItem {
   sideDish?: string;
   drinkTiming?: string;
   withAlcohol?: boolean;
+  liga?: string;
+  /** 0=Entrada, 1=PlatoFuerte, 2=Postre */
+  courseTiming?: number;
 }
 
 interface CartState {
@@ -24,11 +27,14 @@ interface CartState {
   restaurantId: number | null;
   /** Nombre del comensal (se pide al entrar al menú tras escanear QR). */
   customerName: string | null;
+  /** Si se está agregando a una orden existente (ej. postres), guarda el orderId. */
+  addToOrderId: number | null;
 
   setTableId: (tableId: number) => void;
   setRestaurantId: (restaurantId: number) => void;
   setCustomerName: (name: string | null) => void;
-  
+  setAddToOrderId: (id: number | null) => void;
+
   addItem: (item: CartItem) => void;
   removeItem: (dishId: number) => void;
   updateQuantity: (dishId: number, quantity: number) => void;
@@ -48,10 +54,12 @@ export const useCartStore = create<CartState>()(
       tableId: null,
       restaurantId: null,
       customerName: null,
+      addToOrderId: null,
 
       setTableId: (id) => set({ tableId: id }),
       setRestaurantId: (id) => set({ restaurantId: id }),
       setCustomerName: (name) => set({ customerName: name }),
+      setAddToOrderId: (id) => set({ addToOrderId: id }),
 
       addItem: (newItem) =>
         set((state) => {
@@ -82,7 +90,7 @@ export const useCartStore = create<CartState>()(
           ),
         })),
 
-      clearCart: () => set({ items: [] }),
+      clearCart: () => set({ items: [], addToOrderId: null }),
 
       getSubtotal: () => {
         const { items } = get();

@@ -1,20 +1,23 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCartStore } from '@/lib/stores/cartStore';
 import { apiClient } from '@/lib/api';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Receipt } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useState } from 'react';
 
 export default function CartPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const {
     items,
     tableId,
     customerName,
+    addToOrderId: storeAddToOrderId,
     removeItem,
     updateQuantity,
     clearCart,
@@ -24,61 +27,82 @@ export default function CartPage() {
     getTotal,
   } = useCartStore();
 
+  // orderId puede venir por URL (?orderId=71) o por el store
+  const urlOrderId = searchParams?.get('orderId') ? parseInt(searchParams.get('orderId')!) : null;
+  const addToOrderId = urlOrderId ?? storeAddToOrderId;
+  const isAddingToOrder = !!addToOrderId;
+
   const [specialInstructions, setSpecialInstructions] = useState('');
 
+  // Mutación para orden nueva
   const createOrderMutation = useMutation({
     mutationFn: (orderData: unknown) => apiClient.createOrder(orderData),
     onSuccess: (response: any) => {
       const order = response?.data;
       const orderId = order?.id ?? order?.Id;
-      if (!orderId) {
-        toast.error('No se recibió el ID de la orden');
-        return;
-      }
+      if (!orderId) { toast.error('No se recibió el ID de la orden'); return; }
       toast.success('¡Orden creada exitosamente!');
+      localStorage.setItem('current_order_id', String(orderId));
       clearCart();
       router.push(`/order-status/${orderId}`);
     },
     onError: (error: any) => {
       const data = error?.response?.data;
-      const msg = data?.error ?? data?.message ?? (typeof data === 'string' ? data : 'Error al crear la orden');
-      toast.error(msg);
+      toast.error(data?.error ?? data?.message ?? 'Error al crear la orden');
     },
   });
 
-  const handleCheckout = () => {
-    // Usar tableId 1 por defecto si no hay mesa (para testing)
-    const finalTableId = tableId || 1;
+  // Mutación para agregar ítems a orden existente
+  const addItemsMutation = useMutation({
+    mutationFn: (items: any[]) => apiClient.addItemsToOrder(addToOrderId!, items),
+    onSuccess: (response: any) => {
+      toast.success('¡Ítems agregados a tu orden!');
+      // Actualizar el cache de React Query con la respuesta actualizada del backend
+      // (que ya tiene status='Confirmed'), evitando que order-status redirija a order-served
+      if (addToOrderId) {
+        queryClient.setQueryData(['order', addToOrderId], response);
+      }
+      clearCart();
+      router.push(`/order-status/${addToOrderId}`);
+    },
+    onError: (error: any) => {
+      const data = (error as any)?.response?.data;
+      toast.error(data?.error ?? data?.message ?? 'Error al agregar ítems');
+    },
+  });
 
-    if (items.length === 0) {
-      toast.error('El carrito está vacío');
+  const isPending = createOrderMutation.isPending || addItemsMutation.isPending;
+
+  const handleCheckout = () => {
+    if (items.length === 0) { toast.error('El carrito está vacío'); return; }
+
+    const mappedItems = items.map(item => ({
+      dishId: item.dishId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      notes: item.notes || item.specialInstructions || undefined,
+      drinkTiming: item.drinkTiming || undefined,
+      withAlcohol: item.withAlcohol !== undefined ? item.withAlcohol : undefined,
+      meatCooking: item.meatCooking || undefined,
+      sideDish: item.sideDish || undefined,
+      customizations: [item.customizations, item.liga ? `Liga: ${item.liga}` : ''].filter(Boolean).join(' | ') || undefined,
+      allergies: item.allergies || undefined,
+      courseTiming: item.courseTiming !== undefined ? item.courseTiming : undefined,
+    }));
+
+    if (isAddingToOrder) {
+      addItemsMutation.mutate(mappedItems);
       return;
     }
 
-    // Generar sessionId único
     const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    const orderData = {
-      tableId: finalTableId,
-      sessionId: sessionId,
+    createOrderMutation.mutate({
+      tableId: tableId || 1,
+      sessionId,
       customerName: customerName?.trim() || undefined,
       specialInstructions: specialInstructions || undefined,
-      items: items.map(item => ({
-        dishId: item.dishId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        notes: item.notes || item.specialInstructions || undefined,
-        // Preferencias del cliente
-        drinkTiming: (item as any).drinkTiming || undefined,
-        withAlcohol: (item as any).withAlcohol !== undefined ? (item as any).withAlcohol : undefined,
-        meatCooking: (item as any).meatCooking || undefined,
-        sideDish: (item as any).sideDish || undefined,
-        customizations: (item as any).customizations || undefined,
-        allergies: (item as any).allergies || undefined,
-      })),
-    };
-
-    createOrderMutation.mutate(orderData);
+      items: mappedItems,
+    });
   };
 
   if (items.length === 0) {
@@ -124,9 +148,11 @@ export default function CartPage() {
                 <ArrowLeft className="w-6 h-6" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Tu Orden</h1>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {isAddingToOrder ? '✨ Agregar a mi Orden' : 'Tu Orden'}
+                </h1>
                 <p className="text-sm text-gray-600">
-                  {items.length} {items.length === 1 ? 'plato' : 'platos'}
+                  {isAddingToOrder ? `Se sumará a tu orden existente` : `${items.length} ${items.length === 1 ? 'plato' : 'platos'}`}
                 </p>
               </div>
             </div>
@@ -170,14 +196,14 @@ export default function CartPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => updateQuantity(item.dishId, Math.max(1, item.quantity - 1))}
-                    className="p-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                    className="p-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-primary-600 hover:text-white transition-colors"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
-                  <span className="w-8 text-center font-semibold">{item.quantity}</span>
+                  <span className="w-8 text-center font-semibold text-gray-700">{item.quantity}</span>
                   <button
                     onClick={() => updateQuantity(item.dishId, item.quantity + 1)}
-                    className="p-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                    className="p-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-primary-600 hover:text-white transition-colors"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -293,13 +319,18 @@ export default function CartPage() {
         <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg">
           <button
             onClick={handleCheckout}
-            disabled={createOrderMutation.isPending}
+            disabled={isPending}
             className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
           >
-            {createOrderMutation.isPending ? (
+            {isPending ? (
               <>
                 <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Procesando...
+              </>
+            ) : isAddingToOrder ? (
+              <>
+                <Receipt className="w-6 h-6" />
+                Agregar a mi Orden
               </>
             ) : (
               <>

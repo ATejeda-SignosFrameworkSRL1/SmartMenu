@@ -29,6 +29,11 @@ public class ApplicationDbContext : DbContext
     public DbSet<TableTransferRequest> TableTransferRequests => Set<TableTransferRequest>();
     public DbSet<DishTag> DishTags => Set<DishTag>();
     public DbSet<DishDishTag> DishDishTags => Set<DishDishTag>();
+    public DbSet<DishImage> DishImages => Set<DishImage>();
+    public DbSet<WaiterShift> WaiterShifts => Set<WaiterShift>();
+    public DbSet<ReservationPreOrder> ReservationPreOrders => Set<ReservationPreOrder>();
+    public DbSet<PreOrderItem> PreOrderItems => Set<PreOrderItem>();
+    public DbSet<TableClaimRequest> TableClaimRequests => Set<TableClaimRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

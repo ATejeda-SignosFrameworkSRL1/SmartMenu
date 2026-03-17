@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle, UtensilsCrossed, Cake, CreditCard, Clock } from 'lucide-react';
+import { CheckCircle, UtensilsCrossed, Cake, CreditCard, Clock, GlassWater, UtensilsCrossed as MenuIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '@/lib/api';
 
@@ -14,20 +14,28 @@ export default function OrderServedPage() {
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', orderId],
     queryFn: () => apiClient.getOrder(parseInt(orderId)),
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: 10000,
   });
 
   const handleFinishedEating = async () => {
     try {
       await apiClient.markCustomerFinished(parseInt(orderId));
       toast.success('Mesero notificado');
-    } catch (error) {
+    } catch {
       toast.error('Error al notificar');
     }
   };
 
   const handleViewDesserts = () => {
-    router.push('/menu?category=Postres');
+    router.push(`/menu?category=Postres&addToOrder=${orderId}`);
+  };
+
+  const handleViewDrinks = () => {
+    router.push(`/menu?category=Bebidas&addToOrder=${orderId}`);
+  };
+
+  const handleBackToMenu = () => {
+    router.push(`/menu?addToOrder=${orderId}`);
   };
 
   const handleRequestAccount = () => {
@@ -136,6 +144,46 @@ export default function OrderServedPage() {
             </div>
           </button>
 
+          {/* Ver bebidas */}
+          <button
+            onClick={handleViewDrinks}
+            className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                <GlassWater className="w-8 h-8 text-blue-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="text-lg font-bold text-gray-900 mb-1">
+                  Ver bebidas
+                </h3>
+                <p className="text-sm text-gray-600">
+                  (Pedir algo para tomar)
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Volver al menú completo */}
+          <button
+            onClick={handleBackToMenu}
+            className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center group-hover:bg-amber-100 transition-colors">
+                <MenuIcon className="w-8 h-8 text-amber-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="text-lg font-bold text-gray-900 mb-1">
+                  Volver al menú
+                </h3>
+                <p className="text-sm text-gray-600">
+                  (Ver todo el menú)
+                </p>
+              </div>
+            </div>
+          </button>
+
           {/* Pagar cuenta */}
           <button
             onClick={handleRequestAccount}
@@ -157,21 +205,65 @@ export default function OrderServedPage() {
           </button>
         </div>
 
-        {/* Order Summary */}
+        {/* Resumen de Cobro */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mt-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Tu Orden</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-5 border-b pb-3">Resumen de Cobro</h3>
+
+          {/* Items */}
           <div className="space-y-2 mb-4">
             {order.data.items.map((item: any, idx: number) => (
               <div key={idx} className="flex justify-between text-sm">
                 <span className="text-gray-700">{item.quantity}x {item.dishName}</span>
-                <span className="font-medium text-gray-900">RD$ {item.subtotal.toFixed(2)}</span>
+                <span className="font-medium text-gray-900">RD$ {(item.subtotal ?? 0).toFixed(2)}</span>
               </div>
             ))}
           </div>
-          <div className="border-t pt-4">
-            <div className="flex justify-between text-lg font-bold">
-              <span>Total:</span>
-              <span className="text-primary-600">RD$ {order.data.total.toFixed(2)}</span>
+
+          <div className="border-t border-dashed border-gray-200 pt-4 space-y-3 text-sm">
+            {/* Subtotal */}
+            <div className="flex justify-between text-gray-700">
+              <span>Subtotal</span>
+              <span className="font-medium">RD$ {(order.data.subtotal ?? 0).toFixed(2)}</span>
+            </div>
+
+            {/* ITBIS 18% */}
+            <div className="flex justify-between text-gray-700">
+              <span className="flex items-center gap-1">
+                ITBIS
+                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">18%</span>
+              </span>
+              <span className="font-medium">RD$ {(order.data.tax ?? 0).toFixed(2)}</span>
+            </div>
+
+            {/* Propina legal 10% */}
+            <div className="flex justify-between text-gray-700">
+              <span className="flex items-center gap-1">
+                Propina legal
+                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">10%</span>
+              </span>
+              <span className="font-medium">RD$ {(order.data.tip ?? (order.data.subtotal ?? 0) * 0.10).toFixed(2)}</span>
+            </div>
+
+            {/* Descuento */}
+            {(order.data.discount ?? 0) > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span className="flex items-center gap-1">
+                  Descuento
+                  <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">–</span>
+                </span>
+                <span className="font-medium">– RD$ {(order.data.discount ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Total */}
+            <div className="border-t border-gray-200 pt-3">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-gray-900">Total a Pagar</span>
+                <span className="text-2xl font-bold text-primary-600">
+                  RD$ {(order.data.total ?? 0).toFixed(2)}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1 text-right">ITBIS (18%) y propina legal (10%) incluidos</p>
             </div>
           </div>
         </div>

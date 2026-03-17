@@ -44,15 +44,19 @@ public class OrderService : IOrderService
 
     public async Task<OrderDto> CreateOrderAsync(CreateOrderDto dto)
     {
-        // Validar que la mesa existe
-        var tableExists = await _context.Tables.AnyAsync(t => t.Id == dto.TableId);
-        if (!tableExists)
-            throw new ArgumentException($"La mesa con Id {dto.TableId} no existe.");
+        // Validar que la mesa existe (solo si se especificó mesa; null = para llevar/POS)
+        if (dto.TableId.HasValue)
+        {
+            var tableExists = await _context.Tables.AnyAsync(t => t.Id == dto.TableId.Value);
+            if (!tableExists)
+                throw new ArgumentException($"La mesa con Id {dto.TableId} no existe.");
+        }
 
-        // Validar que todos los platos existen
+        // Validar que todos los platos existen y cargar DefaultCourse
         var dishIds = dto.Items.Select(i => i.DishId).Distinct().ToList();
-        var existingDishIds = await _context.Dishes.Where(d => dishIds.Contains(d.Id)).Select(d => d.Id).ToListAsync();
-        var missing = dishIds.Except(existingDishIds).ToList();
+        var existingDishes = await _context.Dishes.Where(d => dishIds.Contains(d.Id)).ToListAsync();
+        var dishMap = existingDishes.ToDictionary(d => d.Id);
+        var missing = dishIds.Except(existingDishes.Select(d => d.Id)).ToList();
         if (missing.Count > 0)
             throw new ArgumentException($"Platos no encontrados: {string.Join(", ", missing)}");
 
@@ -61,17 +65,20 @@ public class OrderService : IOrderService
 
         // Calcular totales
         var subtotal = dto.Items.Sum(i => i.UnitPrice * i.Quantity);
-        var tax = subtotal * 0.18m; // 18% ITBIS
-        var total = subtotal + tax;
+        var tax = subtotal * 0.18m;  // 18% ITBIS
+        var tip = subtotal * 0.10m;  // 10% propina legal (Ley 13-07 RD)
+        var total = subtotal + tax + tip;
 
         var order = new Order
         {
             OrderNumber = orderNumber,
             TableId = dto.TableId,
+            IsPickup = !dto.TableId.HasValue,
             SessionId = dto.SessionId ?? string.Empty,
             CustomerName = dto.CustomerName,
             Subtotal = subtotal,
             Tax = tax,
+            Tip = tip,
             Total = total,
             Status = OrderStatus.Pending,
             SpecialInstructions = dto.SpecialInstructions,
@@ -87,7 +94,9 @@ public class OrderService : IOrderService
                 Allergies = i.Allergies,
                 SideDish = i.SideDish,
                 PreferenceText = i.MeatCooking,
-                IsReady = false
+                IsReady = false,
+                CourseTiming = i.CourseTiming
+                    ?? (dishMap.TryGetValue(i.DishId, out var dish) ? dish.DefaultCourse : SmartMenu.Domain.Enums.CourseTiming.PlatoFuerte)
             }).ToList()
         };
 
@@ -145,7 +154,11 @@ public class OrderService : IOrderService
 
     public async Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus)
     {
-        var order = await _orderRepository.GetByIdAsync(id);
+        var order = await _context.Orders
+            .Include(o => o.Table)
+            .Include(o => o.Items)
+                .ThenInclude(i => i.Dish)
+            .FirstOrDefaultAsync(o => o.Id == id);
         if (order == null)
         {
             throw new KeyNotFoundException($"Order {id} not found");
@@ -154,15 +167,28 @@ public class OrderService : IOrderService
         if (Enum.TryParse<OrderStatus>(newStatus, true, out var status))
         {
             order.Status = status;
-            
+
             if (status == OrderStatus.Completed)
             {
                 order.CompletedAt = DateTime.UtcNow;
+                // Liberar la mesa al completar el pedido (tras el pago)
+                if (order.Table != null)
+                {
+                    // Solo liberar si no hay otras órdenes activas en la misma mesa
+                    var hasOtherActiveOrders = await _context.Orders.AnyAsync(o =>
+                        o.TableId == order.TableId &&
+                        o.Id != order.Id &&
+                        o.Status != OrderStatus.Completed &&
+                        o.Status != OrderStatus.Cancelled);
+
+                    if (!hasOtherActiveOrders)
+                        order.Table.Status = TableStatus.Available;
+                }
             }
 
             await _orderRepository.UpdateAsync(order);
         }
-        
+
         var updatedOrder = await _orderRepository.GetByIdWithItemsAsync(id);
         return MapToOrderDto(updatedOrder!, false, 0);
     }
@@ -180,7 +206,9 @@ public class OrderService : IOrderService
 
     public async Task AssignWaiterAsync(int orderId, int waiterId)
     {
-        var order = await _orderRepository.GetByIdAsync(orderId);
+        var order = await _context.Orders
+            .Include(o => o.Table)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
         if (order == null)
             throw new KeyNotFoundException($"Orden {orderId} no encontrada.");
 
@@ -190,6 +218,13 @@ public class OrderService : IOrderService
 
         order.AssignedWaiterId = waiterId;
         order.Status = Domain.Enums.OrderStatus.Confirmed;
+
+        // Marcar la mesa como Occupied al confirmar el pedido
+        if (order.Table != null && order.Table.Status != TableStatus.Occupied)
+        {
+            order.Table.Status = TableStatus.Occupied;
+        }
+
         await _orderRepository.UpdateAsync(order);
     }
 
@@ -218,8 +253,9 @@ public class OrderService : IOrderService
             .Include(o => o.Table)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
-            .Where(o => o.AssignedWaiterId == null 
-                && (o.Status == Domain.Enums.OrderStatus.Pending || o.Status == Domain.Enums.OrderStatus.Confirmed))
+            .Where(o => o.AssignedWaiterId == null
+                && o.Status != Domain.Enums.OrderStatus.Completed
+                && o.Status != Domain.Enums.OrderStatus.Cancelled)
             .OrderBy(o => o.CreatedAt)
             .ToListAsync();
 
@@ -236,7 +272,7 @@ public class OrderService : IOrderService
                 .ThenInclude(i => i.Dish)
             .Where(o => o.AssignedWaiterId == waiterId
                 && (o.Status != Domain.Enums.OrderStatus.Completed
-                    || o.Table.Status == Domain.Enums.TableStatus.Cleaning))
+                    || (o.Table != null && o.Table.Status == Domain.Enums.TableStatus.Cleaning)))
             .OrderBy(o => o.CreatedAt)
             .ToListAsync();
 
@@ -254,6 +290,7 @@ public class OrderService : IOrderService
             ? await _context.Payments
                 .Where(p => completedOrderIds.Contains(p.OrderId) && p.ProcessedByWaiterId == waiterId)
                 .Select(p => p.OrderId)
+                .Distinct()
                 .ToListAsync()
             : new List<int>();
 
@@ -264,7 +301,10 @@ public class OrderService : IOrderService
                 .Where(p => completedOrderIds.Contains(p.OrderId))
                 .Select(p => new { p.OrderId, p.TipAmount })
                 .ToListAsync();
-            tipLookup = paymentTips.ToDictionary(x => x.OrderId, x => x.TipAmount);
+            // Usar GroupBy para manejar múltiples pagos por orden (pago mixto/split)
+            tipLookup = paymentTips
+                .GroupBy(x => x.OrderId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.TipAmount));
         }
         else
         {
@@ -379,6 +419,77 @@ public class OrderService : IOrderService
         await _context.SaveChangesAsync();
     }
 
+    public async Task<OrderDto> AddItemsToOrderAsync(int orderId, List<CreateOrderItemDto> newItems)
+    {
+        var order = await _context.Orders
+            .Include(o => o.Table)
+            .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.Category)
+            .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.KitchenZone)
+            .FirstOrDefaultAsync(o => o.Id == orderId)
+            ?? throw new KeyNotFoundException($"Orden {orderId} no encontrada.");
+
+        bool newFoodAdded = false, newDrinksAdded = false;
+        foreach (var dto in newItems)
+        {
+            var dish = await _context.Dishes.FindAsync(dto.DishId);
+            if (IsDrinkDish(dish?.Name)) newDrinksAdded = true;
+            else newFoodAdded = true;
+
+            order.Items.Add(new OrderItem
+            {
+                DishId       = dto.DishId,
+                Quantity     = dto.Quantity,
+                UnitPrice    = dto.UnitPrice,
+                Subtotal     = dto.UnitPrice * dto.Quantity,
+                Notes        = dto.Notes,
+                Customizations = dto.Customizations,
+                Allergies    = dto.Allergies,
+                SideDish     = dto.SideDish,
+                CourseTiming = dto.CourseTiming ?? (dish != null ? (CourseTiming?)dish.DefaultCourse : null),
+            });
+        }
+
+        // Recalcular totales incluyendo todos los ítems
+        var subtotal = order.Items.Sum(i => i.UnitPrice * i.Quantity);
+        var tax  = subtotal * 0.18m;
+        var tip  = subtotal * 0.10m;
+        order.Subtotal = subtotal;
+        order.Tax      = tax;
+        order.Tip      = tip;
+        order.Total    = subtotal + tax + tip;
+
+        // Solo resetear los flags de la sección que tiene ítems nuevos.
+        // Si solo se agregaron bebidas, la cocina ya sirvió su parte → no tocar KitchenServed.
+        if (newFoodAdded)
+        {
+            order.KitchenPreparing = false;
+            order.KitchenReady     = false;
+            order.KitchenServed    = false;
+        }
+        if (newDrinksAdded)
+        {
+            order.BarPreparing = false;
+            order.BarReady     = false;
+            order.BarServed    = false;
+        }
+
+        // Si la orden ya estaba Served/Completed, volver a Confirmed
+        // para que el KDS la muestre de nuevo con los nuevos ítems.
+        if (order.Status == OrderStatus.Served || order.Status == OrderStatus.Completed)
+            order.Status = OrderStatus.Confirmed;
+
+        await _context.SaveChangesAsync();
+
+        // Recargar con relaciones completas para el DTO
+        var updated = await _context.Orders
+            .Include(o => o.Table)
+            .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.Category)
+            .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.KitchenZone)
+            .FirstAsync(o => o.Id == orderId);
+
+        return MapToOrderDto(updated);
+    }
+
     private OrderDto MapToOrderDto(Order order, bool paymentCollectedByWaiter = false, decimal paymentTipAmount = 0)
     {
         return new OrderDto
@@ -386,10 +497,13 @@ public class OrderService : IOrderService
             Id = order.Id,
             OrderNumber = order.OrderNumber,
             TableId = order.TableId,
-            TableNumber = order.Table?.TableNumber.ToString() ?? "N/A",
+            IsPickup = order.IsPickup,
+            TableNumber = order.IsPickup ? "Mostrador" : (order.Table?.TableNumber.ToString() ?? "N/A"),
             CustomerName = order.CustomerName,
+            AssignedWaiterId = order.AssignedWaiterId,
             Subtotal = order.Subtotal,
             Tax = order.Tax,
+            Tip = order.Tip,
             Total = order.Total,
             Status = order.Status.ToString(),
             KitchenPreparing = order.KitchenPreparing,
@@ -416,10 +530,17 @@ public class OrderService : IOrderService
                 PreferenceText = i.PreferenceText,
                 IsReady = i.IsReady,
                 KitchenZoneId = i.Dish?.KitchenZoneId,
-                KitchenZoneName = i.Dish?.KitchenZone?.Name
+                KitchenZoneName = i.Dish?.KitchenZone?.Name,
+                CourseTiming = i.CourseTiming?.ToString()
             }).ToList(),
             PaymentCollectedByWaiter = paymentCollectedByWaiter,
-            PaymentTipAmount = paymentTipAmount
+            PaymentTipAmount = paymentTipAmount,
+            ClientRequestedPaymentMethod = order.ClientRequestedPaymentMethod,
+            ClientTipPercentage = order.ClientTipPercentage,
+            ClientTipAmount = order.ClientTipAmount,
+            ClientRequiresFiscalReceipt = order.ClientRequiresFiscalReceipt,
+            ClientRNC = order.ClientRNC,
+            ClientBusinessName = order.ClientBusinessName
         };
     }
 }

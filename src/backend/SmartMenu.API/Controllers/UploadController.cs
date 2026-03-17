@@ -19,8 +19,9 @@ public class UploadController : ControllerBase
     /// Subir imagen para un plato (reemplaza URL por archivo).
     /// </summary>
     [HttpPost("dish-image")]
-    [RequestSizeLimit(5_242_880)] // 5 MB
-    public async Task<IActionResult> UploadDishImage(IFormFile file)
+    [RequestSizeLimit(10_485_760)] // 10 MB
+    [DisableRequestSizeLimit]
+    public async Task<IActionResult> UploadDishImage([FromForm] IFormFile? file)
     {
         if (file == null || file.Length == 0)
             return BadRequest(new { error = "No se envió ningún archivo" });

@@ -185,7 +185,7 @@ public class VirtualTableController : ControllerBase
             .Include(o => o.Table)
             .Include(o => o.Items)
             .ThenInclude(i => i.Dish)
-            .Where(o => tableIds.Contains(o.TableId) && o.Status != Domain.Enums.OrderStatus.Cancelled)
+            .Where(o => o.TableId.HasValue && tableIds.Contains(o.TableId.Value) && o.Status != Domain.Enums.OrderStatus.Cancelled)
             .OrderByDescending(o => o.CreatedAt)
             .Select(o => new
             {

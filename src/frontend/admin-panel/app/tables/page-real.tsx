@@ -92,7 +92,7 @@ export default function TablesPage() {
   };
 
   return (
-    <MainLayout>
+    <MainLayout title="Gestión de Mesas">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -115,7 +115,7 @@ export default function TablesPage() {
             </CardContent>
           </Card>
           <Card className="border-2 border-danger/30">
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 ">
               <div className="text-2xl font-bold">{stats.occupied}</div>
               <p className="text-xs text-muted-foreground">Mesas Ocupadas</p>
             </CardContent>

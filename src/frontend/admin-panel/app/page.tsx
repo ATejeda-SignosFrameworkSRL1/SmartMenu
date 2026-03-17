@@ -19,6 +19,7 @@ export default function AdminDashboard() {
   const [tables, setTables] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [dishes, setDishes] = useState<any[]>([]);
+  const [dishAvgTimes, setDishAvgTimes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function AdminDashboard() {
     const token = localStorage.getItem('admin_token');
     if (!token) {
       setLoading(false);
-      window.location.href = 'https://172.31.98.64:3000/login';
+      window.location.href = 'https://172.31.98.104:3000/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -41,15 +42,17 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     try {
-      const [tablesRes, ordersRes, dishesRes] = await Promise.all([
+      const [tablesRes, ordersRes, dishesRes, avgTimesRes] = await Promise.all([
         api.get('/api/table'),
         api.get('/api/order/active'),
-        api.get('/api/dish')
+        api.get('/api/dish'),
+        api.get('/api/reports/dish-avg-time').catch(() => ({ data: [] }))
       ]);
 
       setTables(Array.isArray(tablesRes.data) ? tablesRes.data : []);
       setOrders(Array.isArray(ordersRes.data) ? ordersRes.data : []);
       setDishes(Array.isArray(dishesRes.data) ? dishesRes.data : []);
+      setDishAvgTimes(Array.isArray(avgTimesRes.data) ? avgTimesRes.data : []);
       setLoading(false);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -128,8 +131,10 @@ export default function AdminDashboard() {
     },
     {
       label: 'Tiempo Promedio',
-      value: '32 min',
-      subtext: 'de preparación',
+      value: dishAvgTimes.length > 0
+        ? `${Math.round(dishAvgTimes.reduce((s: number, d: any) => s + (d.avgMinutes ?? 0), 0) / dishAvgTimes.length)} min`
+        : '— min',
+      subtext: `${dishAvgTimes.length} platos medidos`,
       icon: Clock,
       color: 'text-warning',
       bgColor: 'bg-warning/10'
@@ -161,7 +166,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <MainLayout>
+    <MainLayout title="Dashboard">
       <div className="space-y-6">
         {/* Top Stats */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -208,6 +213,47 @@ export default function AdminDashboard() {
             );
           })}
         </div>
+
+        {/* Tiempo Promedio por Plato */}
+        {dishAvgTimes.length > 0 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-warning" />
+                    Tiempo Promedio por Plato
+                  </CardTitle>
+                  <CardDescription>Tiempo real desde la orden hasta servida (últimos 30 días)</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {dishAvgTimes.slice(0, 10).map((d: any) => {
+                  const avg = Math.round(d.avgMinutes ?? 0);
+                  const est = d.estimatedMinutes ?? 0;
+                  const ratio = est > 0 ? avg / est : 1;
+                  const barColor = ratio > 1.3 ? 'bg-red-500' : ratio > 1 ? 'bg-amber-400' : 'bg-emerald-500';
+                  const maxMin = Math.max(...dishAvgTimes.map((x: any) => x.avgMinutes ?? 0), 1);
+                  return (
+                    <div key={d.dishId} className="flex items-center gap-3">
+                      <div className="w-40 truncate text-sm font-medium">{d.dishName}</div>
+                      <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${(avg / maxMin) * 100}%` }} />
+                      </div>
+                      <div className="text-sm font-bold w-16 text-right">{avg} min</div>
+                      <div className="text-xs text-muted-foreground w-20 text-right">est. {est} min</div>
+                      <Badge variant="outline" className={`text-xs ${ratio > 1.3 ? 'border-red-300 text-red-600' : ratio > 1 ? 'border-amber-300 text-amber-600' : 'border-emerald-300 text-emerald-600'}`}>
+                        {d.orderCount} ord
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Active Orders */}
         <Card>

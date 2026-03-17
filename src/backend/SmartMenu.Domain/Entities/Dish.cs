@@ -1,3 +1,5 @@
+using SmartMenu.Domain.Enums;
+
 namespace SmartMenu.Domain.Entities;
 
 public class Dish : BaseEntity
@@ -14,10 +16,13 @@ public class Dish : BaseEntity
     public int PreparationTimeMinutes { get; set; }
     /// <summary>Kitchen or Bar zone where this dish is prepared (null = default/main kitchen)</summary>
     public int? KitchenZoneId { get; set; }
+    /// <summary>Default course/timing for this dish (Entrada, PlatoFuerte, Postre)</summary>
+    public CourseTiming DefaultCourse { get; set; } = CourseTiming.PlatoFuerte;
     
     // Navigation properties
     public Category Category { get; set; } = null!;
     public Zone? KitchenZone { get; set; }
     public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     public ICollection<DishDishTag> DishTags { get; set; } = new List<DishDishTag>();
+    public ICollection<DishImage> Images { get; set; } = new List<DishImage>();
 }

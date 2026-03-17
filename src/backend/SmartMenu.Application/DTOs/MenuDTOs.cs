@@ -1,3 +1,5 @@
+using SmartMenu.Domain.Enums;
+
 namespace SmartMenu.Application.DTOs;
 
 public record DishDto
@@ -16,7 +18,17 @@ public record DishDto
     public int PreparationTimeMinutes { get; init; }
     public int? KitchenZoneId { get; init; }
     public string? KitchenZoneName { get; init; }
+    public CourseTiming DefaultCourse { get; init; } = CourseTiming.PlatoFuerte;
     public List<DishTagDto> Tags { get; init; } = new();
+    public List<DishImageDto> Images { get; init; } = new();
+}
+
+public record DishImageDto
+{
+    public int Id { get; init; }
+    public string ImageUrl { get; init; } = string.Empty;
+    public int DisplayOrder { get; init; }
+    public bool IsMain { get; init; }
 }
 
 public record DishTagDto
@@ -48,5 +60,6 @@ public record CreateDishDto
     public bool IsGlutenFree { get; init; }
     public int PreparationTimeMinutes { get; init; }
     public int? KitchenZoneId { get; init; }
+    public CourseTiming DefaultCourse { get; init; } = CourseTiming.PlatoFuerte;
     public List<int> TagIds { get; init; } = new();
 }

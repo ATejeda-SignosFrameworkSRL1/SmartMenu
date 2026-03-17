@@ -135,7 +135,7 @@ public class TableTransferController : ControllerBase
 
         var tableIds = JsonSerializer.Deserialize<List<int>>(req.TableIdsJson ?? "[]") ?? new List<int>();
         var ordersToUpdate = await _context.Orders
-            .Where(o => tableIds.Contains(o.TableId) && o.AssignedWaiterId == req.FromWaiterId
+            .Where(o => o.TableId.HasValue && tableIds.Contains(o.TableId.Value) && o.AssignedWaiterId == req.FromWaiterId
                 && o.Status != Domain.Enums.OrderStatus.Completed && o.Status != Domain.Enums.OrderStatus.Cancelled)
             .ToListAsync();
         foreach (var order in ordersToUpdate)

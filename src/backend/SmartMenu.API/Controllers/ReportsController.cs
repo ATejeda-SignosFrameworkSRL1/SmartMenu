@@ -62,6 +62,37 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
+    /// Tiempo promedio de preparación por plato (desde creación de la orden hasta servida).
+    /// </summary>
+    [HttpGet("dish-avg-time")]
+    public async Task<IActionResult> GetDishAvgTime([FromQuery] DateTime? from, [FromQuery] DateTime? to)
+    {
+        var fromDate = (from ?? DateTime.UtcNow.AddDays(-30)).Date;
+        var toDate = (to ?? DateTime.UtcNow).Date.AddDays(1);
+
+        var data = await _context.OrderItems
+            .Include(oi => oi.Dish)
+            .Include(oi => oi.Order)
+            .Where(oi => oi.Order.CreatedAt >= fromDate
+                      && oi.Order.CreatedAt < toDate
+                      && oi.Order.ServedAt != null)
+            .GroupBy(oi => new { oi.DishId, oi.Dish.Name, oi.Dish.PreparationTimeMinutes })
+            .Select(g => new
+            {
+                dishId = g.Key.DishId,
+                dishName = g.Key.Name,
+                estimatedMinutes = g.Key.PreparationTimeMinutes,
+                orderCount = g.Count(),
+                avgMinutes = g.Average(oi =>
+                    EF.Functions.DateDiffMinute(oi.Order.CreatedAt, oi.Order.ServedAt!.Value))
+            })
+            .OrderByDescending(x => x.avgMinutes)
+            .ToListAsync();
+
+        return Ok(data);
+    }
+
+    /// <summary>
     /// Detalle de mesero: % que le toca de los 10% de propina legal y total de propina para pagarle.
     /// </summary>
     [HttpGet("waiter-detail/{waiterId}")]

@@ -34,6 +34,12 @@ export interface Category {
   dishes: Dish[];
 }
 
+export interface DishTag {
+  code: string;
+  label: string;
+  icon: string;
+}
+
 export interface Dish {
   id: number;
   name: string;
@@ -47,6 +53,8 @@ export interface Dish {
   isVegan: boolean;
   isGlutenFree: boolean;
   preparationTimeMinutes: number;
+  defaultCourse?: number;
+  tags?: DishTag[];
 }
 
 export interface Modifier {

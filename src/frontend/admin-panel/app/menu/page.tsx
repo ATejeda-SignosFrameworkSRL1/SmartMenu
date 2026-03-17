@@ -11,6 +11,18 @@ const api = axios.create({
   baseURL: '',
 });
 
+type CourseTiming = 0 | 1 | 2; // 0=Entrada, 1=PlatoFuerte, 2=Postre
+
+const COURSE_OPTIONS: { value: CourseTiming; label: string; icon: string; color: string }[] = [
+  { value: 0, label: 'Entrada', icon: '🥗', color: 'bg-green-100 text-green-800' },
+  { value: 1, label: 'Plato Fuerte', icon: '🍖', color: 'bg-orange-100 text-orange-800' },
+  { value: 2, label: 'Postre', icon: '🍰', color: 'bg-pink-100 text-pink-800' },
+];
+
+function getCourseOption(v: number) {
+  return COURSE_OPTIONS.find((c) => c.value === v) ?? COURSE_OPTIONS[1];
+}
+
 interface Dish {
   id: number;
   name: string;
@@ -24,6 +36,7 @@ interface Dish {
   isVegan: boolean;
   isGlutenFree: boolean;
   preparationTimeMinutes: number;
+  defaultCourse: CourseTiming;
   tags?: { id: number; code: string; label: string; icon: string }[];
 }
 
@@ -37,7 +50,7 @@ export default function MenuManagementPage() {
   const router = useRouter();
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [dishTags, setDishTags] = useState<{ id: number; code: string; label: string; icon: string }[]>([]);
+  const [dishTags, setDishTags] = useState<{ id: number; code: string; label: string; icon: string; isActive: boolean }[]>([]);
   const [kitchenBarZones, setKitchenBarZones] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,7 +72,7 @@ export default function MenuManagementPage() {
     }
     const token = localStorage.getItem('admin_token');
     if (!token) {
-      window.location.href = 'https://172.31.98.64:3000/login';
+      window.location.href = 'https://172.31.98.104:3000/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -77,7 +90,9 @@ export default function MenuManagementPage() {
       ]);
       setDishes(Array.isArray(dishesRes.data) ? dishesRes.data : []);
       setCategories(Array.isArray(categoriesRes.data) ? categoriesRes.data : []);
-      setDishTags(Array.isArray(tagsRes.data) ? tagsRes.data : []);
+      setDishTags(Array.isArray(tagsRes.data)
+        ? tagsRes.data.filter((t: any) => (t.isActive ?? t.IsActive) === true)
+        : []);
       setKitchenBarZones([...(kitchensRes.data ?? []), ...(barsRes.data ?? [])]);
     } catch (error) {
       toast.error('Error al cargar datos');
@@ -138,7 +153,7 @@ export default function MenuManagementPage() {
                 setEditingDish(null);
                 setShowModal(true);
               }}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              className="flex items-center gap-2 px-6 py-3 bg-green-800 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
               <Plus className="w-5 h-5" />
               Agregar Platillo
@@ -233,8 +248,16 @@ export default function MenuManagementPage() {
                     )}
                   </div>
 
-                  {/* Status */}
-                  <div className="mb-3">
+                  {/* Course + Status */}
+                  <div className="mb-3 flex items-center gap-2 flex-wrap">
+                    {(() => {
+                      const c = getCourseOption(dish.defaultCourse ?? 1);
+                      return (
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${c.color}`}>
+                          {c.icon} {c.label}
+                        </span>
+                      );
+                    })()}
                     <span
                       className={`px-3 py-1 rounded-full text-sm font-medium ${
                         dish.isAvailable
@@ -318,7 +341,7 @@ function DishFormModal({
 }: {
   dish: Dish | null;
   categories: Category[];
-  dishTags: { id: number; code: string; label: string; icon: string }[];
+  dishTags: { id: number; code: string; label: string; icon: string; isActive: boolean }[];
   kitchenBarZones: any[];
   onClose: () => void;
   onSuccess: () => void;
@@ -335,7 +358,12 @@ function DishFormModal({
     isGlutenFree: dish?.isGlutenFree || false,
     tagIds: (dish?.tags ?? []).map((t: any) => t.id),
     kitchenZoneId: (dish as any)?.kitchenZoneId ?? (dish as any)?.KitchenZoneId ?? null as number | null,
+    defaultCourse: (dish?.defaultCourse ?? 1) as CourseTiming,
   });
+  const [dishImages, setDishImages] = useState<{ id: number; imageUrl: string; isMain: boolean }[]>(
+    (dish as any)?.images ?? []
+  );
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -424,9 +452,16 @@ function DishFormModal({
                 <select
                   required
                   value={formData.categoryId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, categoryId: parseInt(e.target.value) })
-                  }
+                  onChange={(e) => {
+                    const catId = parseInt(e.target.value);
+                    const catName = categories.find(c => c.id === catId)?.name?.toLowerCase() ?? '';
+                    let course = formData.defaultCourse;
+                    if (catName.includes('entrada') || catName.includes('aperitivo')) course = 0;
+                    else if (catName.includes('postre')) course = 2;
+                    else if (catName.includes('bebida') || catName.includes('cóctel') || catName.includes('coctel') || catName.includes('vino')) course = 1;
+                    else course = 1;
+                    setFormData({ ...formData, categoryId: catId, defaultCourse: course as CourseTiming });
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
                   {categories.map((cat) => (
@@ -435,6 +470,28 @@ function DishFormModal({
                     </option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tiempo del plato
+              </label>
+              <div className="flex gap-2">
+                {COURSE_OPTIONS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, defaultCourse: c.value })}
+                    className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                      formData.defaultCourse === c.value
+                        ? 'border-primary-500 ' + c.color
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {c.icon} {c.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -458,59 +515,104 @@ function DishFormModal({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Imagen del plato
+                Imágenes del plato
               </label>
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 w-fit">
+              <div className="flex flex-col gap-3">
+                {/* Gallery of existing images */}
+                {dishImages.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {dishImages.map((img, idx) => (
+                      <div key={img.id || idx} className={`relative group rounded-lg border-2 overflow-hidden ${img.isMain ? 'border-green-500' : 'border-gray-200'}`}>
+                        <img src={img.imageUrl} alt={`Imagen ${idx + 1}`} className="h-20 w-20 object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                          {!img.isMain && dish && (
+                            <button type="button" onClick={async () => {
+                              try {
+                                const token = localStorage.getItem('admin_token');
+                                await fetch(`/api/dish/${dish.id}/images/${img.id}/set-main`, {
+                                  method: 'PUT', headers: token ? { Authorization: `Bearer ${token}` } : {},
+                                });
+                                setDishImages(prev => prev.map(i => ({ ...i, isMain: i.id === img.id })));
+                                setFormData(prev => ({ ...prev, imageUrl: img.imageUrl }));
+                              } catch { toast.error('Error'); }
+                            }} className="p-1 bg-white rounded text-xs" title="Hacer principal">⭐</button>
+                          )}
+                          {dish && (
+                            <button type="button" onClick={async () => {
+                              try {
+                                const token = localStorage.getItem('admin_token');
+                                await fetch(`/api/dish/${dish.id}/images/${img.id}`, {
+                                  method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {},
+                                });
+                                setDishImages(prev => prev.filter(i => i.id !== img.id));
+                                toast.success('Imagen eliminada');
+                              } catch { toast.error('Error'); }
+                            }} className="p-1 bg-red-500 text-white rounded text-xs" title="Eliminar">✕</button>
+                          )}
+                        </div>
+                        {img.isMain && <span className="absolute bottom-0 left-0 right-0 bg-green-500 text-white text-[9px] text-center font-bold py-0.5">Principal</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Upload button */}
+                <label className={`flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 w-fit ${uploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/gif,image/webp"
+                    multiple
                     className="hidden"
                     onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        const token = localStorage.getItem('admin_token');
-                        const formDataUpload = new FormData();
-                        formDataUpload.append('file', file);
-                        const baseURL = '';
-                        const res = await fetch(`${baseURL}/api/upload/dish-image`, {
-                          method: 'POST',
-                          headers: token ? { Authorization: `Bearer ${token}` } : {},
-                          body: formDataUpload,
-                        });
-                        if (!res.ok) {
-                          const err = await res.json().catch(() => ({}));
-                          throw new Error(err?.error || 'Error al subir');
+                      const files = e.target.files;
+                      if (!files || files.length === 0) return;
+                      setUploadingImage(true);
+                      const token = localStorage.getItem('admin_token');
+                      for (let i = 0; i < files.length; i++) {
+                        try {
+                          const formDataUpload = new FormData();
+                          formDataUpload.append('file', files[i]);
+                          const uploadBase = process.env.NEXT_PUBLIC_WS_URL || '';
+                          const res = await fetch(`${uploadBase}/api/upload/dish-image`, {
+                            method: 'POST',
+                            headers: token ? { Authorization: `Bearer ${token}` } : {},
+                            body: formDataUpload,
+                          });
+                          if (!res.ok) throw new Error('Error al subir');
+                          const data = await res.json();
+                          const url = data?.url || '';
+                          const isMain = dishImages.length === 0 && i === 0;
+                          if (isMain) setFormData(prev => ({ ...prev, imageUrl: url }));
+                          if (dish) {
+                            const addRes = await fetch(`/api/dish/${dish.id}/images`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                              body: JSON.stringify({ imageUrl: url, displayOrder: dishImages.length + i, isMain }),
+                            });
+                            if (addRes.ok) {
+                              const imgData = await addRes.json();
+                              setDishImages(prev => [...prev, { id: imgData.id, imageUrl: url, isMain }]);
+                            }
+                          } else {
+                            setDishImages(prev => [...prev, { id: Date.now() + i, imageUrl: url, isMain }]);
+                          }
+                          toast.success(`Imagen ${i + 1} subida`);
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Error al subir imagen');
                         }
-                        const data = await res.json();
-                        const url = data?.url || '';
-                        setFormData((prev) => ({ ...prev, imageUrl: url }));
-                        toast.success('Imagen subida');
-                      } catch (err: any) {
-                        toast.error(err?.message || 'Error al subir la imagen');
                       }
+                      setUploadingImage(false);
                       e.target.value = '';
                     }}
                   />
-                  <span className="text-sm font-medium text-gray-700">Subir imagen</span>
+                  <span className="text-sm font-medium text-gray-700">
+                    {uploadingImage ? 'Subiendo...' : '+ Subir imágenes'}
+                  </span>
                 </label>
-                <input
-                  type="text"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  placeholder="URL o deja vacío si subiste archivo"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                />
               </div>
-              {formData.imageUrl && (
+              {formData.imageUrl && dishImages.length === 0 && (
                 <div className="mt-2">
                   <p className="text-xs text-gray-500 mb-1">Vista previa:</p>
-                  <img
-                    src={formData.imageUrl.startsWith('http') ? formData.imageUrl : ('') + formData.imageUrl}
-                    alt="Vista previa"
-                    className="h-24 w-auto object-contain rounded border border-gray-200"
-                  />
+                  <img src={formData.imageUrl} alt="Vista previa" className="h-24 w-auto object-contain rounded border border-gray-200" />
                 </div>
               )}
             </div>
@@ -532,44 +634,6 @@ function DishFormModal({
                 }
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.isVegetarian}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isVegetarian: e.target.checked })
-                  }
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">🌱 Vegetariano</span>
-              </label>
-
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.isVegan}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isVegan: e.target.checked })
-                  }
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">🌾 Vegano</span>
-              </label>
-
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.isGlutenFree}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isGlutenFree: e.target.checked })
-                  }
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">🚫 Sin Gluten</span>
-              </label>
             </div>
 
             {dishTags.length > 0 && (
@@ -601,7 +665,7 @@ function DishFormModal({
               </button>
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
+                className="flex-1 px-6 py-3 bg-green-800 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
               >
                 {dish ? 'Guardar Cambios' : 'Crear Platillo'}
               </button>

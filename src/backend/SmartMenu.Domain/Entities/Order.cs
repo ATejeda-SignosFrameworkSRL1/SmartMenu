@@ -5,7 +5,10 @@ namespace SmartMenu.Domain.Entities;
 public class Order : BaseEntity
 {
     public string OrderNumber { get; set; } = string.Empty;
-    public int TableId { get; set; }
+    /// <summary>Null cuando es una orden para llevar (POS del cajero).</summary>
+    public int? TableId { get; set; }
+    /// <summary>True para órdenes de mostrador/para llevar creadas por el cajero.</summary>
+    public bool IsPickup { get; set; } = false;
     public int? TableSessionId { get; set; }
     public string SessionId { get; set; } = string.Empty;
     /// <summary>Nombre del comensal (lo ingresa al entrar al menú desde el QR).</summary>
@@ -36,9 +39,21 @@ public class Order : BaseEntity
     public DateTime? ServedAt { get; set; }
     public bool CustomerFinishedEating { get; set; } = false; // Cliente terminó de comer
     public DateTime? FinishedEatingAt { get; set; }
-    
+    /// <summary>Método de pago solicitado por el cliente al pedir la cuenta.</summary>
+    public string? ClientRequestedPaymentMethod { get; set; } // Cash, Card, Transfer, Mixed
+    /// <summary>Porcentaje de propina solicitado por el cliente.</summary>
+    public decimal ClientTipPercentage { get; set; } = 0;
+    /// <summary>Monto de propina en valor absoluto solicitado por el cliente.</summary>
+    public decimal ClientTipAmount { get; set; } = 0;
+    /// <summary>El cliente solicita comprobante fiscal (NCF).</summary>
+    public bool ClientRequiresFiscalReceipt { get; set; } = false;
+    /// <summary>RNC de la empresa del cliente (si solicita comprobante).</summary>
+    public string? ClientRNC { get; set; }
+    /// <summary>Nombre de la empresa validado contra la DGII.</summary>
+    public string? ClientBusinessName { get; set; }
+
     // Navigation properties
-    public Table Table { get; set; } = null!;
+    public Table? Table { get; set; }
     public TableSession? TableSession { get; set; }
     public User? Customer { get; set; }
     public User? AssignedWaiter { get; set; }

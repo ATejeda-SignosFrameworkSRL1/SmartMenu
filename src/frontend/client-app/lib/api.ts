@@ -75,6 +75,10 @@ export const apiClient = {
   toggleDishAvailability: (dishId: number) =>
     api.patch(`/dish/${dishId}/toggle-availability`),
 
+  // Dish Tags
+  getDishTags: () =>
+    api.get('/dishtag'),
+
   // Categories
   getCategories: () =>
     api.get('/category'),
@@ -98,10 +102,26 @@ export const apiClient = {
   markCustomerFinished: (orderId: number) =>
     api.put(`/order/${orderId}/customer-finished`),
 
+  addItemsToOrder: (orderId: number, items: any[]) =>
+    api.post(`/order/${orderId}/add-items`, items),
+
   // Payments
   createPayment: (data: any) =>
     api.post('/payment', data),
 
   getPayment: (paymentId: number) =>
     api.get(`/payment/${paymentId}`),
+
+  requestBilling: (orderId: number, preferences?: {
+    paymentMethod?: string;
+    tipPercentage?: number;
+    tipAmount?: number;
+    requiresFiscalReceipt?: boolean;
+    rnc?: string;
+    businessName?: string;
+  }) =>
+    api.post(`/payment/request-billing/${orderId}`, preferences ?? {}),
+
+  validateRnc: (rnc: string) =>
+    api.get(`/payment/validate-rnc/${rnc}`),
 };

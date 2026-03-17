@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { Clock, CheckCircle, ChefHat, Package, Utensils, Wine } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
@@ -37,15 +36,27 @@ export default function OrderStatusPage() {
   const kitchenItems = items.filter((item: any) => !isDrinkItem(item.dishName ?? item.DishName ?? ''));
   const barItems = items.filter((item: any) => isDrinkItem(item.dishName ?? item.DishName ?? ''));
 
-  const [statusView, setStatusView] = useState<'general' | 'bar'>('general');
-  const barReady = order?.barReady ?? order?.BarReady ?? false;
-  const barPreparing = order?.barPreparing ?? order?.BarPreparing ?? false;
-  const barServed = order?.barServed ?? order?.BarServed ?? false;
+  const hasFood = kitchenItems.length > 0;
+  const hasBar  = barItems.length > 0;
 
-  // Si no hay bebidas y estabas viendo orden bar, volver a general
+  // Default: si solo hay bebidas → arrancar en 'bar', si no → 'general'
+  const [statusView, setStatusView] = useState<'general' | 'bar'>(() =>
+    !hasFood && hasBar ? 'bar' : 'general'
+  );
+  const kitchenPreparing = order?.kitchenPreparing ?? order?.KitchenPreparing ?? false;
+  const kitchenReady     = order?.kitchenReady     ?? order?.KitchenReady     ?? false;
+  const kitchenServed    = order?.kitchenServed    ?? order?.KitchenServed    ?? false;
+  const barReady         = order?.barReady         ?? order?.BarReady         ?? false;
+  const barPreparing     = order?.barPreparing     ?? order?.BarPreparing     ?? false;
+  const barServed        = order?.barServed        ?? order?.BarServed        ?? false;
+
+  // Sincronizar vista cuando cambien los ítems
   useEffect(() => {
-    if (barItems.length === 0 && statusView === 'bar') setStatusView('general');
-  }, [barItems.length, statusView]);
+    if (!hasBar && statusView === 'bar') setStatusView('general');
+    if (!hasFood && hasBar && statusView === 'general') setStatusView('bar');
+    // Cocina terminó pero el bar sigue pendiente → enfocar la bebida automáticamente
+    if (hasBar && !barServed && kitchenServed && statusView === 'general') setStatusView('bar');
+  }, [hasFood, hasBar, kitchenServed, barServed, statusView]);
 
   // Redirect to served page when order is served
   useEffect(() => {
@@ -58,6 +69,20 @@ export default function OrderStatusPage() {
     ? statusSteps.findIndex((step) => step.status === order.status)
     : -1;
 
+  // Step general: el más avanzado entre status global y progreso real de cocina/bar
+  const derivedGeneralStep = (() => {
+    if (!order) return -1;
+    const globalStep = currentStepIndex >= 0 ? currentStepIndex : 0;
+    // Servida completa: todas las partes servidas
+    const allServed = (!hasFood || kitchenServed) && (!hasBar || barServed);
+    if (allServed) return 4;
+    // Lista: al menos una parte lista
+    if (kitchenReady || barReady) return 3;
+    // Preparando: al menos una parte preparando
+    if (kitchenPreparing || barPreparing) return 2;
+    return globalStep;
+  })();
+
   // Para la vista Bar: 0 Pendiente, 1 Confirmada, 2 Preparando, 3 Lista, 4 Servida
   const barStepIndex =
     order?.status === 'Served' || barServed
@@ -69,15 +94,39 @@ export default function OrderStatusPage() {
           : order?.status === 'Confirmed' || order?.status === 'Preparing' || order?.status === 'Ready'
             ? 1
             : 0;
-  const displayStepIndex = statusView === 'bar' ? barStepIndex : currentStepIndex;
+
+  const displayStepIndex = statusView === 'bar' ? barStepIndex : derivedGeneralStep;
+
+  // Etiqueta descriptiva para el estado actual
+  const getGeneralLabel = () => {
+    if (!order) return '';
+    if (derivedGeneralStep >= 4) return 'Servida';
+    if (hasFood && hasBar) {
+      const kitchenDone = kitchenServed || kitchenReady;
+      const barDone     = barServed || barReady;
+      if (kitchenDone && !barDone) return 'Cocina lista • Bar preparando';
+      if (!kitchenDone && barDone) return 'Bar listo • Cocina preparando';
+    }
+    return statusSteps[derivedGeneralStep]?.label ?? '';
+  };
+
   const displayLabel = statusView === 'bar'
     ? (barServed ? 'Servida' : statusSteps[barStepIndex]?.label)
-    : statusSteps[currentStepIndex]?.label;
+    : getGeneralLabel();
 
   const getTimeElapsed = () => {
     if (!order?.createdAt) return 0;
-    return Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / 60000);
+    // Forzar interpretación UTC (el servidor devuelve sin 'Z')
+    const utcStr = !order.createdAt.endsWith('Z') ? order.createdAt + 'Z' : order.createdAt;
+    return Math.floor((new Date().getTime() - new Date(utcStr).getTime()) / 60000);
   };
+
+  // Mostrar "Solicitar Cuenta" cuando cocina sirvió (aunque bar aún no)
+  const canRequestBill =
+    order?.status === 'Served' ||
+    (kitchenServed && (!hasBar || barServed)) ||
+    (barServed && (!hasFood || kitchenServed));
+
 
   if (isLoading) {
     return (
@@ -122,11 +171,14 @@ export default function OrderStatusPage() {
             <div className="flex justify-center gap-2 mt-4">
               <button
                 type="button"
-                onClick={() => setStatusView('general')}
+                onClick={() => hasFood && setStatusView('general')}
+                disabled={!hasFood}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                  statusView === 'general'
-                    ? 'bg-primary-600 text-white shadow'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  !hasFood
+                    ? 'opacity-50 cursor-not-allowed text-gray-400 bg-gray-100'
+                    : statusView === 'general'
+                      ? 'bg-primary-600 text-white shadow'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
                 <ChefHat className="w-4 h-4" />
@@ -134,11 +186,11 @@ export default function OrderStatusPage() {
               </button>
               <button
                 type="button"
-                onClick={() => barItems.length > 0 && setStatusView('bar')}
-                disabled={barItems.length === 0}
+                onClick={() => hasBar && setStatusView('bar')}
+                disabled={!hasBar}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                  barItems.length === 0
-                    ? 'opacity-50 cursor-not-allowed text-gray-400'
+                  !hasBar
+                    ? 'opacity-50 cursor-not-allowed text-gray-400 bg-gray-100'
                     : statusView === 'bar'
                       ? 'bg-primary-600 text-white shadow'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -293,23 +345,59 @@ export default function OrderStatusPage() {
           </div>
         </div>
 
-        {/* Total de la orden */}
+        {/* Desglose de la orden */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <div className="flex justify-between items-center text-2xl font-bold">
-            <span className="text-gray-900">Total:</span>
-            <span className="text-primary-600">RD$ {order.total.toFixed(2)}</span>
+          <h2 className="text-lg font-bold text-gray-900 mb-5 border-b pb-3">Resumen de Cobro</h2>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between text-gray-700">
+              <span>Subtotal</span>
+              <span className="font-medium">RD$ {(order.subtotal ?? 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-700">
+              <span className="flex items-center gap-1">
+                ITBIS
+                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">18%</span>
+              </span>
+              <span className="font-medium">RD$ {(order.tax ?? 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-700">
+              <span className="flex items-center gap-1">
+                Propina legal
+                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">10%</span>
+              </span>
+              <span className="font-medium">RD$ {(order.tip ?? (order.subtotal ?? 0) * 0.10).toFixed(2)}</span>
+            </div>
+            {(order.discount ?? 0) > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span className="flex items-center gap-1">
+                  Descuento
+                  <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">–</span>
+                </span>
+                <span className="font-medium">– RD$ {(order.discount ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="border-t border-dashed border-gray-200 pt-3 mt-1">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-gray-900">Total a Pagar</span>
+                <span className="text-2xl font-bold text-primary-600">
+                  RD$ {(order.total ?? 0).toFixed(2)}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1 text-right">ITBIS (18%) y propina legal (10%) incluidos</p>
+            </div>
           </div>
         </div>
+
 
         {/* Actions */}
         <div className="flex gap-4">
           <button
-            onClick={() => router.push('/menu')}
+            onClick={() => router.push(`/menu?activeOrder=${order.id}`)}
             className="flex-1 px-6 py-4 bg-white text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-lg"
           >
             Volver al Menú
           </button>
-          {order.status === 'Served' && (
+          {canRequestBill && (
             <button
               onClick={() => router.push(`/payment/${order.id}`)}
               className="flex-1 px-6 py-4 bg-gradient-to-r from-primary-600 to-secondary-600 text-white rounded-xl font-semibold hover:from-primary-700 hover:to-secondary-700 transition-all shadow-lg"

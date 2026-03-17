@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Utensils, Clock, DollarSign, CheckCircle, AlertCircle, XCircle, LogOut, Wine, Check, RefreshCw, QrCode, Users, ArrowRightLeft, Share2, Pin, PinOff } from 'lucide-react';
+import { Utensils, Clock, DollarSign, CheckCircle, AlertCircle, XCircle, LogOut, Wine, Check, RefreshCw, QrCode, Users, ArrowRightLeft, Share2, Pin, PinOff, Bell, X, ChefHat, Play, Square } from 'lucide-react';
 // Icono de exclamación para alarma en mesas con pedido sin asignar
 const AlertExclamation = () => (
   <span className="inline-flex items-center justify-center text-red-600 font-bold text-xl animate-pulse" style={{ animationDuration: '0.8s' }}>!</span>
 );
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
+import { useWaiterNotifications, WaiterNotification } from '@/lib/useWaiterNotifications';
 
 // Carga dinámica del QrScanner para evitar chunk errors en HTTPS
 const QrScanner = dynamic(() => import('./components/QrScanner').then(mod => ({ default: mod.QrScanner })), {
@@ -43,7 +44,8 @@ function isDrinkItem(dishName: string): boolean {
 }
 function getElapsedMinutes(createdAt: string | number | undefined): number {
   if (createdAt == null) return 0;
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+  const utcStr = typeof createdAt === 'string' && !createdAt.endsWith('Z') ? createdAt + 'Z' : createdAt;
+  return Math.floor((Date.now() - new Date(utcStr as string).getTime()) / 60000);
 }
 // Bar KDS está separado: el personal de bar usa el panel de admin (/bar). En Waiter App nunca se muestra la vista Bar.
 function isBartender(_u: any): boolean {
@@ -86,6 +88,22 @@ export default function WaiterPage() {
   const [view, setView] = useState<'general' | 'my-tables'>('general');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  // Estados del modal de cobro expandido
+  const [pmMethod, setPmMethod] = useState('Cash');
+  const [pmTipPct, setPmTipPct] = useState(0);
+  const [pmCustomTip, setPmCustomTip] = useState('');
+  const [pmSplitType, setPmSplitType] = useState<'None' | 'ByComensal' | 'ByTime' | 'Proportional' | 'ByCategory'>('None');
+  const [pmSplitParts, setPmSplitParts] = useState(2);
+  const [pmByTimePart1, setPmByTimePart1] = useState('');
+  const [pmByTimePart2, setPmByTimePart2] = useState('');
+  const [pmByTimePayPart, setPmByTimePayPart] = useState<1 | 2>(1);
+  const [pmPropAssign, setPmPropAssign] = useState<Record<number, number>>({});
+  const [pmPayAsPerson, setPmPayAsPerson] = useState(1);
+  const [pmPayCategory, setPmPayCategory] = useState('');
+  const [pmMixedCash, setPmMixedCash] = useState('');
+  const [pmMixedCard, setPmMixedCard] = useState('');
+  const [pmMixedTransfer, setPmMixedTransfer] = useState('');
+  const [pmProcessing, setPmProcessing] = useState(false);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [orderModalOrder, setOrderModalOrder] = useState<Order | null>(null);
   const [barOrdersRaw, setBarOrdersRaw] = useState<any[]>([]);
@@ -115,8 +133,185 @@ export default function WaiterPage() {
   const [claimConfirmOrder, setClaimConfirmOrder] = useState<Order | null>(null);
   // tableIds donde el mesero tiene sesión reclamada (pin activo); se pierde al soltar
   const [claimedTableIds, setClaimedTableIds] = useState<Set<number>>(new Set());
+  // tableIds con solicitud de claim pendiente (esperando respuesta del admin)
+  // Inicializar desde sessionStorage para sobrevivir refresh/navegación interna
+  const [pendingClaimTableIds, setPendingClaimTableIds] = useState<Set<number>>(() => {
+    try {
+      const stored = sessionStorage.getItem('pendingClaimTableIds');
+      if (stored) return new Set<number>(JSON.parse(stored));
+    } catch { /* ignore */ }
+    return new Set<number>();
+  });
+  // Shift state
+  const [activeShift, setActiveShift] = useState<{ id: number; startTime: string; durationMinutes: number } | null>(null);
+  const [showEndShiftModal, setShowEndShiftModal] = useState(false);
+  const [endShiftTransferTo, setEndShiftTransferTo] = useState<number | null>(null);
+  const [shiftStep, setShiftStep] = useState<1 | 2 | 3>(1); // 1=resumen, 2=transferencia, 3=resultado
+  const [shiftSummary, setShiftSummary] = useState<any>(null);
+  const [shiftLoadingModal, setShiftLoadingModal] = useState(false);
+  const [shiftResult, setShiftResult] = useState<any>(null);
   const [selectedVTTableIndex, setSelectedVTTableIndex] = useState(0);
+  const [notifToken, setNotifToken] = useState<string | null>(null);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
   
+  // SignalR notifications
+  const waiterId = user ? getUserId(user) : null;
+  const { notifications, unreadCount, connected, markAllRead, dismiss, clearAll } = useWaiterNotifications({
+    waiterId: waiterId ?? null,
+    token: notifToken,
+  });
+
+  // Sincronizar pendingClaimTableIds con sessionStorage cuando cambia
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('pendingClaimTableIds', JSON.stringify([...pendingClaimTableIds]));
+    } catch { /* ignore */ }
+  }, [pendingClaimTableIds]);
+
+  // ── Polling de respaldo: detecta claims aprobados/rechazados aunque SignalR falle ──
+  const processedClaimIdsRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    const pollClaims = async () => {
+      const uid = user ? getUserId(user) : null;
+      if (!uid || pendingClaimTableIds.size === 0) return;
+      try {
+        const token = localStorage.getItem('waiter_token');
+        if (!token) return;
+        const res = await api.get(`/api/tableclaim/history?waiterId=${uid}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const list: any[] = Array.isArray(res.data) ? res.data : [];
+        for (const r of list) {
+          if (processedClaimIdsRef.current.has(r.id)) continue;
+          if (r.status === 1 /* Approved */ && pendingClaimTableIds.has(r.tableId)) {
+            processedClaimIdsRef.current.add(r.id);
+            setClaimedTableIds(prev => new Set(prev).add(r.tableId));
+            setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(r.tableId); return s; });
+            toast(`✅ ¡Solicitud aprobada! La Mesa ${r.tableNumber} es tuya.`, {
+              duration: 8000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 700 }
+            });
+          } else if (r.status === 2 /* Rejected */ && pendingClaimTableIds.has(r.tableId)) {
+            processedClaimIdsRef.current.add(r.id);
+            setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(r.tableId); return s; });
+            toast(`❌ El admin no aprobó tu solicitud para la Mesa ${r.tableNumber}.`, {
+              duration: 10000, style: { background: '#fef2f2', color: '#991b1b', fontWeight: 700 }
+            });
+          }
+        }
+      } catch {
+        // silencioso — es un respaldo
+      }
+    };
+
+    if (pendingClaimTableIds.size > 0) {
+      pollClaims();
+      const iv = setInterval(pollClaims, 8000);
+      return () => clearInterval(iv);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingClaimTableIds.size, user]);
+
+  // ── Respaldo de notificaciones por polling de estado ─────────────────────────
+  // Si SignalR no conecta, este useEffect detecta transiciones de estado en las
+  // órdenes y mesas cada vez que el polling de 5s actualiza los datos.
+  const notifStateRef = useRef<{
+    kitchenReady: Set<number>;  // orderIds ya notificados
+    barReady:     Set<number>;
+    billing:      Set<number>;  // tableIds ya notificados
+    initialized:  boolean;
+  }>({ kitchenReady: new Set(), barReady: new Set(), billing: new Set(), initialized: false });
+
+  useEffect(() => {
+    const allOrders = [...myOrders, ...generalOrders];
+
+    if (!notifStateRef.current.initialized) {
+      // Primera carga: registrar estado actual como línea base (no notificar)
+      notifStateRef.current.initialized = true;
+      for (const o of allOrders) {
+        const oid: number = (o as any).id;
+        if ((o as any).kitchenReady || (o as any).KitchenReady) notifStateRef.current.kitchenReady.add(oid);
+        if ((o as any).barReady    || (o as any).BarReady)    notifStateRef.current.barReady.add(oid);
+      }
+      for (const t of tables) {
+        if (t.status === 'Billing') notifStateRef.current.billing.add(t.id);
+      }
+      return;
+    }
+
+    // Detección de cocina/bar listos
+    for (const o of allOrders) {
+      const oid: number = (o as any).id;
+      const tn: number  = (o as any).tableNumber ?? (o as any).TableNumber ?? 0;
+      const on: string  = ((o as any).orderNumber ?? '').split('-').pop() ?? '';
+      const kr = !!((o as any).kitchenReady || (o as any).KitchenReady);
+      const br = !!((o as any).barReady     || (o as any).BarReady);
+      const ks = !!((o as any).kitchenServed|| (o as any).KitchenServed);
+      const bs = !!((o as any).barServed    || (o as any).BarServed);
+
+      if (kr && !ks && !notifStateRef.current.kitchenReady.has(oid)) {
+        notifStateRef.current.kitchenReady.add(oid);
+        toast(`🍽️ Cocina lista — Mesa ${tn} · Orden #${on}`, {
+          duration: 10000, style: { background: '#fef3c7', color: '#92400e', fontWeight: 700 }
+        });
+      }
+      if (br && !bs && !notifStateRef.current.barReady.has(oid)) {
+        notifStateRef.current.barReady.add(oid);
+        toast(`🍹 Bar listo — Mesa ${tn} · Orden #${on}`, {
+          duration: 10000, style: { background: '#f3e8ff', color: '#6b21a8', fontWeight: 700 }
+        });
+      }
+      // Limpiar cuando ya fue servido para que futuras órdenes puedan notificar
+      if (ks) notifStateRef.current.kitchenReady.delete(oid);
+      if (bs) notifStateRef.current.barReady.delete(oid);
+    }
+
+    // Rastrear estado de billing por polling (solo para limpieza del Set,
+    // el toast/notificación lo envía SignalR para evitar duplicados).
+    for (const t of tables) {
+      if (t.status !== 'Billing') {
+        notifStateRef.current.billing.delete(t.id);
+      } else {
+        notifStateRef.current.billing.add(t.id);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myOrders, generalOrders, tables]);
+
+  // Mostrar toast cuando llega una notificación nueva (vía SignalR)
+  const prevUnreadRef = useRef(0);
+  useEffect(() => {
+    if (unreadCount > prevUnreadRef.current && notifications.length > 0) {
+      const latest = notifications[0];
+      if (latest.type === 'customer_finished') {
+        toast(`✅ ${latest.message}`, { duration: 6000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 600 } });
+      } else if (latest.type === 'items_added') {
+        toast(`➕ ${latest.message}`, { duration: 6000, style: { background: '#faf5ff', color: '#7e22ce', fontWeight: 600 } });
+      } else if (latest.type === 'billing_requested') {
+        toast(`💳 ${latest.message}`, { duration: 8000, style: { background: '#fefce8', color: '#854d0e', fontWeight: 600 } });
+      } else if (latest.type === 'claim_approved') {
+        // El admin aprobó: marcar la mesa como reclamada y quitar de pendientes
+        // Usamos latest.tableId (ID de DB) que es lo que almacena pendingClaimTableIds/claimedTableIds
+        const tId = latest.tableId ?? Number(latest.tableNumber);
+        if (tId) {
+          setClaimedTableIds(prev => new Set(prev).add(tId));
+          setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(tId); return s; });
+        }
+        toast(`✅ ${latest.message}`, { duration: 8000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 700 } });
+      } else if (latest.type === 'claim_rejected') {
+        // El admin rechazó: quitar de pendientes
+        const tId = latest.tableId ?? Number(latest.tableNumber);
+        if (tId) {
+          setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(tId); return s; });
+        }
+        const note = latest.adminNote ? ` — "${latest.adminNote}"` : '';
+        toast(`❌ ${latest.message}${note}`, { duration: 10000, style: { background: '#fef2f2', color: '#991b1b', fontWeight: 700 } });
+      } else {
+        toast(`🔔 ${latest.message}`, { duration: 6000, style: { background: '#eff6ff', color: '#1d4ed8', fontWeight: 600 } });
+      }
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount, notifications]);
+
   // Log cuando virtualTablesList cambie
   useEffect(() => {
     console.log('🎨 useEffect - virtualTablesList cambió:', virtualTablesList.length, 'elementos');
@@ -330,11 +525,12 @@ export default function WaiterPage() {
 
       const token = localStorage.getItem('waiter_token');
       if (!token) {
-        window.location.href = 'https://172.31.98.64:3000/login';
+        window.location.href = 'https://172.31.98.104:3000/login';
         return;
       }
 
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      setNotifToken(token);
 
       let resolvedUser: any;
       try {
@@ -353,7 +549,7 @@ export default function WaiterPage() {
           console.log('⚠️ currentUser no tiene id, cargando desde localStorage');
           const userData = localStorage.getItem('waiter_user');
           if (!userData) {
-            window.location.href = 'https://172.31.98.64:3000/login';
+            window.location.href = 'https://172.31.98.104:3000/login';
             return;
           }
           resolvedUser = JSON.parse(userData);
@@ -364,7 +560,7 @@ export default function WaiterPage() {
         console.error('❌ Error llamando /api/auth/me:', error);
         const userData = localStorage.getItem('waiter_user');
         if (!userData) {
-          window.location.href = 'https://172.31.98.64:3000/login';
+          window.location.href = 'https://172.31.98.104:3000/login';
           return;
         }
         resolvedUser = JSON.parse(userData);
@@ -377,8 +573,37 @@ export default function WaiterPage() {
         setLoading(false);
         return;
       }
-      loadData(waiterId);
-      loadVirtualTables(); // Cargar mesas virtuales al inicio
+      await Promise.all([loadData(waiterId), loadVirtualTables()]);
+      // Load shift status
+      try {
+        const shiftRes = await api.get(`/api/waitershift/active/${waiterId}`);
+        if (shiftRes.data?.hasActiveShift) {
+          setActiveShift({ id: shiftRes.data.id, startTime: shiftRes.data.startTime, durationMinutes: shiftRes.data.durationMinutes });
+        }
+      } catch { /* ignore */ }
+
+      // ── Restaurar solicitudes de claim pendientes desde la base de datos ──────
+      // Esto garantiza que al refrescar o cambiar de tab, el estado "Solicitud pendiente"
+      // se muestre correctamente aunque React haya perdido el estado en memoria.
+      try {
+        const claimRes = await api.get(`/api/tableclaim/history?waiterId=${waiterId}`);
+        const claimList: any[] = Array.isArray(claimRes.data) ? claimRes.data : [];
+
+        // Pre-marcar todos los claims YA resueltos (no-pendientes) como procesados.
+        // Esto evita que el polling de respaldo los tome como "nuevos" al arrancar.
+        claimList
+          .filter(r => r.status !== 0 /* cualquiera que no sea Pending */)
+          .forEach(r => processedClaimIdsRef.current.add(r.id));
+
+        // Restaurar solo los realmente pendientes al state.
+        // El backend es la fuente de verdad — reemplaza lo que había en sessionStorage.
+        const stillPending = claimList
+          .filter(r => r.status === 0 /* Pending */)
+          .map(r => r.tableId as number);
+        // Siempre sincronizar (incluyendo vacío) para limpiar datos obsoletos del sessionStorage
+        setPendingClaimTableIds(new Set(stillPending));
+      } catch { /* ignore — no crítico */ }
+
       setLoading(false);
       pollingIntervalRef.current = setInterval(() => {
         if (!shouldPollRef.current) {
@@ -785,21 +1010,126 @@ export default function WaiterPage() {
 
   const openPaymentModal = (order: Order) => {
     setSelectedOrder(order);
+    // Pre-cargar preferencias del cliente
+    const o = order as any;
+    const clientMethod = o.clientRequestedPaymentMethod ?? o.ClientRequestedPaymentMethod ?? 'Cash';
+    const orderTotalForModal = Number(o.total ?? o.totalAmount ?? 0);
+    setPmMethod(clientMethod);
+    setPmTipPct(Number(o.clientTipPercentage ?? o.ClientTipPercentage ?? 0));
+    setPmCustomTip(
+      Number(o.clientTipPercentage ?? 0) === 0 && Number(o.clientTipAmount ?? 0) > 0
+        ? String(o.clientTipAmount ?? o.ClientTipAmount ?? '')
+        : ''
+    );
+    setPmSplitType('None');
+    setPmSplitParts(2);
+    setPmByTimePart1('');
+    setPmByTimePart2('');
+    setPmByTimePayPart(1);
+    setPmPropAssign({});
+    setPmPayAsPerson(1);
+    setPmPayCategory('');
+    // Si el cliente pidió Mixto, pre-rellenar el monto completo en efectivo como punto de partida
+    if (clientMethod === 'Mixed') {
+      setPmMixedCash(orderTotalForModal > 0 ? orderTotalForModal.toFixed(2) : '');
+      setPmMixedCard('');
+      setPmMixedTransfer('');
+    } else {
+      setPmMixedCash('');
+      setPmMixedCard('');
+      setPmMixedTransfer('');
+    }
     setShowPaymentModal(true);
   };
 
   const collectPayment = async (order: Order) => {
     if (!user) return;
+    setPmProcessing(true);
     try {
-      await api.post('/api/payment/collect', {
-        orderId: getOrderId(order),
-        waiterId: getUserId(user)
-      });
+      const orderId = getOrderId(order);
+      const waiterId = getUserId(user);
+      const orderTotal = Number((order as any).total ?? (order as any).totalAmount ?? 0);
+      const orderItems: any[] = (order as any).items ?? [];
+
+      // Calcular propina del mesero
+      const tipAmt = pmTipPct > 0
+        ? orderTotal * (pmTipPct / 100)
+        : (pmCustomTip ? parseFloat(pmCustomTip) || 0 : 0);
+      const tipPct = pmTipPct > 0
+        ? pmTipPct
+        : (pmCustomTip && orderTotal > 0 ? (parseFloat(pmCustomTip) / orderTotal) * 100 : 0);
+
+      // Calcular la porción a cobrar según split
+      const taxRate = orderTotal > 0 ? (Number((order as any).tax ?? 0) / (Number((order as any).subtotal ?? 1) || 1)) : 0.18;
+      let myPortion = orderTotal;
+      if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
+        myPortion = orderTotal / pmSplitParts;
+      } else if (pmSplitType === 'ByTime') {
+        myPortion = pmByTimePayPart === 1 ? (parseFloat(pmByTimePart1) || 0) : (parseFloat(pmByTimePart2) || 0);
+        if (myPortion <= 0) myPortion = orderTotal;
+      } else if (pmSplitType === 'Proportional' && pmSplitParts > 0) {
+        const perPerson: Record<number, number> = {};
+        for (let i = 1; i <= pmSplitParts; i++) perPerson[i] = 0;
+        orderItems.forEach((item: any) => {
+          const sub = Number(item.subtotal ?? item.Subtotal ?? 0);
+          const p = pmPropAssign[item.id ?? item.Id] ?? 1;
+          perPerson[p] = (perPerson[p] ?? 0) + sub;
+        });
+        const subtotalP = perPerson[pmPayAsPerson] ?? 0;
+        myPortion = subtotalP + subtotalP * taxRate;
+      } else if (pmSplitType === 'ByCategory' && pmPayCategory) {
+        const catTotals: Record<string, number> = {};
+        orderItems.forEach((item: any) => {
+          const cat = item.categoryName ?? item.CategoryName ?? 'Otros';
+          const sub = Number(item.subtotal ?? item.Subtotal ?? 0);
+          catTotals[cat] = (catTotals[cat] ?? 0) + sub;
+        });
+        Object.keys(catTotals).forEach(c => { catTotals[c] = catTotals[c] + catTotals[c] * taxRate; });
+        myPortion = catTotals[pmPayCategory] ?? 0;
+      }
+
+      let body: any;
+
+      if (pmMethod === 'Mixed') {
+        const cashAmt     = parseFloat(pmMixedCash)     || 0;
+        const cardAmt     = parseFloat(pmMixedCard)     || 0;
+        const transferAmt = parseFloat(pmMixedTransfer) || 0;
+        const totalMixed  = cashAmt + cardAmt + transferAmt;
+        const subPayments = [];
+        if (cashAmt > 0)     subPayments.push({ method: 'Cash',     amount: cashAmt,     tipAmount: totalMixed > 0 ? tipAmt * (cashAmt / totalMixed)     : 0 });
+        if (cardAmt > 0)     subPayments.push({ method: 'Card',     amount: cardAmt,     tipAmount: totalMixed > 0 ? tipAmt * (cardAmt / totalMixed)     : 0 });
+        if (transferAmt > 0) subPayments.push({ method: 'Transfer', amount: transferAmt, tipAmount: totalMixed > 0 ? tipAmt * (transferAmt / totalMixed) : 0 });
+
+        body = {
+          orderId, waiterId,
+          paymentMethod: 'Mixed',
+          billSplitType: pmSplitType !== 'None' ? pmSplitType : undefined,
+          subPayments,
+        };
+      } else {
+        body = {
+          orderId, waiterId,
+          paymentMethod: pmMethod,
+          amount: myPortion,
+          tipAmount: tipAmt,
+          tipPercentage: tipPct,
+          billSplitType: pmSplitType !== 'None' ? pmSplitType : undefined,
+          splitPartIndex: pmSplitType === 'ByComensal' ? pmSplitParts
+            : pmSplitType === 'ByTime' ? pmByTimePayPart
+            : undefined,
+        };
+      }
+
+      await api.post('/api/payment/collect', body);
       toast.success('Cobro registrado. Mesa en limpieza.');
+      setShowPaymentModal(false);
+      setSelectedOrder(null);
       loadData(getUserId(user));
     } catch (err: any) {
       const msg = err?.response?.data?.error ?? 'Error al registrar cobro';
       toast.error(msg);
+    } finally {
+      setPmProcessing(false);
     }
   };
 
@@ -835,10 +1165,79 @@ export default function WaiterPage() {
     return t?.status ?? '';
   };
 
+  const loadShift = async () => {
+    const uid = getUserId(user);
+    if (!uid) return;
+    try {
+      const res = await api.get(`/api/waitershift/active/${uid}`);
+      if (res.data?.hasActiveShift) {
+        setActiveShift({ id: res.data.id, startTime: res.data.startTime, durationMinutes: res.data.durationMinutes });
+      } else {
+        setActiveShift(null);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const startShift = async () => {
+    const uid = getUserId(user);
+    if (!uid) return;
+    try {
+      const res = await api.post('/api/waitershift/start', { waiterId: uid });
+      setActiveShift({ id: res.data.id, startTime: res.data.startTime, durationMinutes: 0 });
+      toast.success('Turno iniciado');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al iniciar turno');
+    }
+  };
+
+  const openEndShiftModal = async () => {
+    const uid = getUserId(user);
+    if (!uid) return;
+    setShiftStep(1);
+    setShiftSummary(null);
+    setShiftResult(null);
+    setEndShiftTransferTo(null);
+    setShowEndShiftModal(true);
+    setShiftLoadingModal(true);
+    try {
+      loadWaiters();
+      const res = await api.get(`/api/waitershift/summary/${uid}`);
+      setShiftSummary(res.data);
+    } catch {
+      toast.error('Error al cargar el resumen del turno');
+    } finally {
+      setShiftLoadingModal(false);
+    }
+  };
+
+  const endShift = async () => {
+    if (!activeShift) return;
+    try {
+      const res = await api.put(`/api/waitershift/${activeShift.id}/end`, {
+        unassignOrders: true,
+        transferToWaiterId: endShiftTransferTo || null
+      });
+      setShiftResult(res.data);
+      setShiftStep(3);
+      setActiveShift(null);
+      const uid = getUserId(user);
+      if (uid) loadData(uid);
+    } catch {
+      toast.error('Error al cerrar turno');
+    }
+  };
+
+  const closeShiftModal = () => {
+    setShowEndShiftModal(false);
+    setShiftStep(1);
+    setShiftSummary(null);
+    setShiftResult(null);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('waiter_token');
     localStorage.removeItem('waiter_user');
-    window.location.href = 'https://172.31.98.64:3000/login';
+    window.location.href = 'https://172.31.98.104:3000/login';
   };
 
   if (loading) {
@@ -988,6 +1387,42 @@ export default function WaiterPage() {
                   <p className="text-lg font-bold text-blue-700">RD$ {stats.totalTips.toFixed(2)}</p>
                 </div>
               </div>
+              {/* Campana de notificaciones */}
+              <button
+                onClick={() => { setShowNotifPanel(v => !v); if (!showNotifPanel) markAllRead(); }}
+                className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Notificaciones"
+              >
+                <Bell className={`w-6 h-6 ${unreadCount > 0 ? 'text-amber-500 animate-bounce' : 'text-gray-500'}`} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Shift controls */}
+              {!activeShift ? (
+                <button
+                  onClick={startShift}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-semibold"
+                >
+                  <Play className="w-4 h-4" />
+                  Iniciar Turno
+                </button>
+              ) : (
+                <button
+                  onClick={openEndShiftModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm font-semibold"
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  Cerrar Turno
+                  <span className="text-xs opacity-80 ml-1">
+                    ({Math.round((Date.now() - new Date(activeShift.startTime).getTime()) / 60000)} min)
+                  </span>
+                </button>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
@@ -999,6 +1434,268 @@ export default function WaiterPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══ SHIFT HANDOVER MODAL ═══ */}
+      {showEndShiftModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+
+            {/* Header */}
+            <div className={`px-6 py-4 flex-shrink-0 ${shiftStep === 3 ? 'bg-emerald-600' : 'bg-amber-500'}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    {shiftStep === 1 && 'Resumen de Turno'}
+                    {shiftStep === 2 && 'Traspaso de Mesas'}
+                    {shiftStep === 3 && '¡Turno Cerrado!'}
+                  </h2>
+                  {activeShift && shiftStep !== 3 && (
+                    <p className="text-sm text-white/80 mt-0.5">
+                      Iniciado a las {new Date(activeShift.startTime).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
+                      {' · '}{Math.round((Date.now() - new Date(activeShift.startTime).getTime()) / 60000)} min
+                    </p>
+                  )}
+                </div>
+                {/* Step indicators */}
+                {shiftStep !== 3 && (
+                  <div className="flex gap-1.5">
+                    {[1, 2].map(s => (
+                      <div key={s} className={`w-2.5 h-2.5 rounded-full transition-all ${shiftStep >= s ? 'bg-white' : 'bg-white/30'}`} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+
+              {/* STEP 1: Resumen */}
+              {shiftStep === 1 && (
+                <>
+                  {shiftLoadingModal ? (
+                    <div className="text-center py-10">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto mb-3" />
+                      <p className="text-sm text-gray-500">Cargando resumen...</p>
+                    </div>
+                  ) : shiftSummary ? (
+                    <>
+                      {/* Alerta si hay cuentas por cobrar */}
+                      {shiftSummary.pendingBillingCount > 0 && (
+                        <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-xl p-3">
+                          <span className="text-orange-500 text-lg">⚠️</span>
+                          <p className="text-sm text-orange-700 font-medium">
+                            Tienes {shiftSummary.pendingBillingCount} mesa{shiftSummary.pendingBillingCount !== 1 ? 's' : ''} con cuenta pendiente de cobro.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Mesas activas */}
+                      {shiftSummary.activeTables?.length > 0 ? (
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                            Mesas abiertas ({shiftSummary.activeTables.length})
+                          </p>
+                          <div className="space-y-2">
+                            {shiftSummary.activeTables.map((t: any) => (
+                              <div key={t.orderId} className="border border-gray-200 rounded-xl p-3">
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-gray-800">Mesa {t.tableNumber}</span>
+                                    <span className="text-xs text-gray-400">{t.zoneName}</span>
+                                    {t.hasPendingPayment && (
+                                      <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-semibold">Por cobrar</span>
+                                    )}
+                                  </div>
+                                  <span className="font-bold text-gray-800">${t.total.toFixed(2)}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-gray-500">
+                                  <span>{t.itemCount} plato{t.itemCount !== 1 ? 's' : ''}{t.customerName ? ` · ${t.customerName}` : ''}</span>
+                                  {t.tip > 0 && <span className="text-emerald-600 font-medium">Propina: ${t.tip.toFixed(2)}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 rounded-xl p-4 text-center">
+                          <p className="text-sm text-gray-500">No tienes mesas abiertas.</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-6">No se pudo cargar el resumen.</p>
+                  )}
+                </>
+              )}
+
+              {/* STEP 2: Transferencia */}
+              {shiftStep === 2 && (
+                <>
+                  {shiftSummary?.activeTables?.length > 0 ? (
+                    <>
+                      <p className="text-sm text-gray-600">
+                        Tienes <strong>{shiftSummary.activeTables.length} mesa{shiftSummary.activeTables.length !== 1 ? 's' : ''} abiertas</strong>.
+                        Selecciona a quién se las entregas:
+                      </p>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
+                          style={{ borderColor: endShiftTransferTo === null ? '#f59e0b' : '#e5e7eb' }}>
+                          <input type="radio" name="shiftTransfer" checked={endShiftTransferTo === null}
+                            onChange={() => setEndShiftTransferTo(null)} className="accent-amber-500" />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">Dejar sin asignar</p>
+                            <p className="text-xs text-gray-400">Cualquier mesero podrá reclamarlas</p>
+                          </div>
+                        </label>
+                        {waiterList.filter(w => w.id !== getUserId(user)).map(w => (
+                          <label key={w.id} className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
+                            style={{ borderColor: endShiftTransferTo === w.id ? '#f59e0b' : '#e5e7eb' }}>
+                            <input type="radio" name="shiftTransfer" checked={endShiftTransferTo === w.id}
+                              onChange={() => setEndShiftTransferTo(w.id)} className="accent-amber-500" />
+                            <div>
+                              <p className="text-sm font-semibold text-gray-700">{w.firstName} {w.lastName}</p>
+                              <p className="text-xs text-gray-400">Transferir {shiftSummary.activeTables.length} mesa{shiftSummary.activeTables.length !== 1 ? 's' : ''}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                      <p className="text-2xl mb-2">✅</p>
+                      <p className="text-sm font-semibold text-emerald-700">No tienes mesas abiertas.</p>
+                      <p className="text-xs text-emerald-600 mt-1">Puedes cerrar el turno directamente.</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* STEP 3: Resultado */}
+              {shiftStep === 3 && shiftResult && (
+                <div className="text-center space-y-5">
+                  <div className="text-5xl">✅</div>
+                  <div>
+                    <p className="text-lg font-bold text-gray-800">Turno cerrado</p>
+                    <p className="text-sm text-gray-500 mt-1">Duración: {shiftResult.durationFormatted}</p>
+                  </div>
+                  {shiftResult.transferredTables > 0 ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 space-y-1">
+                      <p className="text-sm font-bold text-amber-700">
+                        {shiftResult.transferredTables} mesa{shiftResult.transferredTables !== 1 ? 's' : ''} y pedidos activos traspasados
+                      </p>
+                      {shiftResult.transferredTo ? (
+                        <p className="text-sm text-amber-600">Entregadas a <strong>{shiftResult.transferredTo}</strong></p>
+                      ) : (
+                        <p className="text-sm text-amber-600">Dejadas disponibles para reclamar</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-4">
+                      <p className="text-sm font-semibold text-emerald-700">No había mesas abiertas al cerrar.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer buttons */}
+            <div className="flex-shrink-0 px-6 pb-6 pt-2 flex gap-3">
+              {shiftStep === 1 && (
+                <>
+                  <button onClick={closeShiftModal} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">
+                    Cancelar
+                  </button>
+                  <button onClick={() => setShiftStep(2)} disabled={shiftLoadingModal}
+                    className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-sm font-semibold disabled:opacity-50">
+                    Continuar →
+                  </button>
+                </>
+              )}
+              {shiftStep === 2 && (
+                <>
+                  <button onClick={() => setShiftStep(1)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">
+                    ← Atrás
+                  </button>
+                  <button onClick={endShift} className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-sm font-semibold">
+                    Confirmar cierre
+                  </button>
+                </>
+              )}
+              {shiftStep === 3 && (
+                <button onClick={closeShiftModal} className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 text-sm font-semibold">
+                  Listo
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Panel de notificaciones */}
+      {showNotifPanel && (
+        <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b bg-gray-50">
+            <div className="flex items-center gap-2">
+              <Bell className="w-5 h-5 text-amber-500" />
+              <h2 className="font-bold text-gray-900 text-lg">Notificaciones</h2>
+              {!connected && (
+                <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Sin conexión</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {notifications.length > 0 && (
+                <button onClick={clearAll} className="text-xs text-gray-500 hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50">
+                  Limpiar todo
+                </button>
+              )}
+              <button onClick={() => setShowNotifPanel(false)} className="p-1 rounded-lg hover:bg-gray-200 transition-colors">
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                <Bell className="w-16 h-16 text-gray-200 mb-4" />
+                <p className="text-gray-500 font-medium">Sin notificaciones</p>
+                <p className="text-sm text-gray-400 mt-1">Las alertas de tus mesas aparecerán aquí</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {notifications.map((n: WaiterNotification) => (
+                  <div
+                    key={n.id}
+                    className={`flex gap-3 p-4 hover:bg-gray-50 transition-colors ${!n.read ? 'bg-blue-50/40' : ''}`}
+                  >
+                    <div className={`mt-0.5 flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-lg
+                      ${n.type === 'kitchen_ready' ? 'bg-amber-100' : n.type === 'bar_ready' ? 'bg-sky-100' : n.type === 'items_added' ? 'bg-purple-100' : 'bg-green-100'}`}
+                    >
+                      {n.type === 'kitchen_ready' ? '🍽️' : n.type === 'bar_ready' ? '🍹' : n.type === 'items_added' ? '➕' : '✅'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 leading-snug">{n.message}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {n.timestamp.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => dismiss(n.id)}
+                      className="flex-shrink-0 p-1 rounded hover:bg-gray-200 transition-colors self-start"
+                    >
+                      <X className="w-4 h-4 text-gray-400" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {showNotifPanel && (
+        <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowNotifPanel(false)} />
+      )}
 
       {/* View Toggle + Acciones */}
       <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3">
@@ -1515,50 +2212,338 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Modal Cobrar: muestra orden, total → Ventas, propina → Propinas (solo lectura, sin inputs de propina) */}
-      {showPaymentModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Cobrar</h2>
-            <p className="text-sm text-gray-600 mb-4">Orden: {selectedOrder.orderNumber}</p>
-            
-            <div className="space-y-3 mb-6">
-              <div className="p-3 bg-green-50 rounded-lg border border-green-200 flex justify-between items-center">
-                <span className="text-sm text-green-700">Total del pedido</span>
-                <span className="font-bold text-green-800">RD$ {((selectedOrder as any).total ?? (selectedOrder as any).totalAmount ?? 0).toFixed(2)}</span>
-              </div>
-              <p className="text-xs text-green-600">→ Se registrará en <strong>Ventas</strong></p>
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex justify-between items-center">
-                <span className="text-sm text-blue-700">Propina</span>
-                <span className="font-bold text-blue-800">RD$ {((selectedOrder as any).paymentTipAmount ?? (selectedOrder as any).PaymentTipAmount ?? 0).toFixed(2)}</span>
-              </div>
-              <p className="text-xs text-blue-600">→ Se registrará en <strong>Propinas</strong></p>
-            </div>
+      {/* Modal Cobrar expandido: división de cuenta, método de pago, propina */}
+      {showPaymentModal && selectedOrder && (() => {
+        const so = selectedOrder as any;
+        const orderTotal    = Number(so.total ?? so.totalAmount ?? 0);
+        const orderSubtotal = Number(so.subtotal ?? so.Subtotal ?? 0);
+        const orderTax      = Number(so.tax ?? so.Tax ?? 0);
+        const orderItems: any[] = so.items ?? [];
+        const taxRate = orderSubtotal > 0 ? orderTax / orderSubtotal : 0.18;
 
-            {/* Actions */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setShowPaymentModal(false); setSelectedOrder(null); }}
-                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  if (selectedOrder) {
-                    collectPayment(selectedOrder);
-                    setShowPaymentModal(false);
-                    setSelectedOrder(null);
-                  }
-                }}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                Confirmar cobro
-              </button>
+        // Totales por categoría
+        const catTotals: Record<string, number> = {};
+        orderItems.forEach((item: any) => {
+          const cat = item.categoryName ?? item.CategoryName ?? 'Otros';
+          const sub = Number(item.subtotal ?? item.Subtotal ?? 0);
+          catTotals[cat] = (catTotals[cat] ?? 0) + sub;
+        });
+        Object.keys(catTotals).forEach(c => { catTotals[c] = catTotals[c] + catTotals[c] * taxRate; });
+
+        // Porción a cobrar según split
+        let myPortion = orderTotal;
+        if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
+          myPortion = orderTotal / pmSplitParts;
+        } else if (pmSplitType === 'ByTime') {
+          myPortion = pmByTimePayPart === 1 ? (parseFloat(pmByTimePart1) || 0) : (parseFloat(pmByTimePart2) || 0);
+          if (myPortion <= 0) myPortion = orderTotal;
+        } else if (pmSplitType === 'Proportional' && pmSplitParts > 0) {
+          const perPerson: Record<number, number> = {};
+          for (let i = 1; i <= pmSplitParts; i++) perPerson[i] = 0;
+          orderItems.forEach((item: any) => {
+            const sub = Number(item.subtotal ?? item.Subtotal ?? 0);
+            const p = pmPropAssign[item.id ?? item.Id] ?? 1;
+            perPerson[p] = (perPerson[p] ?? 0) + sub;
+          });
+          const subtotalP = perPerson[pmPayAsPerson] ?? 0;
+          myPortion = subtotalP + subtotalP * taxRate;
+        } else if (pmSplitType === 'ByCategory' && pmPayCategory) {
+          myPortion = catTotals[pmPayCategory] ?? 0;
+        }
+
+        const tipAmt = pmTipPct > 0
+          ? myPortion * (pmTipPct / 100)
+          : (pmCustomTip ? parseFloat(pmCustomTip) || 0 : 0);
+
+        const grandTotal = myPortion + (pmMethod !== 'Mixed' ? tipAmt : 0);
+
+        const mixedTotal = (parseFloat(pmMixedCash) || 0) + (parseFloat(pmMixedCard) || 0) + (parseFloat(pmMixedTransfer) || 0);
+
+        const clientMethod = so.clientRequestedPaymentMethod ?? so.ClientRequestedPaymentMethod;
+        const clientTipPct = Number(so.clientTipPercentage ?? so.ClientTipPercentage ?? 0);
+        const clientTipAmt = Number(so.clientTipAmount ?? so.ClientTipAmount ?? 0);
+
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-3">
+            <div className="bg-white rounded-xl max-w-lg w-full max-h-[92vh] overflow-y-auto shadow-2xl">
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Cobrar — Mesa {selectedOrder.tableNumber}</h2>
+                    <p className="text-sm text-gray-500">Orden #{selectedOrder.orderNumber}</p>
+                  </div>
+                  <button
+                    onClick={() => { setShowPaymentModal(false); setSelectedOrder(null); }}
+                    className="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none"
+                  >×</button>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-5">
+
+                {/* Preferencias del cliente */}
+                {(() => {
+                  const clientFiscal = so.clientRequiresFiscalReceipt ?? so.ClientRequiresFiscalReceipt ?? false;
+                  const clientRNC    = so.clientRNC ?? so.ClientRNC ?? '';
+                  const clientBiz    = so.clientBusinessName ?? so.ClientBusinessName ?? '';
+                  const hasPrefs     = clientMethod || clientTipPct > 0 || clientTipAmt > 0 || clientFiscal;
+                  if (!hasPrefs) return null;
+                  return (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm space-y-2">
+                      <p className="font-semibold text-indigo-800">Preferencias del cliente</p>
+                      <div className="flex flex-wrap gap-3 text-indigo-700">
+                        {clientMethod && <span>Método: <strong>{clientMethod === 'Cash' ? 'Efectivo' : clientMethod === 'Card' ? 'Tarjeta' : clientMethod === 'Transfer' ? 'Transferencia' : 'Mixto'}</strong></span>}
+                        {clientTipPct > 0 && <span>Propina: <strong>{clientTipPct}%</strong></span>}
+                        {clientTipPct === 0 && clientTipAmt > 0 && <span>Propina: <strong>RD$ {clientTipAmt.toFixed(2)}</strong></span>}
+                      </div>
+                      {clientFiscal && (
+                        <div className="flex items-start gap-2 pt-2 border-t border-indigo-200 text-indigo-800">
+                          <span className="text-base">📄</span>
+                          <div>
+                            <span className="font-semibold">Comprobante fiscal solicitado</span>
+                            {clientRNC && <span className="ml-2 text-indigo-600">RNC: <strong>{clientRNC}</strong></span>}
+                            {clientBiz && <p className="text-indigo-700 font-medium mt-0.5">{clientBiz}</p>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Resumen de la orden */}
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Resumen</p>
+                  <div className="space-y-1 max-h-28 overflow-y-auto mb-2">
+                    {orderItems.map((item: any, idx: number) => (
+                      <div key={item.id ?? idx} className="flex justify-between text-sm text-gray-700">
+                        <span>{item.quantity}x {item.dishName ?? item.DishName}</span>
+                        <span>RD$ {Number(item.subtotal ?? item.Subtotal ?? 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t pt-2 space-y-1 text-sm">
+                    <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>RD$ {orderSubtotal.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-gray-600"><span>ITBIS (18%)</span><span>RD$ {orderTax.toFixed(2)}</span></div>
+                    <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t">
+                      <span>Total</span><span className="text-green-700">RD$ {orderTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* División de cuenta */}
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">División de cuenta</p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {([
+                      { value: 'None',         label: 'Cuenta única' },
+                      { value: 'ByComensal',   label: 'Por comensal' },
+                      { value: 'ByTime',       label: 'Por parte' },
+                      { value: 'Proportional', label: 'Proporcional' },
+                      { value: 'ByCategory',   label: 'Por categoría' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => {
+                          setPmSplitType(value);
+                          setPmSplitParts(2);
+                          setPmByTimePart1('');
+                          setPmByTimePart2('');
+                          setPmPropAssign({});
+                          setPmPayCategory('');
+                          // Si Mixto, resetear al total completo en efectivo cuando vuelve a None
+                          if (pmMethod === 'Mixed' && value === 'None') {
+                            setPmMixedCash(orderTotal.toFixed(2));
+                            setPmMixedCard('');
+                            setPmMixedTransfer('');
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg border text-sm ${pmSplitType === value ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold' : 'border-gray-200 text-gray-700'}`}
+                      >{label}</button>
+                    ))}
+                  </div>
+
+                  {pmSplitType === 'ByComensal' && (
+                    <div className="flex items-center gap-2 flex-wrap text-sm">
+                      <label className="text-gray-600">Entre</label>
+                      <select value={pmSplitParts} onChange={e => setPmSplitParts(parseInt(e.target.value) || 2)} className="border text-gray-900 rounded px-2 py-1">
+                        {[2,3,4,5,6].map(n => <option key={n} value={n}>{n} personas</option>)}
+                      </select>
+                      <span className="text-gray-600">→ Parte: <strong>RD$ {myPortion.toFixed(2)}</strong></span>
+                    </div>
+                  )}
+
+                  {pmSplitType === 'ByTime' && (
+                    <div className="space-y-2 text-sm">
+                      <p className="text-gray-600">Ingresa el monto de cada parte (deben sumar RD$ {orderTotal.toFixed(2)})</p>
+                      <div className="flex gap-2 flex-wrap">
+                        <input type="number" step="0.01" placeholder="Parte 1" value={pmByTimePart1}
+                          onChange={e => { setPmByTimePart1(e.target.value); setPmByTimePart2((orderTotal - (parseFloat(e.target.value) || 0)).toFixed(2)); }}
+                          className="border text-gray-900 rounded px-2 py-1 w-36" />
+                        <input type="number" step="0.01" placeholder="Parte 2" value={pmByTimePart2}
+                          onChange={e => { setPmByTimePart2(e.target.value); setPmByTimePart1((orderTotal - (parseFloat(e.target.value) || 0)).toFixed(2)); }}
+                          className="border text-gray-900 rounded px-2 py-1 w-36" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-gray-600">Cobrar:</label>
+                        <select value={pmByTimePayPart} onChange={e => setPmByTimePayPart(parseInt(e.target.value) as 1|2)} className="border text-gray-900 rounded px-2 py-1">
+                          <option value={1}>Parte 1 — RD$ {(parseFloat(pmByTimePart1) || 0).toFixed(2)}</option>
+                          <option value={2}>Parte 2 — RD$ {(parseFloat(pmByTimePart2) || 0).toFixed(2)}</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {pmSplitType === 'Proportional' && (
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <label className="text-gray-600">Entre</label>
+                        <select value={pmSplitParts} onChange={e => { setPmSplitParts(parseInt(e.target.value) || 2); setPmPropAssign({}); }} className="border text-gray-900 rounded px-2 py-1">
+                          {[2,3,4,5,6].map(n => <option key={n} value={n}>{n} personas</option>)}
+                        </select>
+                      </div>
+                      <p className="text-gray-700 font-medium">Asigna cada ítem:</p>
+                      <div className="space-y-1 max-h-28 overflow-y-auto">
+                        {orderItems.map((item: any, idx: number) => {
+                          const id = item.id ?? item.Id ?? idx;
+                          return (
+                            <div key={id} className="flex justify-between items-center text-gray-900">
+                              <span className="truncate flex-1 text-xs">{item.quantity}x {item.dishName ?? item.DishName}</span>
+                              <select value={pmPropAssign[id] ?? 1} onChange={e => setPmPropAssign(prev => ({ ...prev, [id]: parseInt(e.target.value) }))} className="border text-gray-900 rounded px-1 py-0.5 text-xs w-24 ml-2">
+                                {Array.from({ length: pmSplitParts }, (_, i) => i+1).map(n => <option key={n} value={n}>Persona {n}</option>)}
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-gray-600">Cobrar persona</label>
+                        <select value={pmPayAsPerson} onChange={e => setPmPayAsPerson(parseInt(e.target.value))} className="border text-gray-900 rounded px-2 py-1">
+                          {Array.from({ length: pmSplitParts }, (_, i) => i+1).map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <span className="text-gray-600">→ <strong>RD$ {myPortion.toFixed(2)}</strong></span>
+                      </div>
+                    </div>
+                  )}
+
+                  {pmSplitType === 'ByCategory' && (
+                    <div className="space-y-2 text-sm">
+                      <p className="text-gray-700 font-medium">Elige la categoría a cobrar:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(catTotals).map(([cat, total]) => (
+                          <button key={cat} type="button" onClick={() => setPmPayCategory(cat)}
+                            className={`px-3 py-1.5 rounded-lg border text-sm ${pmPayCategory === cat ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}>
+                            {cat}: RD$ {total.toFixed(2)}
+                          </button>
+                        ))}
+                      </div>
+                      {pmPayCategory && <p className="text-gray-600">Cobrar <strong>{pmPayCategory}</strong>: <strong>RD$ {myPortion.toFixed(2)}</strong></p>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Propina */}
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Propina</p>
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    {[{pct:10,label:'10%'},{pct:15,label:'15%'},{pct:20,label:'20%'},{pct:0,label:'Sin'}].map(({pct,label}) => (
+                      <button key={label} type="button"
+                        onClick={() => { setPmTipPct(pct); setPmCustomTip(''); }}
+                        className={`py-2 rounded-lg border text-sm font-semibold ${pmTipPct === pct && !pmCustomTip ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <input type="number" placeholder="Monto personalizado..." value={pmCustomTip}
+                    onChange={e => { setPmCustomTip(e.target.value); setPmTipPct(0); }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-indigo-500" />
+                  {tipAmt > 0 && (
+                    <div className="mt-2 p-2 bg-green-50 rounded text-sm flex justify-between text-green-800">
+                      <span>Propina</span><span className="font-bold">RD$ {tipAmt.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Método de pago */}
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Método de Pago</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'Cash',     name: 'Efectivo' },
+                      { id: 'Card',     name: 'Tarjeta' },
+                      { id: 'Transfer', name: 'Transferencia' },
+                      { id: 'Mixed',    name: 'Mixto' },
+                    ].map(m => (
+                      <button key={m.id} type="button" onClick={() => setPmMethod(m.id)}
+                        className={`py-2.5 rounded-lg border text-sm font-semibold transition-all ${pmMethod === m.id ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}>
+                        {m.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {pmMethod === 'Mixed' && (
+                    <div className="mt-3 space-y-2 text-sm">
+                      <p className="text-gray-600 font-medium">Distribuye el monto por método:</p>
+                      <p className="text-xs text-gray-500">Total a cobrar: RD$ {myPortion.toFixed(2)}</p>
+                      {[
+                        { label: 'Efectivo',       value: pmMixedCash,     setter: setPmMixedCash },
+                        { label: 'Tarjeta',        value: pmMixedCard,     setter: setPmMixedCard },
+                        { label: 'Transferencia',  value: pmMixedTransfer, setter: setPmMixedTransfer },
+                      ].map(({ label, value, setter }) => (
+                        <div key={label} className="flex items-center gap-2">
+                          <label className="w-32 text-gray-700">{label}</label>
+                          <input type="number" step="0.01" placeholder="0.00" value={value}
+                            onChange={e => setter(e.target.value)}
+                            className="flex-1 border border-gray-200 rounded px-2 py-1 text-gray-900 focus:outline-none focus:border-indigo-500" />
+                        </div>
+                      ))}
+                      <div className={`flex justify-between font-semibold pt-1 ${Math.abs(mixedTotal - myPortion) < 0.01 ? 'text-green-700' : 'text-red-600'}`}>
+                        <span>Suma ingresada</span>
+                        <span>RD$ {mixedTotal.toFixed(2)} {Math.abs(mixedTotal - myPortion) < 0.01 ? '✓' : `(faltan RD$ ${(myPortion - mixedTotal).toFixed(2)})`}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Total final */}
+                {pmMethod !== 'Mixed' && (
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                    <div className="flex justify-between text-sm text-gray-700"><span>A cobrar</span><span>RD$ {myPortion.toFixed(2)}</span></div>
+                    {tipAmt > 0 && <div className="flex justify-between text-sm text-green-700"><span>Propina</span><span>RD$ {tipAmt.toFixed(2)}</span></div>}
+                    <div className="flex justify-between font-bold text-gray-900 pt-1 border-t border-gray-200">
+                      <span>Total</span><span className="text-indigo-700">RD$ {grandTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Footer */}
+              <div className="sticky bottom-0 bg-white border-t border-gray-200 px-5 py-4 flex gap-3 rounded-b-xl">
+                <button
+                  onClick={() => { setShowPaymentModal(false); setSelectedOrder(null); }}
+                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => { if (selectedOrder) collectPayment(selectedOrder); }}
+                  disabled={pmProcessing || (pmMethod === 'Mixed' && Math.abs(mixedTotal - myPortion) > 0.01)}
+                  title={pmMethod === 'Mixed' && Math.abs(mixedTotal - myPortion) > 0.01 ? `Los montos del pago mixto deben sumar RD$ ${myPortion.toFixed(2)}` : ''}
+                  className="flex-1 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {pmProcessing
+                    ? 'Procesando...'
+                    : (pmMethod === 'Mixed' && Math.abs(mixedTotal - myPortion) > 0.01)
+                      ? `Mixto: falta RD$ ${(myPortion - mixedTotal).toFixed(2)}`
+                      : 'Confirmar cobro'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal: Identificar mesa por QR */}
       {showQrModal && (
@@ -1933,13 +2918,20 @@ export default function WaiterPage() {
               <div className="px-4 pb-4 space-y-2 border-t pt-3 mt-1">
                 {/* Quedarme con la mesa (se oculta si ya está reclamada) */}
                 {['Pending','Confirmed','Preparing','Ready','Served'].includes(order.status) && !claimedTableIds.has((order as any).tableId ?? (order as any).TableId) && (
-                  <button
-                    onClick={() => setClaimConfirmOrder(order)}
-                    className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2"
-                  >
-                    <Users className="w-4 h-4" />
-                    Quedarme con esta Mesa
-                  </button>
+                  pendingClaimTableIds.has((order as any).tableId ?? (order as any).TableId) ? (
+                    <div className="w-full py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm font-semibold flex items-center justify-center gap-2">
+                      <Clock className="w-4 h-4 animate-pulse" />
+                      Solicitud pendiente — esperando admin...
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setClaimConfirmOrder(order)}
+                      className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                    >
+                      <Users className="w-4 h-4" />
+                      Quedarme con esta Mesa
+                    </button>
+                  )
                 )}
 
                 {/* Mover comensal */}
@@ -1968,7 +2960,7 @@ export default function WaiterPage() {
         );
       })()}
 
-      {/* Modal: Confirm Quedarme con Mesa */}
+      {/* Modal: Solicitar Quedarme con Mesa (requiere aprobación del admin) */}
       {claimConfirmOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
@@ -1978,11 +2970,15 @@ export default function WaiterPage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Quedarme con Mesa {claimConfirmOrder.tableNumber}</h2>
-                <p className="text-sm text-gray-500">Los próximos pedidos de esta mesa te llegarán a ti.</p>
+                <p className="text-sm text-gray-500">El admin deberá aprobar tu solicitud.</p>
               </div>
             </div>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4 text-sm text-indigo-700">
+              <strong>¿Cómo funciona?</strong><br />
+              Al enviar la solicitud, el admin recibirá una notificación. Si aprueba, quedarás asignado a la mesa y recibirás confirmación aquí.
+            </div>
             <p className="text-sm text-gray-600 mb-5">
-              ¿Confirmas que quieres quedarte con la mesa <strong>#{claimConfirmOrder.tableNumber}</strong>?
+              ¿Enviar solicitud para quedarte con la mesa <strong>#{claimConfirmOrder.tableNumber}</strong>?
             </p>
             <div className="flex gap-3">
               <button
@@ -1997,18 +2993,26 @@ export default function WaiterPage() {
                   const tableId = (claimConfirmOrder as any).tableId ?? (claimConfirmOrder as any).TableId;
                   if (!uid || !tableId) return;
                   try {
-                    await api.post('/api/tablesession/claim', { tableId, waiterId: uid });
-                    toast.success(`Quedaste con la Mesa ${claimConfirmOrder.tableNumber} 📌`);
-                    setClaimedTableIds(prev => new Set(prev).add(tableId));
+                    await api.post('/api/tableclaim', {
+                      waiterId: uid,
+                      tableId,
+                      orderId: getOrderId(claimConfirmOrder) || null,
+                    });
+                    // Marcar como pendiente localmente
+                    setPendingClaimTableIds(prev => new Set(prev).add(tableId));
+                    toast(`⏳ Solicitud enviada al admin. Espera su respuesta.`, {
+                      duration: 7000,
+                      style: { background: '#eef2ff', color: '#4338ca', fontWeight: 600 }
+                    });
                     setClaimConfirmOrder(null);
                   } catch (err: any) {
-                    toast.error(err?.response?.data?.error || 'Error al reclamar la mesa');
+                    toast.error(err?.response?.data?.error || 'Error al enviar la solicitud');
                   }
                 }}
                 className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm flex items-center justify-center gap-2"
               >
                 <Pin className="w-4 h-4" />
-                Sí, quedarme
+                Solicitar mesa
               </button>
             </div>
           </div>

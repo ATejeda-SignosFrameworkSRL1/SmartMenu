@@ -84,7 +84,7 @@ export default function UsersPage() {
         localStorage.removeItem('admin_token');
         localStorage.removeItem('admin_user');
         toast.error('Sesión expirada. Inicia sesión de nuevo.');
-        window.location.href = 'https://172.31.98.64:3000/login';
+        window.location.href = 'https://172.31.98.104:3000/login';
         return;
       }
       toast.error('Error al cargar usuarios');
@@ -97,7 +97,7 @@ export default function UsersPage() {
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     if (!token) {
-      window.location.href = 'https://172.31.98.64:3000/login';
+      window.location.href = 'https://172.31.98.104:3000/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -210,7 +210,7 @@ export default function UsersPage() {
   };
 
   return (
-    <MainLayout>
+    <MainLayout title="Gestión de Usuarios">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

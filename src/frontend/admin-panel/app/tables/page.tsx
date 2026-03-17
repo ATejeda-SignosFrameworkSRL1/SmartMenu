@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import {
   QrCode,
   Trash2,
   Edit,
+  Filter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QRCodeSVG } from 'qrcode.react';
@@ -25,7 +26,7 @@ const api = axios.create({
   baseURL: '',
 });
 
-const CLIENT_URL = process.env.NEXT_PUBLIC_CLIENT_URL || 'https://172.31.98.64:3000';
+const CLIENT_URL = process.env.NEXT_PUBLIC_CLIENT_URL || 'https://172.31.98.104:3000';
 
 interface Table {
   id: number;
@@ -41,6 +42,7 @@ interface Zone {
   id: number;
   name: string;
   tableCount: number;
+  type?: string;
 }
 
 export default function TablesPage() {
@@ -48,10 +50,15 @@ export default function TablesPage() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterCapacity, setFilterCapacity] = useState<string>('all');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ tableNumber: 0, capacity: 4, zoneId: 0 });
   const [createdTable, setCreatedTable] = useState<Table | null>(null);
+  // Lee propiedad en camelCase o PascalCase
+  const nv = (obj: any, key: string) =>
+    obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
 
   const loadData = async () => {
     setLoading(true);
@@ -63,12 +70,40 @@ export default function TablesPage() {
 
       const [tablesRes, zonesRes] = await Promise.all([
         api.get('/api/table'),
-        api.get('/api/zone', { params: { type: 'Dining' } })
+        api.get('/api/zone'),
       ]);
 
-      setTables(Array.isArray(tablesRes.data) ? tablesRes.data : []);
-      const allZones = Array.isArray(zonesRes.data) ? zonesRes.data : [];
-      setZones(allZones);
+      // Normalizar zonas — excluir cocinas y bares
+      const allZonesRaw: any[] = Array.isArray(zonesRes.data) ? zonesRes.data : [];
+      const normalizedZones: Zone[] = allZonesRaw
+        .map(z => ({
+          id: Number(nv(z, 'id')),
+          name: String(nv(z, 'name') ?? ''),
+          tableCount: Number(nv(z, 'tableCount') ?? 0),
+          type: String(nv(z, 'type') ?? ''),
+        }))
+        .filter(z => {
+          const t = z.type.toLowerCase();
+          return t !== 'kitchen' && t !== 'bar';
+        });
+      setZones(normalizedZones);
+
+      const diningZoneNames = new Set(normalizedZones.map(z => z.name));
+
+      // Normalizar mesas — API no devuelve zoneId, solo zoneName
+      const allTablesRaw: any[] = Array.isArray(tablesRes.data) ? tablesRes.data : [];
+      const normalizedTables: Table[] = allTablesRaw
+        .map(t => ({
+          id: Number(nv(t, 'id')),
+          tableNumber: Number(nv(t, 'tableNumber')),
+          capacity: Number(nv(t, 'capacity')),
+          status: String(nv(t, 'status') ?? 'Available'),
+          zoneName: String(nv(t, 'zoneName') ?? ''),
+          zoneId: 0, // no viene del API, no se usa
+          qrCode: String(nv(t, 'qrCode') ?? ''),
+        }))
+        .filter(t => diningZoneNames.has(t.zoneName));
+      setTables(normalizedTables);
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Error al cargar datos');
@@ -80,27 +115,49 @@ export default function TablesPage() {
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     if (!token) {
-      window.location.href = 'https://172.31.98.64:3000/login';
+      window.location.href = 'https://172.31.98.104:3000/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     loadData();
     const interval = setInterval(loadData, 10000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tras normalización todos los campos son camelCase con tipos correctos
   const getVal = (obj: any, key: string) => obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)] ?? '';
-  const getTableStatus = (t: Table) => getVal(t, 'status');
-  const getTableZoneId = (t: Table) => getVal(t, 'zoneId');
-  const getZoneId = (z: Zone) => getVal(z, 'id');
-  const filteredTables = selectedZone
-    ? tables.filter(t => getTableZoneId(t) === selectedZone)
-    : tables;
+  const getTableStatus = (t: Table) => t.status;
+  const getZoneId = (z: Zone) => z.id;
+
+  const filteredTables = useMemo(() => {
+    const selectedZoneName = selectedZone ? zones.find(z => z.id === selectedZone)?.name : null;
+    return tables.filter(t => {
+      const zoneMatch = !selectedZoneName || t.zoneName === selectedZoneName;
+      const statusMatch = filterStatus === 'all' || t.status === filterStatus;
+      const capacityMatch =
+        filterCapacity === 'all' ||
+        (filterCapacity === '2' && t.capacity <= 2) ||
+        (filterCapacity === '4' && t.capacity >= 3 && t.capacity <= 4) ||
+        (filterCapacity === '6+' && t.capacity >= 5);
+      return zoneMatch && statusMatch && capacityMatch;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tables, selectedZone, zones, filterStatus, filterCapacity]);
+
+  const hasActiveFilters = filterStatus !== 'all' || filterCapacity !== 'all' || selectedZone !== null;
+
+  const clearFilters = () => {
+    setSelectedZone(null);
+    setFilterStatus('all');
+    setFilterCapacity('all');
+  };
 
   const stats = {
     available: tables.filter(t => getTableStatus(t) === 'Available').length,
     occupied: tables.filter(t => getTableStatus(t) === 'Occupied').length,
     reserved: tables.filter(t => getTableStatus(t) === 'Reserved').length,
+    billing: tables.filter(t => getTableStatus(t) === 'Billing').length,
   };
 
   const getStatusColor = (status: string) => {
@@ -109,6 +166,7 @@ export default function TablesPage() {
       'Occupied': 'bg-danger border-danger text-white',
       'Reserved': 'bg-warning border-warning text-white',
       'Cleaning': 'bg-blue-500 border-blue-500 text-white',
+      'Billing': 'bg-billing border-billing text-white',
     };
     return colors[status] || 'bg-muted border-muted';
   };
@@ -119,6 +177,7 @@ export default function TablesPage() {
       'Occupied': 'Ocupada',
       'Reserved': 'Reservada',
       'Cleaning': 'Limpieza',
+      'Billing': 'Por cobrar',
     };
     return labels[status] || status;
   };
@@ -164,10 +223,7 @@ export default function TablesPage() {
     }
   };
 
-  const getQrUrl = (table: Table) => {
-    const qr = getVal(table, 'qrCode');
-    return `${CLIENT_URL}/table/${qr}`;
-  };
+  const getQrUrl = (table: Table) => `${CLIENT_URL}/table/${table.qrCode}`;
 
   const downloadQR = (table: Table) => {
     const svg = document.getElementById(`qr-svg-${table.id}`);
@@ -181,7 +237,7 @@ export default function TablesPage() {
       canvas.height = 400;
       ctx?.drawImage(img, 0, 0, 400, 400);
       const link = document.createElement('a');
-      link.download = `mesa-${getVal(table, 'tableNumber')}-qr.png`;
+      link.download = `mesa-${table.tableNumber}-qr.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     };
@@ -197,7 +253,7 @@ export default function TablesPage() {
             <h1 className="text-3xl font-bold">Gestión de Mesas</h1>
             <p className="text-muted-foreground">Administra el estado y configuración de las mesas</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <Button onClick={() => { setShowCreateModal(true); setCreateForm({ tableNumber: tables.length + 1, capacity: 4, zoneId: zones[0] ? getZoneId(zones[0]) : 0 }); }} variant="default">
               <Plus className="h-4 w-4 mr-2" />
               Nueva Mesa
@@ -210,7 +266,7 @@ export default function TablesPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card className="border-2 border-success/30">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{stats.available}</div>
@@ -223,6 +279,12 @@ export default function TablesPage() {
               <p className="text-xs text-muted-foreground">Mesas Ocupadas</p>
             </CardContent>
           </Card>
+          <Card className="border-2 border-billing/30">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold">{stats.billing}</div>
+              <p className="text-xs text-muted-foreground">Por Cobrar</p>
+            </CardContent>
+          </Card>
           <Card className="border-2 border-warning/30">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{stats.reserved}</div>
@@ -231,37 +293,135 @@ export default function TablesPage() {
           </Card>
         </div>
 
-        {/* Zone Filter */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Filtrar por Zona</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                variant={selectedZone === null ? 'default' : 'outline'}
+        {/* Filters Panel */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+
+          {/* Zone tabs */}
+          <div>
+            <p className="text-xs font-semibold text-black uppercase tracking-wider mb-2">Zona</p>
+            <div className="flex flex-wrap gap-2">
+              <button
                 onClick={() => setSelectedZone(null)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                  selectedZone === null
+                    ? 'text-white shadow-sm'
+                    : 'bg-white text-black border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+                style={selectedZone === null ? { backgroundColor: '#8a0000e6', borderColor: '#8a0000e6' } : {}}
               >
-                Todas ({tables.length})
-              </Button>
+                Todas
+                <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                  selectedZone === null ? 'bg-white/20 text-white' : 'bg-white text-gray-500'
+                }`}>
+                  {tables.length}
+                </span>
+              </button>
               {zones.map((zone) => (
-                <Button
+                <button
                   key={getZoneId(zone)}
-                  variant={selectedZone === getZoneId(zone) ? 'default' : 'outline'}
                   onClick={() => setSelectedZone(getZoneId(zone))}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                    selectedZone === getZoneId(zone)
+                      ? 'text-white shadow-sm'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                  style={selectedZone === getZoneId(zone) ? { backgroundColor: '#8a0000e6', borderColor: '#8a0000e6' } : {}}
                 >
-                  <MapPin className="h-4 w-4 mr-2" />
-                  {getVal(zone, 'name')} ({getVal(zone, 'tableCount')})
-                </Button>
+                  {zone.name}
+                  <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                    selectedZone === getZoneId(zone) ? 'bg-white/20 text-white' : 'bg-white text-gray-500'
+                  }`}>
+                    {zone.tableCount}
+                  </span>
+                </button>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="border-t border-gray-100" />
+
+          {/* Status + Capacity + Results row */}
+          <div className="flex flex-wrap items-end gap-6">
+
+            {/* Estado */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Estado</p>
+              <div className="flex gap-2">
+                {[
+                  { value: 'all', label: 'Todos', dot: null },
+                  { value: 'Available', label: 'Disponible', dot: 'bg-green-500' },
+                  { value: 'Occupied', label: 'Ocupada', dot: 'bg-red-500' },
+                  { value: 'Billing', label: 'Por cobrar', dot: 'bg-purple-500' },
+                  { value: 'Reserved', label: 'Reservada', dot: 'bg-yellow-400' },
+                  { value: 'Cleaning', label: 'Limpieza', dot: 'bg-blue-400' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFilterStatus(opt.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                      filterStatus === opt.value
+                        ? 'text-white shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                    style={filterStatus === opt.value ? { backgroundColor: '#8a0000e6', borderColor: '#8a0000e6' } : {}}
+                  >
+                    {opt.dot && <span className={`w-2 h-2 rounded-full ${opt.dot}`} />}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Capacidad */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Capacidad</p>
+              <div className="flex gap-2">
+                {[
+                  { value: 'all', label: 'Todas', icon: null },
+                  { value: '2', label: '1–2 personas', icon: '🪑' },
+                  { value: '4', label: '3–4 personas', icon: '🪑🪑' },
+                  { value: '6+', label: '5+ personas', icon: '🪑🪑🪑' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFilterCapacity(opt.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                      filterCapacity === opt.value
+                        ? 'text-white shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                    style={filterCapacity === opt.value ? { backgroundColor: '#8a0000e6', borderColor: '#8a0000e6' } : {}}
+                  >
+                    {opt.icon && <span className="text-xs">{opt.icon}</span>}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Results + clear */}
+            <div className="ml-auto flex items-center gap-3">
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-all border border-gray-200 hover:border-red-200"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Limpiar
+                </button>
+              )}
+              <div className="text-right">
+                <p className="text-2xl font-bold text-gray-900 leading-none">{filteredTables.length}</p>
+                <p className="text-xs text-gray-400">mesa{filteredTables.length !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Tables Grid */}
         <Card>
           <CardHeader>
-            <CardTitle>Mesas ({filteredTables.length})</CardTitle>
+            <CardTitle>Mesas {hasActiveFilters ? `(${filteredTables.length} de ${tables.length})` : `(${tables.length})`}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -277,17 +437,17 @@ export default function TablesPage() {
                     onClick={() => setSelectedTable(table)}
                     className={cn(
                       'border-4 rounded-lg p-4 text-center transition-all cursor-pointer hover:scale-105 hover:shadow-lg',
-                      getStatusColor(getTableStatus(table))
+                      getStatusColor(table.status)
                     )}
                   >
-                    <div className="text-3xl font-bold mb-2">#{getVal(table, 'tableNumber')}</div>
-                    <div className="text-xs uppercase mb-2">{getVal(table, 'zoneName')}</div>
+                    <div className="text-3xl font-bold mb-2">#{table.tableNumber}</div>
+                    <div className="text-xs uppercase mb-2">{table.zoneName}</div>
                     <div className="flex items-center justify-center gap-1 text-sm mb-2">
                       <Users className="h-4 w-4" />
-                      {getVal(table, 'capacity')}
+                      {table.capacity}
                     </div>
                     <Badge variant="secondary" className="text-xs">
-                      {getStatusLabel(getTableStatus(table))}
+                      {getStatusLabel(table.status)}
                     </Badge>
                   </div>
                 ))}
@@ -302,7 +462,7 @@ export default function TablesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTable(null)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Mesa #{getVal(selectedTable, 'tableNumber')}</h2>
+              <h2 className="text-2xl font-bold">Mesa #{selectedTable.tableNumber}</h2>
               <button onClick={() => setSelectedTable(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
                 <X className="h-5 w-5" />
               </button>
@@ -328,15 +488,15 @@ export default function TablesPage() {
             <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                 <span className="text-muted-foreground">Zona</span>
-                <p className="font-semibold">{getVal(selectedTable, 'zoneName')}</p>
+                <p className="font-semibold">{selectedTable.zoneName}</p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                 <span className="text-muted-foreground">Capacidad</span>
-                <p className="font-semibold">{getVal(selectedTable, 'capacity')} personas</p>
+                <p className="font-semibold">{selectedTable.capacity} personas</p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 col-span-2">
                 <span className="text-muted-foreground">Estado actual</span>
-                <p className="font-semibold">{getStatusLabel(getTableStatus(selectedTable))}</p>
+                <p className="font-semibold">{getStatusLabel(selectedTable.status)}</p>
               </div>
             </div>
 
@@ -344,12 +504,12 @@ export default function TablesPage() {
             <div className="mb-6">
               <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Cambiar Estado</h3>
               <div className="grid grid-cols-2 gap-2">
-                {['Available', 'Occupied', 'Reserved', 'Cleaning'].map(status => (
+                {['Available', 'Occupied', 'Billing', 'Reserved', 'Cleaning'].map(status => (
                   <Button
                     key={status}
-                    variant={getTableStatus(selectedTable) === status ? 'default' : 'outline'}
+                    variant={selectedTable.status === status ? 'default' : 'outline'}
                     size="sm"
-                    disabled={getTableStatus(selectedTable) === status}
+                    disabled={selectedTable.status === status}
                     onClick={() => updateTableStatus(selectedTable.id, status)}
                     className="w-full"
                   >
@@ -366,7 +526,7 @@ export default function TablesPage() {
                 size="sm"
                 className="flex-1"
                 onClick={() => deleteTable(selectedTable.id)}
-                disabled={getTableStatus(selectedTable) === 'Occupied'}
+                disabled={selectedTable.status === 'Occupied'}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Eliminar Mesa
@@ -415,7 +575,7 @@ export default function TablesPage() {
                 >
                   <option value={0}>Seleccionar zona...</option>
                   {zones.map(z => (
-                    <option key={getZoneId(z)} value={getZoneId(z)}>{getVal(z, 'name')}</option>
+                    <option key={z.id} value={z.id}>{z.name}</option>
                   ))}
                 </select>
               </div>
@@ -436,7 +596,7 @@ export default function TablesPage() {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <QrCode className="h-8 w-8 text-green-600" />
               </div>
-              <h2 className="text-xl font-bold">Mesa #{getVal(createdTable, 'tableNumber')} Creada</h2>
+              <h2 className="text-xl font-bold">Mesa #{createdTable.tableNumber} Creada</h2>
               <p className="text-sm text-muted-foreground">Este es el código QR de la mesa</p>
             </div>
             <div className="flex justify-center mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">

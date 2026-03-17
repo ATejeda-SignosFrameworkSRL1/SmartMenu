@@ -11,8 +11,12 @@ public class TableReservation : BaseEntity
     public string? SpecialRequests { get; set; }
     public bool IsConfirmed { get; set; } = false;
     public bool IsCancelled { get; set; } = false;
+    /// <summary>Origin: "Internal" (host), "Portal" (public site)</summary>
+    public string Source { get; set; } = "Internal";
     /// <summary>Si la mesa no se usa antes de este momento, queda liberada (evitar roces con reserva).</summary>
     public DateTime? ReservedUntil { get; set; }
+    /// <summary>Minutos antes de la reserva en que la mesa pasa a estado Reserved (default 60).</summary>
+    public int AdvanceBlockMinutes { get; set; } = 60;
     /// <summary>Cuándo se envió el link de confirmación por WS (1-2h antes).</summary>
     public DateTime? ConfirmationLinkSentAt { get; set; }
     /// <summary>Link enviado al cliente para confirmar asistencia.</summary>
@@ -22,4 +26,5 @@ public class TableReservation : BaseEntity
     // Navigation properties
     public Table Table { get; set; } = null!;
     public User? CreatedByHost { get; set; }
+    public ReservationPreOrder? PreOrder { get; set; }
 }

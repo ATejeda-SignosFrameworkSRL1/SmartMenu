@@ -12,12 +12,21 @@ export default function TablePage() {
   const params = useParams();
   const router = useRouter();
   const qrCode = params?.qrCode as string;
-  const { setTableId, setCustomerName, customerName } = useCartStore();
+  const { setTableId, setCustomerName, clearCart } = useCartStore();
   const [nameInput, setNameInput] = useState('');
 
   // Determinar si es un ID numérico o un GUID
   const isNumericId = qrCode?.startsWith('table-');
   const tableId = isNumericId && qrCode ? parseInt(qrCode.replace('table-', '')) : null;
+
+  // Al escanear el QR siempre resetear: nombre, carrito y orden activa
+  // para que cada comensal ingrese su propio nombre
+  useEffect(() => {
+    setCustomerName(null);
+    clearCart();
+    localStorage.removeItem('current_order_id');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: tableInfo, isLoading, error } = useQuery({
     queryKey: ['table', qrCode],
@@ -34,13 +43,9 @@ export default function TablePage() {
 
   useEffect(() => {
     if (tableInfo?.data) {
-      const table = tableInfo.data;
-      setTableId(table.id);
-      if (customerName) {
-        router.push('/menu');
-      }
+      setTableId(tableInfo.data.id);
     }
-  }, [tableInfo, setTableId, customerName, router]);
+  }, [tableInfo, setTableId]);
 
   const handleSubmitName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,22 +135,22 @@ export default function TablePage() {
           </div>
         </div>
 
-        {/* Pedir nombre antes de ir al menú */}
-        {table && !customerName ? (
+        {/* Siempre pedir nombre — cada comensal debe identificarse */}
+        {table ? (
           <form onSubmit={handleSubmitName} className="space-y-4">
             <div className="flex items-center justify-center gap-2 text-gray-700 mb-2">
               <User className="w-5 h-5 text-primary-600" />
               <span className="font-medium">¿Cómo te llamas?</span>
             </div>
             <p className="text-sm text-gray-500 text-center mb-3">
-              Tu nombre se mostrará en la orden para el mesero.
+              Tu nombre aparecerá en tu pedido para que el mesero te identifique.
             </p>
             <input
               type="text"
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               placeholder="Ej. María, Juan..."
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition"
               maxLength={100}
               autoFocus
             />
@@ -159,7 +164,7 @@ export default function TablePage() {
         ) : (
           <div className="text-center text-gray-600">
             <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-            <p>{customerName ? 'Redirigiendo al menú...' : 'Cargando...'}</p>
+            <p>Cargando...</p>
           </div>
         )}
       </div>

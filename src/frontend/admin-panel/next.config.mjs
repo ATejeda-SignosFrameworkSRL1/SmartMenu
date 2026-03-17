@@ -1,18 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  distDir: 'out',
   reactStrictMode: true,
+  allowedDevOrigins: ['10.0.0.24'],
   images: {
-    domains: ['localhost', 'smartmenu.com.do', '172.31.98.64'],
+    domains: ['localhost', 'smartmenu.com.do', '10.0.0.24'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'https://172.31.98.64:5042',
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'https://10.0.0.24:5042',
   },
   async rewrites() {
+    const backendHttp = process.env.BACKEND_HTTP_URL || 'http://localhost:5041';
     return [
-      { source: '/api/:path*', destination: 'http://172.31.98.64:5041/api/:path*' },
-      { source: '/uploads/:path*', destination: 'http://172.31.98.64:5041/uploads/:path*' },
+      { source: '/api/:path*', destination: `${backendHttp}/api/:path*` },
+      { source: '/uploads/:path*', destination: `${backendHttp}/uploads/:path*` },
+      { source: '/hubs/:path*', destination: `${backendHttp}/hubs/:path*` },
     ];
   },
 };

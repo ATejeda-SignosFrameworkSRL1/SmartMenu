@@ -694,4 +694,238 @@ public static class DbInitializer
             try { Console.WriteLine("⚠️ EnsureZoneTypeColumns: " + ex.Message); } catch { }
         }
     }
+
+    /// <summary>
+    /// Ensures bar@smartmenu.com bartender user exists.
+    /// </summary>
+    public static async Task EnsureBarUserAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            const string barEmail = "bar@smartmenu.com";
+            if (!context.Users.Any(u => u.Email == barEmail))
+            {
+                // Obtener el primer restaurante
+                var restaurant = context.Restaurants.FirstOrDefault();
+                if (restaurant != null)
+                {
+                    context.Users.Add(new User
+                    {
+                        Email = barEmail,
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("Bar123!"),
+                        FirstName = "Bar",
+                        LastName = "SmartMenu",
+                        Phone = "809-555-0199",
+                        Role = UserRole.Bartender,
+                        IsActive = true,
+                        RestaurantId = restaurant.Id
+                    });
+                    await context.SaveChangesAsync();
+                    Console.WriteLine("✅ Usuario bar@smartmenu.com creado.");
+                }
+            }
+            else
+            {
+                // Asegurar que el usuario tenga rol Bartender
+                var barUser = context.Users.FirstOrDefault(u => u.Email == barEmail);
+                if (barUser != null && barUser.Role != UserRole.Bartender)
+                {
+                    barUser.Role = UserRole.Bartender;
+                    await context.SaveChangesAsync();
+                    Console.WriteLine("✅ Rol de bar@smartmenu.com actualizado a Bartender.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureBarUser: " + ex.Message); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Adds DefaultCourse to Dishes (default 1=PlatoFuerte) and CourseTiming to OrderItems (nullable).
+    /// </summary>
+    public static async Task EnsureCourseTimingColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Dishes') AND name = 'DefaultCourse')
+                    ALTER TABLE Dishes ADD DefaultCourse int NOT NULL DEFAULT 1;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'CourseTiming')
+                    ALTER TABLE OrderItems ADD CourseTiming int NULL;");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM [__EFMigrationsHistory] WHERE [MigrationId] = N'20260303000000_AddCourseTiming')
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion]) VALUES (N'20260303000000_AddCourseTiming', N'9.0.0');");
+
+            // Fix DefaultCourse based on category name
+            await context.Database.ExecuteSqlRawAsync(@"
+                UPDATE d SET d.DefaultCourse = 0
+                FROM Dishes d INNER JOIN Categories c ON d.CategoryId = c.Id
+                WHERE LOWER(c.Name) LIKE '%entrada%' OR LOWER(c.Name) LIKE '%aperitivo%';
+
+                UPDATE d SET d.DefaultCourse = 2
+                FROM Dishes d INNER JOIN Categories c ON d.CategoryId = c.Id
+                WHERE LOWER(c.Name) LIKE '%postre%' OR LOWER(c.Name) LIKE '%dulce%';
+
+                UPDATE d SET d.DefaultCourse = 1
+                FROM Dishes d INNER JOIN Categories c ON d.CategoryId = c.Id
+                WHERE LOWER(c.Name) LIKE '%bebida%' OR LOWER(c.Name) LIKE '%coctel%'
+                   OR LOWER(c.Name) LIKE '%c_ctel%' OR LOWER(c.Name) LIKE '%vino%';");
+
+            Console.WriteLine("✅ Columnas DefaultCourse/CourseTiming listas + DefaultCourse sincronizado con categorías.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureCourseTimingColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureAdvanceBlockAndSourceColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columnas AdvanceBlockMinutes/Source en TableReservations...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'AdvanceBlockMinutes')
+                    ALTER TABLE TableReservations ADD AdvanceBlockMinutes int NOT NULL DEFAULT 60;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'Source')
+                    ALTER TABLE TableReservations ADD [Source] nvarchar(20) NOT NULL DEFAULT 'Internal';
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'ConfirmationLinkSentAt')
+                    ALTER TABLE TableReservations ADD ConfirmationLinkSentAt datetime2 NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'ConfirmationLink')
+                    ALTER TABLE TableReservations ADD ConfirmationLink nvarchar(512) NULL;");
+
+            Console.WriteLine("✅ Columnas AdvanceBlockMinutes/Source listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureAdvanceBlockAndSourceColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureFiscalReceiptColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columnas fiscales en Payments...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Payments') AND name = 'RequiresFiscalReceipt')
+                    ALTER TABLE Payments ADD RequiresFiscalReceipt bit NOT NULL DEFAULT 0;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Payments') AND name = 'RNC')
+                    ALTER TABLE Payments ADD RNC nvarchar(20) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Payments') AND name = 'BusinessName')
+                    ALTER TABLE Payments ADD BusinessName nvarchar(256) NULL;");
+
+            Console.WriteLine("✅ Columnas fiscales en Payments listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureFiscalReceiptColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureDishImagesTableAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Creando tabla DishImages...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DishImages')
+                BEGIN
+                    CREATE TABLE DishImages (
+                        Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        DishId int NOT NULL,
+                        ImageUrl nvarchar(512) NOT NULL DEFAULT '',
+                        DisplayOrder int NOT NULL DEFAULT 0,
+                        IsMain bit NOT NULL DEFAULT 0,
+                        CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        UpdatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        CONSTRAINT FK_DishImages_Dishes FOREIGN KEY (DishId) REFERENCES Dishes(Id) ON DELETE CASCADE
+                    );
+                END");
+
+            Console.WriteLine("✅ Tabla DishImages lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureDishImagesTable: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureWaiterShiftsTableAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Creando tabla WaiterShifts...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'WaiterShifts')
+                BEGIN
+                    CREATE TABLE WaiterShifts (
+                        Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        WaiterId int NOT NULL,
+                        StartTime datetime2 NOT NULL,
+                        EndTime datetime2 NULL,
+                        IsActive bit NOT NULL DEFAULT 1,
+                        Notes nvarchar(512) NULL,
+                        CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        UpdatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        CONSTRAINT FK_WaiterShifts_Users FOREIGN KEY (WaiterId) REFERENCES Users(Id)
+                    );
+                END");
+
+            Console.WriteLine("✅ Tabla WaiterShifts lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureWaiterShiftsTable: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureReservationPreOrderTablesAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Creando tablas ReservationPreOrders / PreOrderItems...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ReservationPreOrders')
+                BEGIN
+                    CREATE TABLE ReservationPreOrders (
+                        Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        ReservationId int NOT NULL,
+                        Notes nvarchar(1024) NULL,
+                        CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        UpdatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        CONSTRAINT FK_ReservationPreOrders_TableReservations FOREIGN KEY (ReservationId) REFERENCES TableReservations(Id) ON DELETE CASCADE
+                    );
+                END
+
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'PreOrderItems')
+                BEGIN
+                    CREATE TABLE PreOrderItems (
+                        Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        PreOrderId int NOT NULL,
+                        DishId int NOT NULL,
+                        Quantity int NOT NULL DEFAULT 1,
+                        Notes nvarchar(512) NULL,
+                        CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        UpdatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        CONSTRAINT FK_PreOrderItems_ReservationPreOrders FOREIGN KEY (PreOrderId) REFERENCES ReservationPreOrders(Id) ON DELETE CASCADE,
+                        CONSTRAINT FK_PreOrderItems_Dishes FOREIGN KEY (DishId) REFERENCES Dishes(Id)
+                    );
+                END");
+
+            Console.WriteLine("✅ Tablas ReservationPreOrders/PreOrderItems listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureReservationPreOrderTables: " + ex.Message); } catch { }
+        }
+    }
 }

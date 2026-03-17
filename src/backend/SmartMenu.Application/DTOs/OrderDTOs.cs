@@ -1,9 +1,12 @@
+using SmartMenu.Domain.Enums;
+
 namespace SmartMenu.Application.DTOs;
 
 // Request DTOs
 public record CreateOrderDto
 {
-    public int TableId { get; init; }
+    /// <summary>Null para órdenes de mostrador/para llevar (POS del cajero).</summary>
+    public int? TableId { get; init; }
     public string SessionId { get; init; } = string.Empty;
     public string? CustomerName { get; init; }
     public string? SpecialInstructions { get; init; }
@@ -24,6 +27,8 @@ public record CreateOrderItemDto
     public string? SideDish { get; init; }
     public string? Customizations { get; init; }
     public string? Allergies { get; init; }
+    /// <summary>Curso en que servir el ítem (null = usar el DefaultCourse del plato)</summary>
+    public CourseTiming? CourseTiming { get; init; }
 }
 
 public record UpdateOrderStatusDto
@@ -36,11 +41,14 @@ public record OrderDto
 {
     public int Id { get; init; }
     public string OrderNumber { get; init; } = string.Empty;
-    public int TableId { get; init; }
+    public int? TableId { get; init; }
     public string TableNumber { get; init; } = string.Empty;
+    public bool IsPickup { get; init; }
     public string? CustomerName { get; init; }
+    public int? AssignedWaiterId { get; init; }
     public decimal Subtotal { get; init; }
     public decimal Tax { get; init; }
+    public decimal Tip { get; init; }
     public decimal Total { get; init; }
     public string Status { get; init; } = string.Empty;
     public bool KitchenPreparing { get; init; }
@@ -56,6 +64,18 @@ public record OrderDto
     public bool PaymentCollectedByWaiter { get; init; }
     /// <summary>Propina del pago (solo para órdenes Completed con pago creado por el cliente).</summary>
     public decimal PaymentTipAmount { get; init; }
+    /// <summary>Método de pago solicitado por el cliente al pedir la cuenta.</summary>
+    public string? ClientRequestedPaymentMethod { get; init; }
+    /// <summary>Porcentaje de propina solicitado por el cliente.</summary>
+    public decimal ClientTipPercentage { get; init; }
+    /// <summary>Monto de propina solicitado por el cliente.</summary>
+    public decimal ClientTipAmount { get; init; }
+    /// <summary>El cliente solicita comprobante fiscal.</summary>
+    public bool ClientRequiresFiscalReceipt { get; init; }
+    /// <summary>RNC del cliente (si solicitó comprobante).</summary>
+    public string? ClientRNC { get; init; }
+    /// <summary>Nombre de la empresa validado.</summary>
+    public string? ClientBusinessName { get; init; }
 }
 
 public record OrderItemDto
@@ -76,4 +96,6 @@ public record OrderItemDto
     public bool IsReady { get; init; }
     public int? KitchenZoneId { get; init; }
     public string? KitchenZoneName { get; init; }
+    /// <summary>Curso en que se debe servir este ítem (Entrada, PlatoFuerte, Postre)</summary>
+    public string? CourseTiming { get; init; }
 }

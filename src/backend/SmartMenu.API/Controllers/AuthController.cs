@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SmartMenu.Application.DTOs;
 using SmartMenu.Application.Services;
+using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.API.Controllers;
 
@@ -11,10 +13,12 @@ namespace SmartMenu.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly ApplicationDbContext _context;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, ApplicationDbContext context)
     {
         _authService = authService;
+        _context = context;
     }
 
     /// <summary>
@@ -64,9 +68,39 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPut("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+    {
+        var email = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+        if (string.IsNullOrEmpty(email))
+            return Unauthorized(new { error = "Token inválido" });
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null)
+            return NotFound(new { error = "Usuario no encontrado" });
+
+        if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            return BadRequest(new { error = "La contraseña actual es incorrecta" });
+
+        if (string.IsNullOrWhiteSpace(dto.NewPassword) || dto.NewPassword.Length < 6)
+            return BadRequest(new { error = "La nueva contraseña debe tener al menos 6 caracteres" });
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Contraseña actualizada correctamente" });
+    }
+
     [HttpGet("health")]
     public IActionResult Health()
     {
         return Ok(new { status = "Auth service is running", timestamp = DateTime.UtcNow });
     }
+}
+
+public class ChangePasswordDto
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
 }
