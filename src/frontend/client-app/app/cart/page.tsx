@@ -7,9 +7,9 @@ import { apiClient } from '@/lib/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Receipt } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 
-export default function CartPage() {
+function CartPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -342,5 +342,17 @@ export default function CartPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CartPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <ShoppingBag className="w-24 h-24 text-gray-300 mx-auto animate-pulse" />
+      </div>
+    }>
+      <CartPageInner />
+    </Suspense>
   );
 }

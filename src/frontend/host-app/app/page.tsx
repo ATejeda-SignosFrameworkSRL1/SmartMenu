@@ -271,8 +271,7 @@ export default function HostApp() {
     const token = localStorage.getItem('host_token');
 
     if (!userData || !token) {
-      const clientAppUrl = process.env.NEXT_PUBLIC_CLIENT_APP_URL || window.location.origin.replace(':3004', ':3000');
-      window.location.href = `${clientAppUrl}/login`;
+      window.location.href = '/login';
       return;
     }
 
@@ -285,6 +284,7 @@ export default function HostApp() {
     const interval = setInterval(loadData, 5000);
     const reservInterval = setInterval(loadReservations, 30000);
     return () => { clearInterval(interval); clearInterval(reservInterval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openAssignModal = (table: Table) => {
@@ -414,8 +414,7 @@ export default function HostApp() {
   const handleLogout = () => {
     localStorage.removeItem('host_token');
     localStorage.removeItem('host_user');
-    const clientAppUrl = process.env.NEXT_PUBLIC_CLIENT_APP_URL || window.location.origin.replace(':3004', ':3000');
-    window.location.href = `${clientAppUrl}/login`;
+    window.location.href = '/login';
   };
 
   const capacityOptions = useMemo(() => {

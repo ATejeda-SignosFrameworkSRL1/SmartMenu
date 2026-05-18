@@ -137,7 +137,7 @@ export default function ReportsPage() {
     try {
       const token = localStorage.getItem('admin_token');
       if (!token) {
-        window.location.href = 'https://172.31.98.104:3000/login';
+        window.location.href = '/login';
         return;
       }
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -199,7 +199,7 @@ export default function ReportsPage() {
         localStorage.removeItem('admin_token');
         localStorage.removeItem('admin_user');
         toast.error('Sesión expirada. Inicia sesión de nuevo.');
-        window.location.href = 'https://172.31.98.104:3000/login';
+        window.location.href = '/login';
         return;
       }
       toast.error('Error al cargar reportes');
@@ -209,6 +209,7 @@ export default function ReportsPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadReports(); }, []);
 
   if (loading || !reportData) {

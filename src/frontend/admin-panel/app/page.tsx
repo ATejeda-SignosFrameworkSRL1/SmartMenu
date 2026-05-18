@@ -45,14 +45,14 @@ function AdminDashboardInner() {
     const token = localStorage.getItem('admin_token');
     if (!token) {
       setLoading(false);
-      const loginUrl = `${window.location.protocol}//${window.location.hostname}:3000/login`;
-      window.location.href = loginUrl;
+      window.location.href = '/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     loadData();
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = async () => {

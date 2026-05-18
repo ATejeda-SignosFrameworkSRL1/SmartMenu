@@ -107,16 +107,16 @@ export default function KDSPage() {
     const userFromUrl = urlParams.get('user');
 
     if (tokenFromUrl && userFromUrl) {
-      sessionStorage.setItem('kds_token', tokenFromUrl);
-      sessionStorage.setItem('kds_user', decodeURIComponent(userFromUrl));
+      localStorage.setItem('kds_token', tokenFromUrl);
+      localStorage.setItem('kds_user', decodeURIComponent(userFromUrl));
       window.history.replaceState({}, '', '/');
     }
 
-    const userData = sessionStorage.getItem('kds_user');
-    const token = sessionStorage.getItem('kds_token');
+    const userData = localStorage.getItem('kds_user');
+    const token = localStorage.getItem('kds_token');
 
     if (!userData || !token) {
-      window.location.href = 'https://172.31.98.104:3000/login';
+      window.location.href = '/login';
       return;
     }
 
@@ -137,7 +137,7 @@ export default function KDSPage() {
           };
           setUser(fresh);
           userRef.current = fresh;
-          sessionStorage.setItem('kds_user', JSON.stringify(fresh));
+          localStorage.setItem('kds_user', JSON.stringify(fresh));
           loadOrders();
         }
       }).catch(() => {});
@@ -168,7 +168,7 @@ export default function KDSPage() {
 
   const loadOrders = async () => {
     try {
-      const token = sessionStorage.getItem('kds_token');
+      const token = localStorage.getItem('kds_token');
       if (!token) return;
       
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -312,8 +312,8 @@ export default function KDSPage() {
               </div>
               <button
                 onClick={() => {
-                  sessionStorage.clear();
-                  window.location.href = 'https://172.31.98.104:3000/login';
+                  localStorage.clear();
+                  window.location.href = '/login';
                 }}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
               >

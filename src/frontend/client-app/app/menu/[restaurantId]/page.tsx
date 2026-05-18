@@ -3,7 +3,7 @@
 import { useParams } from 'next/navigation';
 import { useCartStore } from '@/lib/stores/cartStore';
 import { useState } from 'react';
-import { ShoppingCart, Search, Leaf, Flame, ChefHat } from 'lucide-react';
+import { ShoppingCart, Search, Leaf, ChefHat } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Dish, Category } from '@/types';
 import { useMenu } from '@/lib/hooks';

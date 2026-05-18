@@ -30,14 +30,14 @@ interface CartState {
   /** Si se está agregando a una orden existente (ej. postres), guarda el orderId. */
   addToOrderId: number | null;
 
-  setTableId: (tableId: number) => void;
-  setRestaurantId: (restaurantId: number) => void;
-  setCustomerName: (name: string | null) => void;
-  setAddToOrderId: (id: number | null) => void;
+  setTableId: (_tableId: number) => void;
+  setRestaurantId: (_restaurantId: number) => void;
+  setCustomerName: (_name: string | null) => void;
+  setAddToOrderId: (_id: number | null) => void;
 
-  addItem: (item: CartItem) => void;
-  removeItem: (dishId: number) => void;
-  updateQuantity: (dishId: number, quantity: number) => void;
+  addItem: (_item: CartItem) => void;
+  removeItem: (_dishId: number) => void;
+  updateQuantity: (_dishId: number, _quantity: number) => void;
   clearCart: () => void;
   
   getSubtotal: () => number;

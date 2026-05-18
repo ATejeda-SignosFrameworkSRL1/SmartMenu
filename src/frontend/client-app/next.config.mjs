@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: 'out',
   reactStrictMode: true,
-  allowedDevOrigins: ['10.0.0.24'],
   images: {
     domains: ['localhost', 'smartmenu.com.do', '10.0.0.24'],
     unoptimized: process.env.NODE_ENV === 'development',

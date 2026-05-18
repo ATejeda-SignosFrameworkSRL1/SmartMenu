@@ -72,7 +72,7 @@ export default function MenuManagementPage() {
     }
     const token = localStorage.getItem('admin_token');
     if (!token) {
-      window.location.href = 'https://172.31.98.104:3000/login';
+      window.location.href = '/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;

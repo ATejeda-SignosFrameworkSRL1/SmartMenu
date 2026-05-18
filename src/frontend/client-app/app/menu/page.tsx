@@ -1,7 +1,7 @@
 'use client';
 
 import { useCartStore } from '@/lib/stores/cartStore';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ShoppingCart, Search, ChefHat, Clock, ArrowLeft, ClipboardList } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -28,7 +28,7 @@ const BADGE_STYLES: Record<string, string> = {
   sin_gluten:  'bg-amber-100 text-amber-800',
 };
 
-export default function MenuPage() {
+function MenuPageInner() {
   const { getItemCount, setAddToOrderId } = useCartStore();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -379,5 +379,20 @@ export default function MenuPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <ChefHat className="w-16 h-16 text-primary-600 animate-bounce mx-auto mb-4" />
+          <p className="text-xl text-gray-700">Cargando menú...</p>
+        </div>
+      </div>
+    }>
+      <MenuPageInner />
+    </Suspense>
   );
 }

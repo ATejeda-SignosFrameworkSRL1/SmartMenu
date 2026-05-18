@@ -26,7 +26,7 @@ const api = axios.create({
   baseURL: '',
 });
 
-const CLIENT_URL = process.env.NEXT_PUBLIC_CLIENT_URL || 'https://172.31.98.104:3000';
+const CLIENT_URL = process.env.NEXT_PUBLIC_CLIENT_URL || (typeof window !== 'undefined' ? window.location.origin.replace(':3001', ':3000') : '');
 
 interface Table {
   id: number;
@@ -115,7 +115,7 @@ export default function TablesPage() {
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     if (!token) {
-      window.location.href = 'https://172.31.98.104:3000/login';
+      window.location.href = '/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;

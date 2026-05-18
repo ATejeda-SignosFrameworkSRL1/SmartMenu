@@ -59,12 +59,33 @@ function cn(...classes: (string | false | undefined | null)[]) {
 export default function ReservationPage() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('reservation_token');
+    if (!token) {
+      window.location.href = '/login';
+      return;
+    }
+    setAuthChecked(true);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-rose-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-gray-600">Verificando sesión…</p>
+        </div>
+      </div>
+    );
+  }
 
   const scrollTo = (id: string) => {
     setMobileNav(false);

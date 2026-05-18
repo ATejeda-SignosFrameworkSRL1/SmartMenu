@@ -525,7 +525,7 @@ export default function WaiterPage() {
 
       const token = localStorage.getItem('waiter_token');
       if (!token) {
-        window.location.href = 'https://172.31.98.104:3000/login';
+        window.location.href = '/login';
         return;
       }
 
@@ -549,7 +549,7 @@ export default function WaiterPage() {
           console.log('⚠️ currentUser no tiene id, cargando desde localStorage');
           const userData = localStorage.getItem('waiter_user');
           if (!userData) {
-            window.location.href = 'https://172.31.98.104:3000/login';
+            window.location.href = '/login';
             return;
           }
           resolvedUser = JSON.parse(userData);
@@ -560,7 +560,7 @@ export default function WaiterPage() {
         console.error('❌ Error llamando /api/auth/me:', error);
         const userData = localStorage.getItem('waiter_user');
         if (!userData) {
-          window.location.href = 'https://172.31.98.104:3000/login';
+          window.location.href = '/login';
           return;
         }
         resolvedUser = JSON.parse(userData);
@@ -629,6 +629,7 @@ export default function WaiterPage() {
         pollingIntervalRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = async (waiterId: number) => {
@@ -1237,7 +1238,7 @@ export default function WaiterPage() {
   const handleLogout = () => {
     localStorage.removeItem('waiter_token');
     localStorage.removeItem('waiter_user');
-    window.location.href = 'https://172.31.98.104:3000/login';
+    window.location.href = '/login';
   };
 
   if (loading) {

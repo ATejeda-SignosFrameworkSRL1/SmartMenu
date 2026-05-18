@@ -25,7 +25,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('admin_token');
       localStorage.removeItem('admin_user');
-      window.location.href = 'https://172.31.98.104:3000/login';
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }

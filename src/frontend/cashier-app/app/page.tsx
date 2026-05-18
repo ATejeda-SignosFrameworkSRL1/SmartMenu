@@ -694,7 +694,7 @@ export default function CashierApp() {
     const userData = localStorage.getItem('cashier_user');
     const token = localStorage.getItem('cashier_token');
     if (!userData || !token) {
-      window.location.href = 'https://172.31.98.104:3000/login';
+      window.location.href = '/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -705,7 +705,7 @@ export default function CashierApp() {
   const handleLogout = () => {
     localStorage.removeItem('cashier_token');
     localStorage.removeItem('cashier_user');
-    window.location.href = 'https://172.31.98.104:3000/login';
+    window.location.href = '/login';
   };
 
   if (loading || !user) {

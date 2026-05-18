@@ -78,7 +78,7 @@ export default function ReservationsPage() {
 
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
-    if (!token) { window.location.href = 'https://172.31.98.104:3000/login'; return; }
+    if (!token) { window.location.href = '/login'; return; }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     loadReservations();
 

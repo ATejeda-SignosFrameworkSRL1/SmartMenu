@@ -109,7 +109,7 @@ export default function KitchenPage() {
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     if (!token) {
-      window.location.href = 'https://10.0.0.24:3000/login';
+      window.location.href = '/login';
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
