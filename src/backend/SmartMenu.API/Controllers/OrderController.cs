@@ -1,3 +1,6 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +14,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class OrderController : ControllerBase
 {
     private readonly IOrderService _orderService;
@@ -111,7 +115,23 @@ public class OrderController : ControllerBase
         if (order == null)
             return NotFound(new { message = "Orden no encontrada" });
 
+        if (!CanAccessOrder(order))
+            return Forbid();
+
         return Ok(order);
+    }
+
+    // IDOR guard: waiters can only access their own assigned orders (or unassigned).
+    // Admin/Manager/Cashier/Chef/Bartender/Host see all orders by role function.
+    private bool CanAccessOrder(OrderDto order)
+    {
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        if (role != "Waiter") return true; // other staff have legit reasons to see any order
+
+        var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(sub, out var userId)) return false;
+
+        return order.AssignedWaiterId == null || order.AssignedWaiterId == userId;
     }
 
     /// <summary>
@@ -145,6 +165,12 @@ public class OrderController : ControllerBase
     {
         try
         {
+            var current = await _orderService.GetOrderByIdAsync(id);
+            if (current == null)
+                return NotFound(new { error = "Orden no encontrada" });
+            if (!CanAccessOrder(current))
+                return Forbid();
+
             var order = await _orderService.UpdateOrderStatusAsync(id, request.NewStatus);
             if (string.Equals(request.NewStatus, "Confirmed", StringComparison.OrdinalIgnoreCase))
                 await NotifyKitchenAsync(order);

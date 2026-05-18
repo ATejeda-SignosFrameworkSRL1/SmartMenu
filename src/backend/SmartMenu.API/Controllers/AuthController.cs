@@ -10,6 +10,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -41,6 +42,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [AllowAnonymous]
     public async Task<ActionResult<AuthResultDto>> Register([FromBody] RegisterDto dto)
     {
         try
@@ -55,6 +57,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [AllowAnonymous]
     public async Task<ActionResult<AuthResultDto>> Login([FromBody] LoginDto dto)
     {
         try
@@ -93,6 +96,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("health")]
+    [AllowAnonymous]
     public IActionResult Health()
     {
         return Ok(new { status = "Auth service is running", timestamp = DateTime.UtcNow });

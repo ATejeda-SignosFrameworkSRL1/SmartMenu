@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Threading.RateLimiting;
 using SmartMenu.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,6 +53,14 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["Secret"];
 
+// Reject default placeholder in any non-Development environment
+if (!builder.Environment.IsDevelopment() &&
+    (string.IsNullOrWhiteSpace(secretKey) || secretKey.StartsWith("your-super-secret")))
+{
+    throw new InvalidOperationException(
+        "JWT secret is missing or is the default placeholder. Set JwtSettings:Secret via environment variable or user-secrets before running outside Development.");
+}
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -86,6 +96,31 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+// ===== RATE LIMITING =====
+builder.Services.AddRateLimiter(options =>
+{
+    // Policy for /api/payment/validate-rnc/{rnc} — external DGII call, must be throttled
+    options.AddFixedWindowLimiter("rnc", o =>
+    {
+        o.PermitLimit = 10;                 // 10 calls
+        o.Window = TimeSpan.FromMinutes(1); // per minute
+        o.QueueLimit = 0;                   // no queue, reject extras
+        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+
+    // Global default — generous; specific policies override per-endpoint
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 600,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -190,6 +225,8 @@ if (!Directory.Exists(wwwRoot))
 app.UseStaticFiles();
 
 app.UseCors(app.Environment.IsDevelopment() ? "AllowAllInDev" : "AllowAll");
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

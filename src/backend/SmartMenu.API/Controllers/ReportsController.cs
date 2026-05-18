@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartMenu.Infrastructure.Data;
@@ -7,6 +8,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin,Manager")]
 public class ReportsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;

@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using SmartMenu.Infrastructure.Data;
@@ -9,6 +11,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class PaymentController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -382,6 +385,8 @@ public class PaymentController : ControllerBase
     /// Devuelve el nombre de la empresa si el RNC es válido.
     /// </summary>
     [HttpGet("validate-rnc/{rnc}")]
+    [AllowAnonymous]
+    [EnableRateLimiting("rnc")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ValidateRnc(string rnc)
