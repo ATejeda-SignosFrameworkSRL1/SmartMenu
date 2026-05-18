@@ -18,7 +18,13 @@ public class Dish : BaseEntity
     public int? KitchenZoneId { get; set; }
     /// <summary>Default course/timing for this dish (Entrada, PlatoFuerte, Postre)</summary>
     public CourseTiming DefaultCourse { get; set; } = CourseTiming.PlatoFuerte;
-    
+
+    /// <summary>Soft delete flag. DGII exige conservar histórico de productos vendidos.</summary>
+    public bool IsDeleted { get; set; } = false;
+
+    /// <summary>Fecha en que el plato fue marcado como eliminado.</summary>
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public Category Category { get; set; } = null!;
     public Zone? KitchenZone { get; set; }

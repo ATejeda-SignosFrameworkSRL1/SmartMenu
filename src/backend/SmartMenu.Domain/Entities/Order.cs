@@ -52,6 +52,10 @@ public class Order : BaseEntity
     /// <summary>Nombre de la empresa validado contra la DGII.</summary>
     public string? ClientBusinessName { get; set; }
 
+    /// <summary>Optimistic concurrency token (SQL Server rowversion).</summary>
+    [System.ComponentModel.DataAnnotations.Timestamp]
+    public byte[]? RowVersion { get; set; }
+
     // Navigation properties
     public Table? Table { get; set; }
     public TableSession? TableSession { get; set; }

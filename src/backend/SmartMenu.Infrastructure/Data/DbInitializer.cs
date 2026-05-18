@@ -928,4 +928,33 @@ public static class DbInitializer
             try { Console.WriteLine("⚠️ EnsureReservationPreOrderTables: " + ex.Message); } catch { }
         }
     }
+
+    /// <summary>
+    /// Bloque B saneamiento fiscal:
+    /// - Concurrency token (rowversion) en Orders y Payments.
+    /// - Soft delete (IsDeleted, DeletedAt) en Dishes.
+    /// </summary>
+    public static async Task EnsureConcurrencyAndSoftDeleteColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando RowVersion en Orders/Payments + soft-delete en Dishes...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'RowVersion')
+                    ALTER TABLE Orders ADD RowVersion rowversion NOT NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Payments') AND name = 'RowVersion')
+                    ALTER TABLE Payments ADD RowVersion rowversion NOT NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Dishes') AND name = 'IsDeleted')
+                    ALTER TABLE Dishes ADD IsDeleted bit NOT NULL DEFAULT 0;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Dishes') AND name = 'DeletedAt')
+                    ALTER TABLE Dishes ADD DeletedAt datetime2 NULL;");
+
+            Console.WriteLine("✅ Concurrency + soft-delete listo.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureConcurrencyAndSoftDeleteColumns: " + ex.Message); } catch { }
+        }
+    }
 }

@@ -146,6 +146,10 @@ builder.Services.AddScoped(typeof(SmartMenu.Application.Repositories.IRepository
 builder.Services.AddScoped<SmartMenu.Application.Repositories.IUserRepository, SmartMenu.Infrastructure.Repositories.UserRepository>();
 builder.Services.AddScoped<SmartMenu.Application.Repositories.IOrderRepository, SmartMenu.Infrastructure.Repositories.OrderRepository>();
 
+// ===== SETTINGS =====
+builder.Services.Configure<SmartMenu.Application.Settings.BillingSettings>(
+    builder.Configuration.GetSection(SmartMenu.Application.Settings.BillingSettings.SectionName));
+
 // ===== SERVICES =====
 builder.Services.AddScoped<SmartMenu.Application.Services.IAuthService, SmartMenu.Infrastructure.Services.AuthService>();
 builder.Services.AddScoped<SmartMenu.Application.Services.IOrderService, SmartMenu.Infrastructure.Services.OrderService>();
@@ -268,6 +272,7 @@ if (app.Environment.IsDevelopment())
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishImagesTableAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureWaiterShiftsTableAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureReservationPreOrderTablesAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureConcurrencyAndSoftDeleteColumnsAsync(context);
 
     // 3. Seed initial data
     await SmartMenu.Infrastructure.Data.DbInitializer.SeedAsync(context);

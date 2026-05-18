@@ -181,6 +181,10 @@ public class ApplicationDbContext : DbContext
             .WithMany()
             .HasForeignKey(p => p.ProcessedByWaiterId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // Soft delete global filter: queries de Dish excluyen los marcados como IsDeleted.
+        // Para incluirlos (ej. reportes históricos / admin "ver eliminados") usar `.IgnoreQueryFilters()`.
+        modelBuilder.Entity<Dish>().HasQueryFilter(d => !d.IsDeleted);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

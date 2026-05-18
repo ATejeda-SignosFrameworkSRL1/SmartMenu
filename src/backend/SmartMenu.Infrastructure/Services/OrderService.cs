@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SmartMenu.Application.DTOs;
 using SmartMenu.Application.Repositories;
 using SmartMenu.Application.Services;
+using SmartMenu.Application.Settings;
 using SmartMenu.Domain.Entities;
 using SmartMenu.Domain.Enums;
 using SmartMenu.Infrastructure.Data;
@@ -34,12 +36,14 @@ public class OrderService : IOrderService
     private readonly IOrderRepository _orderRepository;
     private readonly ApplicationDbContext _context;
     private readonly ILogger<OrderService> _logger;
+    private readonly BillingSettings _billing;
 
-    public OrderService(IOrderRepository orderRepository, ApplicationDbContext context, ILogger<OrderService> logger)
+    public OrderService(IOrderRepository orderRepository, ApplicationDbContext context, ILogger<OrderService> logger, IOptions<BillingSettings> billing)
     {
         _orderRepository = orderRepository;
         _context = context;
         _logger = logger;
+        _billing = billing.Value;
     }
 
     public async Task<OrderDto> CreateOrderAsync(CreateOrderDto dto)
@@ -63,10 +67,34 @@ public class OrderService : IOrderService
         // Generar número de orden único
         var orderNumber = $"ORD-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
 
-        // Calcular totales
-        var subtotal = dto.Items.Sum(i => i.UnitPrice * i.Quantity);
-        var tax = subtotal * 0.18m;  // 18% ITBIS
-        var tip = subtotal * 0.10m;  // 10% propina legal (Ley 13-07 RD)
+        // ⚠️ Server-side pricing: UnitPrice viene del catálogo, NUNCA del cliente.
+        // Evita over-posting / manipulación de precios. dishMap fue cargado de la DB arriba.
+        var items = dto.Items.Select(i =>
+        {
+            if (!dishMap.TryGetValue(i.DishId, out var dish))
+                throw new ArgumentException($"Plato {i.DishId} no encontrado");
+            if (i.Quantity <= 0)
+                throw new ArgumentException($"Cantidad inválida para plato {i.DishId}: {i.Quantity}");
+            return new OrderItem
+            {
+                DishId = i.DishId,
+                Quantity = i.Quantity,
+                UnitPrice = dish.Price,
+                Subtotal = dish.Price * i.Quantity,
+                Notes = i.Notes,
+                Customizations = i.Customizations,
+                Allergies = i.Allergies,
+                SideDish = i.SideDish,
+                PreferenceText = i.MeatCooking,
+                IsReady = false,
+                CourseTiming = i.CourseTiming ?? dish.DefaultCourse
+            };
+        }).ToList();
+
+        // Totales calculados sobre precios del servidor.
+        var subtotal = items.Sum(i => i.Subtotal);
+        var tax = decimal.Round(subtotal * _billing.TaxRate, 2, MidpointRounding.AwayFromZero);
+        var tip = decimal.Round(subtotal * _billing.TipRate, 2, MidpointRounding.AwayFromZero);
         var total = subtotal + tax + tip;
 
         var order = new Order
@@ -83,21 +111,7 @@ public class OrderService : IOrderService
             Status = OrderStatus.Pending,
             SpecialInstructions = dto.SpecialInstructions,
             EstimatedTimeMinutes = dto.Items.Count * 10,
-            Items = dto.Items.Select(i => new OrderItem
-            {
-                DishId = i.DishId,
-                Quantity = i.Quantity,
-                UnitPrice = i.UnitPrice,
-                Subtotal = i.UnitPrice * i.Quantity,
-                Notes = i.Notes,
-                Customizations = i.Customizations,
-                Allergies = i.Allergies,
-                SideDish = i.SideDish,
-                PreferenceText = i.MeatCooking,
-                IsReady = false,
-                CourseTiming = i.CourseTiming
-                    ?? (dishMap.TryGetValue(i.DishId, out var dish) ? dish.DefaultCourse : SmartMenu.Domain.Enums.CourseTiming.PlatoFuerte)
-            }).ToList()
+            Items = items
         };
 
         // Si la mesa pertenece a una mesa virtual activa, asignar la orden al mesero que la creó
@@ -431,28 +445,33 @@ public class OrderService : IOrderService
         bool newFoodAdded = false, newDrinksAdded = false;
         foreach (var dto in newItems)
         {
-            var dish = await _context.Dishes.FindAsync(dto.DishId);
-            if (IsDrinkDish(dish?.Name)) newDrinksAdded = true;
+            if (dto.Quantity <= 0)
+                throw new ArgumentException($"Cantidad inválida para plato {dto.DishId}: {dto.Quantity}");
+
+            var dish = await _context.Dishes.FindAsync(dto.DishId)
+                ?? throw new ArgumentException($"Plato {dto.DishId} no encontrado");
+
+            if (IsDrinkDish(dish.Name)) newDrinksAdded = true;
             else newFoodAdded = true;
 
             order.Items.Add(new OrderItem
             {
-                DishId       = dto.DishId,
-                Quantity     = dto.Quantity,
-                UnitPrice    = dto.UnitPrice,
-                Subtotal     = dto.UnitPrice * dto.Quantity,
-                Notes        = dto.Notes,
+                DishId         = dto.DishId,
+                Quantity       = dto.Quantity,
+                UnitPrice      = dish.Price,            // server-side price, no client trust
+                Subtotal       = dish.Price * dto.Quantity,
+                Notes          = dto.Notes,
                 Customizations = dto.Customizations,
-                Allergies    = dto.Allergies,
-                SideDish     = dto.SideDish,
-                CourseTiming = dto.CourseTiming ?? (dish != null ? (CourseTiming?)dish.DefaultCourse : null),
+                Allergies      = dto.Allergies,
+                SideDish       = dto.SideDish,
+                CourseTiming   = dto.CourseTiming ?? (CourseTiming?)dish.DefaultCourse,
             });
         }
 
-        // Recalcular totales incluyendo todos los ítems
+        // Recalcular totales incluyendo todos los ítems (precios siempre desde el catálogo)
         var subtotal = order.Items.Sum(i => i.UnitPrice * i.Quantity);
-        var tax  = subtotal * 0.18m;
-        var tip  = subtotal * 0.10m;
+        var tax  = decimal.Round(subtotal * _billing.TaxRate, 2, MidpointRounding.AwayFromZero);
+        var tip  = decimal.Round(subtotal * _billing.TipRate, 2, MidpointRounding.AwayFromZero);
         order.Subtotal = subtotal;
         order.Tax      = tax;
         order.Tip      = tip;

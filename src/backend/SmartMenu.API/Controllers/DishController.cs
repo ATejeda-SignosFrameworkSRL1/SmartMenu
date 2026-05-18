@@ -135,13 +135,21 @@ public class DishController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> DeleteDish(int id)
     {
+        // Soft delete: la DGII exige conservar histórico de productos vendidos.
+        // El plato deja de aparecer en queries normales (via HasQueryFilter), pero los
+        // OrderItem históricos siguen pudiéndose mostrar.
         var dish = await _context.Dishes.FindAsync(id);
         if (dish == null)
             return NotFound(new { message = "Dish not found" });
 
-        _context.Dishes.Remove(dish);
+        if (dish.IsDeleted)
+            return NoContent();
+
+        dish.IsDeleted = true;
+        dish.DeletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         return NoContent();

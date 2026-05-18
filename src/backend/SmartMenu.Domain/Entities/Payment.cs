@@ -25,7 +25,11 @@ public class Payment : BaseEntity
     public string? RNC { get; set; }
     /// <summary>Nombre de la empresa obtenido con el RNC.</summary>
     public string? BusinessName { get; set; }
-    
+
+    /// <summary>Optimistic concurrency token (SQL Server rowversion).</summary>
+    [System.ComponentModel.DataAnnotations.Timestamp]
+    public byte[]? RowVersion { get; set; }
+
     // Navigation properties
     public Order Order { get; set; } = null!;
     public User? ProcessedByWaiter { get; set; }
