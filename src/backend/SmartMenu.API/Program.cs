@@ -158,7 +158,13 @@ builder.Services.AddScoped<SmartMenu.Application.Services.IOrderService, SmartMe
 builder.Services.AddSignalR();
 
 // ===== CONTROLLERS =====
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never;
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 // ===== SWAGGER =====
@@ -229,6 +235,10 @@ if (!Directory.Exists(wwwRoot))
 app.UseStaticFiles();
 
 app.UseCors(app.Environment.IsDevelopment() ? "AllowAllInDev" : "AllowAll");
+
+// Global exception handling — debe ir antes de Authentication para que
+// también atrape excepciones del pipeline de auth.
+app.UseMiddleware<SmartMenu.API.Middleware.ExceptionHandlingMiddleware>();
 
 app.UseRateLimiter();
 
