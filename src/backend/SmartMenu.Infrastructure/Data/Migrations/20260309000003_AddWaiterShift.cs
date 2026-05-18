@@ -1,10 +1,13 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20260309000003_AddWaiterShift")]
     public partial class AddWaiterShift : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

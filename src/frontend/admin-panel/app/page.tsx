@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +15,9 @@ const api = axios.create({
   baseURL: '',
 });
 
-export default function AdminDashboard() {
+function AdminDashboardInner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [tables, setTables] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -28,10 +31,22 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+    // Leer token desde URL si viene del login
+    const urlToken = searchParams.get('token');
+    const urlUser = searchParams.get('user');
+    if (urlToken) {
+      localStorage.setItem('admin_token', urlToken);
+      if (urlUser) localStorage.setItem('user', decodeURIComponent(urlUser));
+      // Limpiar la URL sin recargar
+      router.replace('/');
+      return;
+    }
+
     const token = localStorage.getItem('admin_token');
     if (!token) {
       setLoading(false);
-      window.location.href = 'https://172.31.98.104:3000/login';
+      const loginUrl = `${window.location.protocol}//${window.location.hostname}:3000/login`;
+      window.location.href = loginUrl;
       return;
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -167,6 +182,7 @@ export default function AdminDashboard() {
 
   return (
     <MainLayout title="Dashboard">
+
       <div className="space-y-6">
         {/* Top Stats */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -360,5 +376,13 @@ export default function AdminDashboard() {
         </Card>
       </div>
     </MainLayout>
+  );
+}
+
+export default function AdminDashboard() {
+  return (
+    <Suspense fallback={null}>
+      <AdminDashboardInner />
+    </Suspense>
   );
 }

@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20260309000001_AddFiscalReceipt")]
     public partial class AddFiscalReceipt : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

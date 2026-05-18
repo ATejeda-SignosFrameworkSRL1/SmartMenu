@@ -11,6 +11,14 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'https://10.0.0.24:5042',
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }],
+      },
+    ];
+  },
   async rewrites() {
     const backendHttp = process.env.BACKEND_HTTP_URL || 'http://localhost:5041';
     return [

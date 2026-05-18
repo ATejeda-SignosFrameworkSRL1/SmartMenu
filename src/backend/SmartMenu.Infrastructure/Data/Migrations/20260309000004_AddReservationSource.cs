@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20260309000004_AddReservationSource")]
     public partial class AddReservationSource : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

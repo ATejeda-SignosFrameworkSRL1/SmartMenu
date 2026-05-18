@@ -3,6 +3,14 @@ const nextConfig = {
   distDir: 'out',
   reactStrictMode: true,
   allowedDevOrigins: ['10.0.0.24'],
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }],
+      },
+    ];
+  },
   async rewrites() {
     const backendHttp = process.env.BACKEND_HTTP_URL || 'http://localhost:5041';
     return [

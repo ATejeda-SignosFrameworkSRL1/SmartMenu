@@ -211,26 +211,35 @@ app.MapGet("/health", () => Results.Ok(new
     environment = app.Environment.EnvironmentName
 }));
 
-// Seed database (solo en desarrollo)
+// Apply migrations and seed database (solo en desarrollo)
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await SmartMenu.Infrastructure.Data.DbInitializer.SeedAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureExtraWaiterAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCashierAsync(context);
+
+    // 1. Apply all EF migrations first
+    await context.Database.MigrateAsync();
+
+    // 2. Add extra columns/tables not covered by EF migrations (idempotent, must run before seed)
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureMigrationAddVirtualTableTransferDishTagsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishTagsSeedAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureZoneTypeColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureOrderServedColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureKitchenZoneColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCourseTimingColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBarUserAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureAdvanceBlockAndSourceColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFiscalReceiptColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishImagesTableAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureWaiterShiftsTableAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureReservationPreOrderTablesAsync(context);
+
+    // 3. Seed initial data
+    await SmartMenu.Infrastructure.Data.DbInitializer.SeedAsync(context);
+
+    // 4. Ensure additional users and data
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureExtraWaiterAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCashierAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishTagsSeedAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBarUserAsync(context);
 }
 
 app.Run();

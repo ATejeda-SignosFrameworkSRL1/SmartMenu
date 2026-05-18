@@ -7,6 +7,14 @@ const nextConfig = {
     domains: ['localhost', 'smartmenu.com.do', '10.0.0.24'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }],
+      },
+    ];
+  },
   async rewrites() {
     const backendHttp = process.env.BACKEND_HTTP_URL || 'http://localhost:5041';
     return [

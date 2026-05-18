@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <inheritdoc />
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20260209000000_AddOrderKitchenBarPreparing")]
     public partial class AddOrderKitchenBarPreparing : Migration
     {
         /// <inheritdoc />
