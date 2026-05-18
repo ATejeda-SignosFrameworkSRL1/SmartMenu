@@ -24,11 +24,13 @@ public class DishController : ControllerBase
     public async Task<ActionResult<IEnumerable<DishDto>>> GetDishes([FromQuery] int? categoryId, [FromQuery] bool all = false)
     {
         var query = _context.Dishes
+            .AsNoTracking()
             .Include(d => d.Category)
             .Include(d => d.KitchenZone)
             .Include(d => d.DishTags)
             .ThenInclude(dt => dt.DishTag)
             .Include(d => d.Images)
+            .AsSplitQuery()
             .AsQueryable();
         if (!all)
             query = query.Where(d => d.IsAvailable);
@@ -45,11 +47,13 @@ public class DishController : ControllerBase
     public async Task<ActionResult<DishDto>> GetDish(int id)
     {
         var dish = await _context.Dishes
+            .AsNoTracking()
             .Include(d => d.Category)
             .Include(d => d.KitchenZone)
             .Include(d => d.DishTags)
             .ThenInclude(dt => dt.DishTag)
             .Include(d => d.Images)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (dish == null)

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using SmartMenu.Domain.Enums;
 
 namespace SmartMenu.Application.DTOs;
@@ -7,19 +8,34 @@ public record CreateOrderDto
 {
     /// <summary>Null para órdenes de mostrador/para llevar (POS del cajero).</summary>
     public int? TableId { get; init; }
+
+    [Required, StringLength(128, MinimumLength = 1)]
     public string SessionId { get; init; } = string.Empty;
+
+    [StringLength(128)]
     public string? CustomerName { get; init; }
+
+    [StringLength(1024)]
     public string? SpecialInstructions { get; init; }
+
+    [Required, MinLength(1)]
     public List<CreateOrderItemDto> Items { get; init; } = new();
 }
 
 public record CreateOrderItemDto
 {
+    [Range(1, int.MaxValue)]
     public int DishId { get; init; }
+
+    [Range(1, 99)]
     public int Quantity { get; init; }
+
+    /// <summary>⚠ Ignored by backend — server-side pricing usa Dish.Price del catálogo.</summary>
     public decimal UnitPrice { get; init; }
+
+    [StringLength(512)]
     public string? Notes { get; init; }
-    
+
     // Customer preferences
     public string? DrinkTiming { get; init; }
     public bool? WithAlcohol { get; init; }
@@ -33,6 +49,7 @@ public record CreateOrderItemDto
 
 public record UpdateOrderStatusDto
 {
+    [Required, StringLength(32, MinimumLength = 1)]
     public string NewStatus { get; init; } = string.Empty;
 }
 
