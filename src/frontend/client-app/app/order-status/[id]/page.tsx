@@ -3,8 +3,9 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { Clock, CheckCircle, ChefHat, Package, Utensils, Wine } from 'lucide-react';
+import { Clock, CheckCircle, ChefHat, Package, Utensils, Wine, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
@@ -23,13 +24,33 @@ export default function OrderStatusPage() {
   const params = useParams();
   const router = useRouter();
   const orderId = params?.id ? parseInt(params.id as string) : null;
+  const [cancelling, setCancelling] = useState(false);
 
-  const { data: orderData, isLoading } = useQuery({
+  const { data: orderData, isLoading, refetch } = useQuery({
     queryKey: ['order', orderId],
     queryFn: () => apiClient.getOrder(orderId!),
     enabled: !!orderId,
     refetchInterval: 5000, // Actualizar cada 5 segundos
   });
+
+  const handleCancel = async () => {
+    if (!orderId) return;
+    const ok = window.confirm('¿Cancelar esta orden? Esto no se puede deshacer.');
+    if (!ok) return;
+    setCancelling(true);
+    try {
+      await apiClient.cancelOrder(orderId, 'Cancelada por cliente');
+      toast.success('Orden cancelada');
+      router.push('/menu');
+    } catch (err: any) {
+      const code = err?.response?.status;
+      const msg = err?.response?.data?.error ?? 'No se pudo cancelar la orden';
+      if (code === 409) toast.error(`No se puede cancelar: ${msg}`);
+      else toast.error(msg);
+      setCancelling(false);
+      await refetch();
+    }
+  };
 
   const order = orderData?.data;
   const items = order?.items ?? [];
@@ -166,6 +187,18 @@ export default function OrderStatusPage() {
             </h1>
             <p className="text-2xl font-bold text-primary-600">#{order.orderNumber}</p>
             <p className="text-gray-600 mt-2">Mesa {order.tableId}</p>
+
+            {/* Cancelar orden — solo antes de que la cocina empiece (Pending o Confirmed) */}
+            {(order.status === 'Pending' || order.status === 'Confirmed') && (
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
+              >
+                <X className="w-4 h-4" />
+                {cancelling ? 'Cancelando…' : 'Cancelar orden'}
+              </button>
+            )}
 
             {/* Selector debajo de #ORD: ver orden general o orden bar (5 estados) */}
             <div className="flex justify-center gap-2 mt-4">

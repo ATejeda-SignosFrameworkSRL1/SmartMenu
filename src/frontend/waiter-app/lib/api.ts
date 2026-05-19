@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// Si la página es HTTPS (ej. celular) usamos API en 5042; si no, 5041
 function getApiBaseUrl(): string {
   return '';
 }
@@ -15,3 +14,56 @@ export const api = axios.create({
   },
   timeout: 15000,
 });
+
+// S3.2 — JWT refresh transparente (mismo patrón que admin-panel).
+let refreshPromise: Promise<string | null> | null = null;
+
+async function tryRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+  const refreshToken = localStorage.getItem('waiter_refresh');
+  if (!refreshToken) return null;
+
+  refreshPromise = (async () => {
+    try {
+      const res = await axios.post(API_URL + '/api/auth/refresh', { refreshToken });
+      const { accessToken, refreshToken: newRefresh, user } = res.data ?? {};
+      if (!accessToken) return null;
+      localStorage.setItem('waiter_token', accessToken);
+      if (newRefresh) localStorage.setItem('waiter_refresh', newRefresh);
+      if (user) localStorage.setItem('waiter_user', JSON.stringify(user));
+      return accessToken as string;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('waiter_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config;
+    if (error.response?.status === 401 && original && !original._refreshAttempted) {
+      original._refreshAttempted = true;
+      const newToken = await tryRefresh();
+      if (newToken) {
+        original.headers = original.headers ?? {};
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api.request(original);
+      }
+      localStorage.removeItem('waiter_token');
+      localStorage.removeItem('waiter_refresh');
+      localStorage.removeItem('waiter_user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);

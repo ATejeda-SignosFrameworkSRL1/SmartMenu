@@ -174,6 +174,38 @@ public class OrderController : ControllerBase
     /// <summary>
     /// Actualizar estado de orden
     /// </summary>
+    /// <summary>
+    /// Cancelar orden (cliente o staff). Solo permitido en estados Pending o Confirmed.
+    /// El customer/sessionId match accede vía session (futuro endpoint); aquí el staff
+    /// con auth cancela órdenes propias o de su mesa. Admin/Manager cancelan cualquiera.
+    /// </summary>
+    [HttpPost("{id}/cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelOrder(int id, [FromBody] CancelOrderDto? dto)
+    {
+        try
+        {
+            var current = await _orderService.GetOrderByIdAsync(id);
+            if (current == null) return NotFound(new { error = "Orden no encontrada" });
+            if (!CanAccessOrder(current)) return Forbid();
+
+            var order = await _orderService.CancelOrderAsync(id, dto?.Reason ?? "");
+            await NotifyKitchenAsync(order);
+            await NotifyWaiterAsync(order, "OrderCancelled", new
+            {
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                tableNumber = order.TableNumber,
+                reason = dto?.Reason,
+                timestamp = DateTime.UtcNow
+            });
+            return Ok(new { message = "Orden cancelada", order });
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+    }
+
     [HttpPut("{id}/status")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusDto request)

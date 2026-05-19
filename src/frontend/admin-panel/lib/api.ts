@@ -10,7 +10,36 @@ export const api = axios.create({
   timeout: 15000,
 });
 
-// Interceptors
+// S3.2 — JWT refresh transparente:
+// Si una request da 401, intentar refresh con el refreshToken guardado. Si OK,
+// reintentar la request original con el nuevo accessToken. Si el refresh también
+// falla, limpiar credenciales y mandar al /login. Lock para evitar refresh paralelo
+// si llegan múltiples 401s simultáneos.
+let refreshPromise: Promise<string | null> | null = null;
+
+async function tryRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+  const refreshToken = localStorage.getItem('admin_refresh');
+  if (!refreshToken) return null;
+
+  refreshPromise = (async () => {
+    try {
+      const res = await axios.post(API_URL + '/api/auth/refresh', { refreshToken });
+      const { accessToken, refreshToken: newRefresh, user } = res.data ?? {};
+      if (!accessToken) return null;
+      localStorage.setItem('admin_token', accessToken);
+      if (newRefresh) localStorage.setItem('admin_refresh', newRefresh);
+      if (user) localStorage.setItem('admin_user', JSON.stringify(user));
+      return accessToken as string;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('admin_token');
   if (token) {
@@ -21,9 +50,19 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
+  async (error) => {
+    const original = error.config;
+    if (error.response?.status === 401 && original && !original._refreshAttempted) {
+      original._refreshAttempted = true;
+      const newToken = await tryRefresh();
+      if (newToken) {
+        original.headers = original.headers ?? {};
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api.request(original);
+      }
+      // Refresh falló o no había refresh token: limpiar y redirigir
       localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_refresh');
       localStorage.removeItem('admin_user');
       window.location.href = '/login';
     }

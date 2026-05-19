@@ -53,6 +53,12 @@ public record UpdateOrderStatusDto
     public string NewStatus { get; init; } = string.Empty;
 }
 
+public record CancelOrderDto
+{
+    [StringLength(256)]
+    public string? Reason { get; init; }
+}
+
 // Response DTOs
 public record OrderDto
 {

@@ -99,6 +99,9 @@ export const apiClient = {
   updateOrderStatus: (orderId: number, newStatus: string) =>
     api.put(`/order/${orderId}/status`, { newStatus }),
 
+  cancelOrder: (orderId: number, reason?: string) =>
+    api.post(`/order/${orderId}/cancel`, { reason: reason ?? '' }),
+
   markCustomerFinished: (orderId: number) =>
     api.put(`/order/${orderId}/customer-finished`),
 
@@ -111,6 +114,9 @@ export const apiClient = {
 
   getPayment: (paymentId: number) =>
     api.get(`/payment/${paymentId}`),
+
+  getReceiptByOrder: (orderId: number) =>
+    api.get(`/payment/by-order/${orderId}/receipt`),
 
   requestBilling: (orderId: number, preferences?: {
     paymentMethod?: string;

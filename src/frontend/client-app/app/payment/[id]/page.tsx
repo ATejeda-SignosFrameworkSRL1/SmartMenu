@@ -24,6 +24,7 @@ export default function PaymentPage() {
   const [customTip,       setCustomTip]       = useState('');
   const [processing,      setProcessing]      = useState(false);
   const [stage, setStage] = useState<'idle' | 'waiting' | 'paid'>('idle');
+  const [receipt, setReceipt] = useState<any>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Comprobante fiscal
@@ -45,7 +46,9 @@ export default function PaymentPage() {
     apiClient.requestBilling(orderId).catch(() => {});
   }, [orderId]);
 
-  // Polling: revisar cada 3s si la orden ya fue completada por el mesero
+  // Polling: revisar cada 3s si la orden ya fue completada por el mesero.
+  // S3.3 — al pasar a 'paid' cargamos el receipt y NO redirigimos automáticamente:
+  // el cliente debe ver y confirmar visualmente el comprobante antes de continuar.
   useEffect(() => {
     if (stage !== 'waiting' || !orderId) return;
     const check = async () => {
@@ -53,16 +56,19 @@ export default function PaymentPage() {
         const res = await apiClient.getOrder(orderId);
         const status: string = (res.data as any)?.status ?? (res.data as any)?.Status ?? '';
         if (status === 'Completed') {
-          setStage('paid');
           if (pollRef.current) clearInterval(pollRef.current);
+          try {
+            const r = await apiClient.getReceiptByOrder(orderId);
+            setReceipt(r.data);
+          } catch { /* si falla, mostramos receipt mínimo basado en order */ }
+          setStage('paid');
           localStorage.removeItem('current_order_id');
-          setTimeout(() => router.push('/menu'), 4000);
         }
       } catch { /* ignorar errores de red */ }
     };
     pollRef.current = setInterval(check, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [stage, orderId, router]);
+  }, [stage, orderId]);
 
   const order       = orderData?.data;
   const orderTotal    = order ? (Number((order as any).total)    || Number((order as any).Total)    || 0) : 0;
@@ -153,27 +159,68 @@ export default function PaymentPage() {
     );
   }
 
-  /* ── pago confirmado ── */
+  /* ── pago confirmado: receipt completo ── */
   if (stage === 'paid') {
+    const r = receipt;
+    const orderNum = r?.orderNumber ?? (order as any).orderNumber ?? (order as any).OrderNumber;
+    const tableNum = r?.tableNumber ?? (order as any).tableId;
+    const paidAt = r?.paidAt ? new Date(r.paidAt) : new Date();
+    const totalFinal = r ? Number(r.total) : orderTotal;
+    const tipFinal = r ? Number(r.tipExtra ?? 0) : 0;
+    const methods = r?.methods ?? [selectedMethod];
+    const fiscal = r?.requiresFiscalReceipt && r?.rnc;
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-14 h-14 text-green-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">¡Pago Completado!</h1>
-          <p className="text-gray-600 mb-6">Gracias por tu preferencia</p>
-          <div className="bg-gray-50 rounded-xl p-5 mb-6 space-y-3 text-left">
-            <div className="flex justify-between text-gray-700">
-              <span>Orden</span>
-              <span className="font-bold">#{(order as any).orderNumber ?? (order as any).OrderNumber}</span>
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+          <div className="text-center mb-6">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <CheckCircle className="w-12 h-12 text-green-600" />
             </div>
-            <div className="flex justify-between text-gray-700">
-              <span>Total</span>
-              <span className="font-bold text-primary-600">RD$ {orderTotal.toFixed(2)}</span>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-900">¡Pago Completado!</h1>
+            <p className="text-gray-500 text-sm mt-1">Gracias por tu preferencia</p>
           </div>
-          <p className="text-sm text-gray-400 animate-pulse">Volviendo al menú...</p>
+
+          <div className="bg-gray-50 rounded-xl p-5 mb-4 space-y-2 text-sm">
+            <div className="flex justify-between text-gray-700"><span>Comprobante</span><span className="font-bold">#{orderNum}</span></div>
+            {tableNum && <div className="flex justify-between text-gray-700"><span>Mesa</span><span>{tableNum}</span></div>}
+            <div className="flex justify-between text-gray-700"><span>Fecha</span><span>{paidAt.toLocaleString('es-DO')}</span></div>
+            <div className="flex justify-between text-gray-700"><span>Método</span><span>{methods.join(', ')}</span></div>
+          </div>
+
+          {r?.items && r.items.length > 0 && (
+            <div className="bg-gray-50 rounded-xl p-5 mb-4 space-y-1.5 text-sm">
+              <div className="font-semibold text-gray-800 mb-2">Detalle</div>
+              {r.items.map((it: any, idx: number) => (
+                <div key={idx} className="flex justify-between text-gray-600">
+                  <span>{it.quantity}× {it.dishName}</span>
+                  <span>RD$ {Number(it.subtotal).toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between text-gray-600 pt-2 border-t border-gray-200"><span>ITBIS</span><span>RD$ {Number(r.tax).toFixed(2)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Propina legal</span><span>RD$ {Number(r.tipLegal).toFixed(2)}</span></div>
+              {tipFinal > 0 && <div className="flex justify-between text-emerald-700"><span>Propina adicional</span><span>RD$ {tipFinal.toFixed(2)}</span></div>}
+            </div>
+          )}
+
+          <div className="bg-primary-50 rounded-xl p-4 mb-4 flex justify-between items-center">
+            <span className="text-gray-700 font-semibold">Total pagado</span>
+            <span className="text-2xl font-bold text-primary-600">RD$ {totalFinal.toFixed(2)}</span>
+          </div>
+
+          {fiscal && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4 text-sm">
+              <div className="font-semibold text-indigo-900 mb-1">Comprobante Fiscal Emitido</div>
+              <div className="text-indigo-700">RNC: {r.rnc}</div>
+              <div className="text-indigo-700">A nombre de: {r.businessName}</div>
+            </div>
+          )}
+
+          <button
+            onClick={() => router.push('/menu')}
+            className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg transition-colors"
+          >
+            Volver al inicio
+          </button>
         </div>
       </div>
     );

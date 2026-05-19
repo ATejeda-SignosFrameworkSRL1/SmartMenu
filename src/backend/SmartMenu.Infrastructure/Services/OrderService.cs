@@ -260,6 +260,43 @@ public class OrderService : IOrderService
         return MapToOrderDto(updatedOrder!, false, 0);
     }
 
+    public async Task<OrderDto> CancelOrderAsync(int id, string reason)
+    {
+        var order = await _context.Orders
+            .Include(o => o.Table)
+            .Include(o => o.Items).ThenInclude(i => i.Dish)
+            .FirstOrDefaultAsync(o => o.Id == id);
+        if (order == null) throw new KeyNotFoundException($"Order {id} not found");
+
+        // Solo se puede cancelar antes de que la cocina la empiece a preparar.
+        // Pending y Confirmed son los únicos estados cancelables sin perjudicar la cocina.
+        if (order.Status != OrderStatus.Pending && order.Status != OrderStatus.Confirmed)
+            throw new InvalidOperationException(
+                $"No se puede cancelar una orden en estado {order.Status}. Solo Pending y Confirmed son cancelables.");
+
+        order.Status = OrderStatus.Cancelled;
+        order.UpdatedAt = DateTime.UtcNow;
+        order.SpecialInstructions = string.IsNullOrWhiteSpace(reason)
+            ? order.SpecialInstructions
+            : $"[CANCELADA: {reason}] {order.SpecialInstructions}".Trim();
+
+        // Liberar la mesa si no hay otras órdenes activas en ella.
+        if (order.Table != null)
+        {
+            var hasOtherActive = await _context.Orders.AnyAsync(o =>
+                o.TableId == order.TableId &&
+                o.Id != order.Id &&
+                o.Status != OrderStatus.Completed &&
+                o.Status != OrderStatus.Cancelled);
+            if (!hasOtherActive)
+                order.Table.Status = TableStatus.Available;
+        }
+
+        await _orderRepository.UpdateAsync(order);
+        var updated = await _orderRepository.GetByIdWithItemsAsync(id);
+        return MapToOrderDto(updated!, false, 0);
+    }
+
     public async Task MarkCustomerFinishedAsync(int orderId)
     {
         var order = await _orderRepository.GetByIdAsync(orderId);

@@ -41,7 +41,7 @@ export default function LoginPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.message || data.error || 'Credenciales inválidas');
       }
-      const { accessToken, user } = await res.json();
+      const { accessToken, refreshToken, user } = await res.json();
       const role = user?.role ?? '';
       const allowed = role === 'Admin' || ACCEPTED_ROLES.includes(role);
       if (!allowed) {
@@ -51,6 +51,7 @@ export default function LoginPage() {
         return;
       }
       localStorage.setItem(`${APP_KEY}_token`, accessToken);
+      if (refreshToken) localStorage.setItem(`${APP_KEY}_refresh`, refreshToken);
       localStorage.setItem(`${APP_KEY}_user`, JSON.stringify(user));
       localStorage.setItem('user', JSON.stringify(user));
       router.replace('/');

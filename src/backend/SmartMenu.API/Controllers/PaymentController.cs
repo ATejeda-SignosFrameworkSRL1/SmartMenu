@@ -138,6 +138,64 @@ public class PaymentController : ControllerBase
     }
 
     /// <summary>
+    /// S3.3 — Receipt para el cliente: agrega pagos de una orden completada y devuelve
+    /// los datos del comprobante (orderNumber, totales, propina, método, fiscal data).
+    /// Sin auth: el cliente final no tiene JWT — solo conoce el orderId desde su QR session.
+    /// </summary>
+    [HttpGet("by-order/{orderId:int}/receipt")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetReceiptByOrder(int orderId)
+    {
+        var order = await _context.Orders
+            .AsNoTracking()
+            .Include(o => o.Items).ThenInclude(i => i.Dish)
+            .Include(o => o.Payments)
+            .Include(o => o.Table)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+        if (order == null) return NotFound(new { error = "Orden no encontrada" });
+
+        var paid = order.Payments.Where(p => p.Status == Domain.Enums.PaymentStatus.Completed).ToList();
+        if (paid.Count == 0)
+            return NotFound(new { error = "La orden todavía no tiene cobro registrado" });
+
+        var totalPaid = paid.Sum(p => p.Amount);
+        var totalTips = paid.Sum(p => p.TipAmount);
+        var methods = paid.Select(p => p.Method).Distinct().ToList();
+        var first = paid.OrderBy(p => p.CompletedAt).First();
+        var requiresFiscal = paid.Any(p => p.RequiresFiscalReceipt);
+        var rnc = paid.FirstOrDefault(p => !string.IsNullOrEmpty(p.RNC))?.RNC;
+        var businessName = paid.FirstOrDefault(p => !string.IsNullOrEmpty(p.BusinessName))?.BusinessName;
+
+        return Ok(new
+        {
+            paymentId = first.Id,
+            orderId = order.Id,
+            orderNumber = order.OrderNumber,
+            tableNumber = order.Table?.TableNumber,
+            customerName = order.CustomerName,
+            paidAt = paid.Max(p => p.CompletedAt),
+            subtotal = order.Subtotal,
+            tax = order.Tax,
+            tipLegal = order.Tip,
+            tipExtra = totalTips,
+            total = totalPaid + totalTips,
+            methods,
+            requiresFiscalReceipt = requiresFiscal,
+            rnc,
+            businessName,
+            items = order.Items.Select(i => new
+            {
+                dishName = i.Dish?.Name ?? "—",
+                quantity = i.Quantity,
+                unitPrice = i.UnitPrice,
+                subtotal = i.Subtotal
+            }).ToList()
+        });
+    }
+
+    /// <summary>
     /// Obtener pago por ID
     /// </summary>
     [HttpGet("{id}")]

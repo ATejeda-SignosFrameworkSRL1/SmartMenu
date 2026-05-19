@@ -11,6 +11,7 @@ public interface IOrderService
     Task<IEnumerable<OrderDto>> GetAllOrdersAsync();
     Task<PagedResult<OrderDto>> GetAllOrdersPagedAsync(int page, int pageSize);
     Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus);
+    Task<OrderDto> CancelOrderAsync(int id, string reason);
     Task MarkCustomerFinishedAsync(int orderId);
     Task AssignWaiterAsync(int orderId, int waiterId);
     Task UnassignWaiterAsync(int orderId);
