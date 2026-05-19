@@ -930,83 +930,16 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>
-    /// Tanda 5 saneamiento DB:
-    /// - Cambia el FK OrderItems→Orders de CASCADE a NO ACTION (proteger histórico fiscal).
-    /// - Índices adicionales para queries de dashboard y reports.
-    /// </summary>
-    public static async Task EnsureTanda5DbObjectsAsync(ApplicationDbContext context)
-    {
-        try
-        {
-            Console.WriteLine("📦 Aplicando Tanda 5: cascade fix + índices adicionales...");
-            await context.Database.ExecuteSqlRawAsync(@"
-                -- Cascade → NO ACTION en OrderItem→Order (proteger histórico fiscal de DELETE accidental)
-                DECLARE @fkName nvarchar(256) = (
-                    SELECT TOP 1 name FROM sys.foreign_keys
-                    WHERE parent_object_id = OBJECT_ID('OrderItems')
-                      AND referenced_object_id = OBJECT_ID('Orders')
-                      AND delete_referential_action_desc = 'CASCADE');
-                IF @fkName IS NOT NULL
-                BEGIN
-                    DECLARE @colName sysname = (
-                        SELECT TOP 1 c.name
-                        FROM sys.foreign_key_columns fkc
-                        JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id
-                        WHERE fkc.constraint_object_id = OBJECT_ID(@fkName));
-                    DECLARE @sql nvarchar(max) =
-                        'ALTER TABLE OrderItems DROP CONSTRAINT ' + QUOTENAME(@fkName) + ';' +
-                        'ALTER TABLE OrderItems ADD CONSTRAINT ' + QUOTENAME(@fkName) +
-                        ' FOREIGN KEY (' + QUOTENAME(@colName) + ') REFERENCES Orders(Id) ON DELETE NO ACTION;';
-                    EXEC sp_executesql @sql;
-                END;
-
-                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Orders_Status' AND object_id = OBJECT_ID('Orders'))
-                    CREATE INDEX IX_Orders_Status ON Orders(Status);
-                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Orders_CreatedAt' AND object_id = OBJECT_ID('Orders'))
-                    CREATE INDEX IX_Orders_CreatedAt ON Orders(CreatedAt);
-                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Payments_Status' AND object_id = OBJECT_ID('Payments'))
-                    CREATE INDEX IX_Payments_Status ON Payments(Status);
-                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Dishes_IsDeleted' AND object_id = OBJECT_ID('Dishes'))
-                    CREATE INDEX IX_Dishes_IsDeleted ON Dishes(IsDeleted);
-                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Dishes_CategoryId_IsAvailable' AND object_id = OBJECT_ID('Dishes'))
-                    CREATE INDEX IX_Dishes_CategoryId_IsAvailable ON Dishes(CategoryId, IsAvailable);
-                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TableSessions_TableId_IsActive' AND object_id = OBJECT_ID('TableSessions'))
-                    CREATE INDEX IX_TableSessions_TableId_IsActive ON TableSessions(TableId, IsActive);");
-            Console.WriteLine("✅ Tanda 5: cascade + índices listos.");
-        }
-        catch (Exception ex)
-        {
-            try { Console.WriteLine("⚠️ EnsureTanda5DbObjects: " + ex.Message); } catch { }
-        }
-    }
-
-    /// <summary>
-    /// Bloque B saneamiento fiscal:
-    /// - Concurrency token (rowversion) en Orders y Payments.
-    /// - Soft delete (IsDeleted, DeletedAt) en Dishes.
-    /// </summary>
-    public static async Task EnsureConcurrencyAndSoftDeleteColumnsAsync(ApplicationDbContext context)
-    {
-        try
-        {
-            Console.WriteLine("📦 Aplicando RowVersion en Orders/Payments + soft-delete en Dishes...");
-
-            await context.Database.ExecuteSqlRawAsync(@"
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'RowVersion')
-                    ALTER TABLE Orders ADD RowVersion rowversion NOT NULL;
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Payments') AND name = 'RowVersion')
-                    ALTER TABLE Payments ADD RowVersion rowversion NOT NULL;
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Dishes') AND name = 'IsDeleted')
-                    ALTER TABLE Dishes ADD IsDeleted bit NOT NULL DEFAULT 0;
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Dishes') AND name = 'DeletedAt')
-                    ALTER TABLE Dishes ADD DeletedAt datetime2 NULL;");
-
-            Console.WriteLine("✅ Concurrency + soft-delete listo.");
-        }
-        catch (Exception ex)
-        {
-            try { Console.WriteLine("⚠️ EnsureConcurrencyAndSoftDeleteColumns: " + ex.Message); } catch { }
-        }
-    }
+    // Los métodos EnsureTanda5DbObjectsAsync y EnsureConcurrencyAndSoftDeleteColumnsAsync
+    // que vivían aquí fueron migrados a la migration formal
+    // 20260519160736_BackfillBlockBTanda5.cs (idempotente).
+    //
+    // Los otros Ensure*Async schema que aún existen en este archivo
+    // (EnsureMigrationAddVirtualTableTransferDishTagsAsync, EnsureOrderServedColumnsAsync,
+    // EnsureKitchenZoneColumnsAsync, EnsureZoneTypeColumnsAsync, EnsureCourseTimingColumnsAsync,
+    // EnsureAdvanceBlockAndSourceColumnsAsync, EnsureFiscalReceiptColumnsAsync,
+    // EnsureDishImagesTableAsync, EnsureWaiterShiftsTableAsync, EnsureReservationPreOrderTablesAsync)
+    // ya no son invocados desde Program.cs — están cubiertos por las migrations EF formales
+    // del mismo nombre en Data/Migrations/. Se dejan como dead code (DEPRECATED) hasta
+    // un próximo cleanup; eliminarlos no afecta el sistema (no hay callers).
 }

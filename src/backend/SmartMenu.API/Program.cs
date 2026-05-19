@@ -290,33 +290,23 @@ app.MapGet("/health", () => Results.Ok(new
     environment = app.Environment.EnvironmentName
 }));
 
-// Apply migrations and seed database (solo en desarrollo)
+// Apply migrations + seed (solo en desarrollo). En producción `dotnet ef database update`
+// debe correr externamente (CI/CD), siguiendo la mejor práctica de no auto-migrar prod.
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-    // 1. Apply all EF migrations first
+    // 1. Aplicar TODAS las migrations EF formales (incluye BackfillBlockBTanda5 idempotente).
+    //    Antes había 12 Ensure*Async schema patches; todos quedan cubiertos por las migrations
+    //    en SmartMenu.Infrastructure/Data/Migrations/.
     await context.Database.MigrateAsync();
 
-    // 2. Add extra columns/tables not covered by EF migrations (idempotent, must run before seed)
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureMigrationAddVirtualTableTransferDishTagsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureZoneTypeColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureOrderServedColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureKitchenZoneColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCourseTimingColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureAdvanceBlockAndSourceColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFiscalReceiptColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishImagesTableAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureWaiterShiftsTableAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureReservationPreOrderTablesAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureConcurrencyAndSoftDeleteColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureTanda5DbObjectsAsync(context);
-
-    // 3. Seed initial data
+    // 2. Seed inicial.
     await SmartMenu.Infrastructure.Data.DbInitializer.SeedAsync(context);
 
-    // 4. Ensure additional users and data
+    // 3. Ensure de DATOS (no schema) — son seeders idempotentes para usuarios y tags
+    //    históricos que no se mantienen en SeedAsync principal.
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureExtraWaiterAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCashierAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishTagsSeedAsync(context);
