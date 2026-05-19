@@ -483,6 +483,12 @@ public class PaymentController : ControllerBase
             _logger.LogInformation("Payment collected by processor {ProcessorId} for order {OrderId}, table set to Cleaning", processorId, dto.OrderId);
             return Ok(new { message = "Cobro registrado. Mesa en limpieza.", tableId = order.TableId });
         }
+        catch (InvalidOperationException ex)
+        {
+            await tx.RollbackAsync();
+            _logger.LogWarning("Split bill validation failed for order {OrderId}: {Message}", dto.OrderId, ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
         catch (Exception ex)
         {
             await tx.RollbackAsync();
