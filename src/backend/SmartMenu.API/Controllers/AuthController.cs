@@ -88,8 +88,10 @@ public class AuthController : ControllerBase
         if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
             return BadRequest(new { error = "La contraseña actual es incorrecta" });
 
-        if (string.IsNullOrWhiteSpace(dto.NewPassword) || dto.NewPassword.Length < 6)
-            return BadRequest(new { error = "La nueva contraseña debe tener al menos 6 caracteres" });
+        // S4.2 — política de contraseña: ≥12 chars + complexity (alineado con AuthService).
+        var pw = dto.NewPassword ?? "";
+        if (pw.Length < 12 || !pw.Any(char.IsUpper) || !pw.Any(char.IsLower) || !pw.Any(char.IsDigit) || pw.All(char.IsLetterOrDigit))
+            return BadRequest(new { error = "La contraseña debe tener al menos 12 caracteres, mayúscula, minúscula, dígito y carácter especial." });
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         await _context.SaveChangesAsync();

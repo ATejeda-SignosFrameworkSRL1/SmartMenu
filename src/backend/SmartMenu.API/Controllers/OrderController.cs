@@ -208,6 +208,7 @@ public class OrderController : ControllerBase
 
     [HttpPut("{id}/status")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusDto request)
     {
         try
@@ -218,7 +219,11 @@ public class OrderController : ControllerBase
             if (!CanAccessOrder(current))
                 return Forbid();
 
-            var order = await _orderService.UpdateOrderStatusAsync(id, request.NewStatus);
+            // S4.5 — Admin/Manager pueden hacer override de transiciones inválidas.
+            var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
+            var isAdmin = role == "Admin" || role == "Manager";
+
+            var order = await _orderService.UpdateOrderStatusAsync(id, request.NewStatus, isAdmin);
             if (string.Equals(request.NewStatus, "Confirmed", StringComparison.OrdinalIgnoreCase))
                 await NotifyKitchenAsync(order);
             return Ok(new { message = "Estado actualizado correctamente", order });
@@ -226,6 +231,10 @@ public class OrderController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (Exception ex)
         {

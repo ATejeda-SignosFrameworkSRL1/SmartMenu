@@ -35,6 +35,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<PreOrderItem> PreOrderItems => Set<PreOrderItem>();
     public DbSet<TableClaimRequest> TableClaimRequests => Set<TableClaimRequest>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -213,6 +214,15 @@ public class ApplicationDbContext : DbContext
              .WithMany()
              .HasForeignKey(rt => rt.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // S4.3 — LoginAttempt para account lockout. Email + AttemptedAt indexados para
+        // contar fallos en ventana de 15 min eficientemente.
+        modelBuilder.Entity<LoginAttempt>(b =>
+        {
+            b.Property(la => la.Email).HasMaxLength(256).IsRequired();
+            b.Property(la => la.IpAddress).HasMaxLength(64);
+            b.HasIndex(la => new { la.Email, la.AttemptedAt });
         });
     }
 

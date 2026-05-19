@@ -30,8 +30,28 @@ public class AuthService : IAuthService
         _db = db;
     }
 
+    // S4.2 — password policy: ≥12 chars, ≥1 upper, ≥1 lower, ≥1 digit, ≥1 special.
+    // Configurable a futuro vía AuthSettings; defaults razonables hoy.
+    private static (bool Ok, string? Error) ValidatePasswordStrength(string password)
+    {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 12)
+            return (false, "La contraseña debe tener al menos 12 caracteres.");
+        if (!password.Any(char.IsUpper))
+            return (false, "La contraseña debe incluir al menos una letra mayúscula.");
+        if (!password.Any(char.IsLower))
+            return (false, "La contraseña debe incluir al menos una letra minúscula.");
+        if (!password.Any(char.IsDigit))
+            return (false, "La contraseña debe incluir al menos un dígito.");
+        if (password.All(char.IsLetterOrDigit))
+            return (false, "La contraseña debe incluir al menos un carácter especial.");
+        return (true, null);
+    }
+
     public async Task<AuthResultDto> RegisterAsync(RegisterDto dto, string? ip = null)
     {
+        var (strong, pwErr) = ValidatePasswordStrength(dto.Password);
+        if (!strong)
+            throw new InvalidOperationException(pwErr!);
         // Verificar si el email ya existe
         if (await _userRepository.EmailExistsAsync(dto.Email))
         {
@@ -63,14 +83,47 @@ public class AuthService : IAuthService
         };
     }
 
+    // S4.3 — Account lockout: 5 fallos en 15 min ⇒ rechazar.
+    private const int MaxFailedAttempts = 5;
+    private const int LockoutWindowMinutes = 15;
+
     public async Task<AuthResultDto> LoginAsync(LoginDto dto, string? ip = null)
     {
-        var user = await _userRepository.GetByEmailAsync(dto.Email);
-        if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-            throw new UnauthorizedAccessException("Invalid credentials");
+        var emailLower = (dto.Email ?? "").ToLowerInvariant();
+        var windowStart = DateTime.UtcNow.AddMinutes(-LockoutWindowMinutes);
 
+        var recentFailures = await _db.LoginAttempts
+            .Where(la => la.Email == emailLower && !la.Success && la.AttemptedAt >= windowStart)
+            .CountAsync();
+
+        if (recentFailures >= MaxFailedAttempts)
+            throw new UnauthorizedAccessException(
+                $"Demasiados intentos fallidos. Espera {LockoutWindowMinutes} minutos antes de intentar de nuevo.");
+
+        var user = await _userRepository.GetByEmailAsync(dto.Email);
+        var pwOk = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash);
+
+        // Registrar SIEMPRE el intento (auditoría + futuras decisiones de lockout)
+        _db.LoginAttempts.Add(new LoginAttempt
+        {
+            Email = emailLower,
+            IpAddress = ip,
+            Success = pwOk && (user?.IsActive ?? false),
+            AttemptedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        if (user == null || !pwOk)
+            throw new UnauthorizedAccessException("Invalid credentials");
         if (!user.IsActive)
             throw new UnauthorizedAccessException("User is inactive");
+
+        // En login exitoso, limpiar histórico de fallos viejos del usuario para no
+        // contar contra futuros bloqueos (ya no son "recientes" tras éxito).
+        var oldFailures = _db.LoginAttempts
+            .Where(la => la.Email == emailLower && !la.Success && la.AttemptedAt < windowStart);
+        _db.LoginAttempts.RemoveRange(oldFailures);
+        await _db.SaveChangesAsync();
 
         var accessToken = GenerateAccessToken(user);
         var refreshToken = await IssueRefreshTokenAsync(user.Id, ip);

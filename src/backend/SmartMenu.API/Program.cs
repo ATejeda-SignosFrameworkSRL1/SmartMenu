@@ -59,11 +59,24 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
 });
 
 // ===== DATABASE =====
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+// S4.1 — IHttpContextAccessor + AuditInterceptor + AuditDbContext (DB separada).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache(); // requerido por IdempotencyMiddleware (S4.4)
+builder.Services.AddScoped<SmartMenu.API.Data.AuditInterceptor>();
+
+builder.Services.AddDbContext<SmartMenu.Infrastructure.Data.AuditDbContext>(options =>
+{
+    var auditConn = builder.Configuration.GetConnectionString("AuditConnection")
+        ?? builder.Configuration.GetConnectionString("DefaultConnection"); // fallback: misma DB si no se configura
+    options.UseSqlServer(auditConn, b => b.MigrationsAssembly("SmartMenu.Infrastructure").MigrationsHistoryTable("__AuditMigrationsHistory"));
+});
+
+builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 {
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("SmartMenu.Infrastructure"));
+    options.AddInterceptors(sp.GetRequiredService<SmartMenu.API.Data.AuditInterceptor>());
     options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
 });
 
@@ -322,6 +335,10 @@ app.UseCors(app.Environment.IsDevelopment() ? "AllowAllInDev" : "AllowAll");
 // Global exception handling — debe ir antes de Authentication para que
 // también atrape excepciones del pipeline de auth.
 app.UseMiddleware<SmartMenu.API.Middleware.ExceptionHandlingMiddleware>();
+
+// S4.4 — Idempotency: solo aplica a POST/PUT/PATCH en /api/order y /api/payment.
+// Si el header Idempotency-Key existe y ya se vio en 24h, retorna respuesta cacheada.
+app.UseMiddleware<SmartMenu.API.Middleware.IdempotencyMiddleware>();
 
 app.UseRateLimiter();
 

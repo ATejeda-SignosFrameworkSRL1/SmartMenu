@@ -443,6 +443,15 @@ public class PaymentController : ControllerBase
                 totalPaid = baseAmount;
             }
 
+            // S4.6 — Split bill validation: la suma de subPayments debe igualar order.Total.
+            // Tolerancia de 1 centavo para rounding. Sin esto, una orden podía marcarse
+            // Completed con deuda silenciosa (frontend mete totales mal cuadrados).
+            if (Math.Abs(totalPaid - order.Total) > 0.01m)
+            {
+                throw new InvalidOperationException(
+                    $"El monto cobrado ({totalPaid:0.00}) no coincide con el total de la orden ({order.Total:0.00}). Diferencia: {(order.Total - totalPaid):0.00}.");
+            }
+
             // Completar la orden
             if (order.Status != Domain.Enums.OrderStatus.Completed)
             {

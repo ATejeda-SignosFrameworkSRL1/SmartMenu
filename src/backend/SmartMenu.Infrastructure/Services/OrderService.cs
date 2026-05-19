@@ -219,7 +219,32 @@ public class OrderService : IOrderService
         };
     }
 
-    public async Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus)
+    // S4.5 — State machine flexible. Cancelled siempre permitido; Admin override
+    // permite cualquier transición (intervención manual auditable).
+    // Pending→Confirmed→Preparing→Ready→Served→Completed es el flujo normal.
+    private static readonly Dictionary<OrderStatus, OrderStatus[]> AllowedTransitions = new()
+    {
+        [OrderStatus.Pending]    = new[] { OrderStatus.Confirmed, OrderStatus.Cancelled },
+        [OrderStatus.Confirmed]  = new[] { OrderStatus.Preparing, OrderStatus.Cancelled },
+        [OrderStatus.Preparing]  = new[] { OrderStatus.Ready, OrderStatus.Cancelled },
+        [OrderStatus.Ready]      = new[] { OrderStatus.Served, OrderStatus.Cancelled },
+        [OrderStatus.Served]     = new[] { OrderStatus.Completed, OrderStatus.Cancelled },
+        [OrderStatus.Completed]  = Array.Empty<OrderStatus>(), // terminal
+        [OrderStatus.Cancelled]  = Array.Empty<OrderStatus>(), // terminal
+    };
+
+    private static void ValidateStateTransition(OrderStatus current, OrderStatus target, bool isAdminOverride)
+    {
+        if (current == target) return; // no-op
+        if (isAdminOverride) return; // Admin/Manager bypass
+        if (target == OrderStatus.Cancelled) return; // siempre permitido
+        if (!AllowedTransitions.TryGetValue(current, out var allowed) || !allowed.Contains(target))
+            throw new InvalidOperationException(
+                $"Transición de estado inválida: {current} → {target}. " +
+                $"Desde {current} solo se permite: {string.Join(", ", allowed?.Select(s => s.ToString()) ?? Array.Empty<string>())}.");
+    }
+
+    public async Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus, bool isAdminOverride = false)
     {
         var order = await _context.Orders
             .Include(o => o.Table)
@@ -233,6 +258,7 @@ public class OrderService : IOrderService
 
         if (Enum.TryParse<OrderStatus>(newStatus, true, out var status))
         {
+            ValidateStateTransition(order.Status, status, isAdminOverride);
             order.Status = status;
 
             if (status == OrderStatus.Completed)
