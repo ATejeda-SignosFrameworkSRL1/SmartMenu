@@ -91,11 +91,14 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(o => o.AssignedWaiterId)
             .OnDelete(DeleteBehavior.NoAction);
 
+        // Restrict en lugar de Cascade: una Order nunca debería ser borrada en SQL
+        // (los datos fiscales/históricos deben sobrevivir). Si alguien intenta DELETE en
+        // una Order con items, la DB lo rechaza en vez de borrar silenciosamente todo.
         modelBuilder.Entity<OrderItem>()
             .HasOne(oi => oi.Order)
             .WithMany(o => o.Items)
             .HasForeignKey(oi => oi.OrderId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<OrderItem>()
             .HasOne(oi => oi.Dish)
@@ -185,6 +188,17 @@ public class ApplicationDbContext : DbContext
         // Soft delete global filter: queries de Dish excluyen los marcados como IsDeleted.
         // Para incluirlos (ej. reportes históricos / admin "ver eliminados") usar `.IgnoreQueryFilters()`.
         modelBuilder.Entity<Dish>().HasQueryFilter(d => !d.IsDeleted);
+
+        // Índices para mejorar queries comunes (active orders, reports, dashboards)
+        modelBuilder.Entity<Order>().HasIndex(o => o.Status);
+        modelBuilder.Entity<Order>().HasIndex(o => o.CreatedAt);
+        modelBuilder.Entity<Order>().HasIndex(o => o.AssignedWaiterId);
+        modelBuilder.Entity<Order>().HasIndex(o => o.TableId);
+        modelBuilder.Entity<Payment>().HasIndex(p => p.OrderId);
+        modelBuilder.Entity<Payment>().HasIndex(p => p.Status);
+        modelBuilder.Entity<Dish>().HasIndex(d => new { d.CategoryId, d.IsAvailable });
+        modelBuilder.Entity<Dish>().HasIndex(d => d.IsDeleted);
+        modelBuilder.Entity<TableSession>().HasIndex(ts => new { ts.TableId, ts.IsActive });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

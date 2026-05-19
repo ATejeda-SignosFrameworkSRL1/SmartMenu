@@ -658,8 +658,9 @@ public static class DbInitializer
                 }
 
                 // Assign existing dishes without KitchenZoneId to Cocina Principal (except drinks)
-                await context.Database.ExecuteSqlRawAsync($@"
-                    UPDATE Dishes SET KitchenZoneId = {mainKitchen.Id} WHERE KitchenZoneId IS NULL;");
+                // ExecuteSqlAsync parametriza FormattableString → evita SQL injection (warning EF1002)
+                await context.Database.ExecuteSqlAsync(
+                    $"UPDATE Dishes SET KitchenZoneId = {mainKitchen.Id} WHERE KitchenZoneId IS NULL");
                 Console.WriteLine("✅ Platos sin zona asignados a 'Cocina Principal'.");
             }
 
@@ -926,6 +927,57 @@ public static class DbInitializer
         catch (Exception ex)
         {
             try { Console.WriteLine("⚠️ EnsureReservationPreOrderTables: " + ex.Message); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Tanda 5 saneamiento DB:
+    /// - Cambia el FK OrderItems→Orders de CASCADE a NO ACTION (proteger histórico fiscal).
+    /// - Índices adicionales para queries de dashboard y reports.
+    /// </summary>
+    public static async Task EnsureTanda5DbObjectsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando Tanda 5: cascade fix + índices adicionales...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                -- Cascade → NO ACTION en OrderItem→Order (proteger histórico fiscal de DELETE accidental)
+                DECLARE @fkName nvarchar(256) = (
+                    SELECT TOP 1 name FROM sys.foreign_keys
+                    WHERE parent_object_id = OBJECT_ID('OrderItems')
+                      AND referenced_object_id = OBJECT_ID('Orders')
+                      AND delete_referential_action_desc = 'CASCADE');
+                IF @fkName IS NOT NULL
+                BEGIN
+                    DECLARE @colName sysname = (
+                        SELECT TOP 1 c.name
+                        FROM sys.foreign_key_columns fkc
+                        JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id
+                        WHERE fkc.constraint_object_id = OBJECT_ID(@fkName));
+                    DECLARE @sql nvarchar(max) =
+                        'ALTER TABLE OrderItems DROP CONSTRAINT ' + QUOTENAME(@fkName) + ';' +
+                        'ALTER TABLE OrderItems ADD CONSTRAINT ' + QUOTENAME(@fkName) +
+                        ' FOREIGN KEY (' + QUOTENAME(@colName) + ') REFERENCES Orders(Id) ON DELETE NO ACTION;';
+                    EXEC sp_executesql @sql;
+                END;
+
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Orders_Status' AND object_id = OBJECT_ID('Orders'))
+                    CREATE INDEX IX_Orders_Status ON Orders(Status);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Orders_CreatedAt' AND object_id = OBJECT_ID('Orders'))
+                    CREATE INDEX IX_Orders_CreatedAt ON Orders(CreatedAt);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Payments_Status' AND object_id = OBJECT_ID('Payments'))
+                    CREATE INDEX IX_Payments_Status ON Payments(Status);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Dishes_IsDeleted' AND object_id = OBJECT_ID('Dishes'))
+                    CREATE INDEX IX_Dishes_IsDeleted ON Dishes(IsDeleted);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Dishes_CategoryId_IsAvailable' AND object_id = OBJECT_ID('Dishes'))
+                    CREATE INDEX IX_Dishes_CategoryId_IsAvailable ON Dishes(CategoryId, IsAvailable);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TableSessions_TableId_IsActive' AND object_id = OBJECT_ID('TableSessions'))
+                    CREATE INDEX IX_TableSessions_TableId_IsActive ON TableSessions(TableId, IsActive);");
+            Console.WriteLine("✅ Tanda 5: cascade + índices listos.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureTanda5DbObjects: " + ex.Message); } catch { }
         }
     }
 

@@ -1,15 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: 'out',
   reactStrictMode: true,
-  allowedDevOrigins: ['10.0.0.24'],
   images: {
-    domains: ['localhost', 'smartmenu.com.do', '10.0.0.24'],
+    domains: ['localhost', 'smartmenu.com.do'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'https://10.0.0.24:5042',
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || '',
   },
   async headers() {
     return [

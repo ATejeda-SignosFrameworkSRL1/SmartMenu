@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: 'out',
   reactStrictMode: true,
-  allowedDevOrigins: ['10.0.0.24'],
   async headers() {
     return [
       {

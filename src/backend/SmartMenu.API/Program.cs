@@ -12,7 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // HTTP 5041 + HTTPS 5042. Para evitar ERR_CERT_COMMON_NAME_INVALID en https://TU_IP:5042, ejecuta: .\scripts\create-dev-cert.ps1
 var devCertPath = Path.Combine(Directory.GetCurrentDirectory(), "dev-cert.pfx");
-const string devCertPassword = "SmartMenuDev";
+var devCertPassword = builder.Configuration["DevCert:Password"] ?? "SmartMenuDev";
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
     serverOptions.Limits.MaxRequestBodySize = 20_971_520; // 20 MB
@@ -127,7 +127,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "https://172.31.98.88:3000" })
+        var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+        policy.WithOrigins(origins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Para SignalR
@@ -164,6 +165,8 @@ builder.Services.AddControllers()
         o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         o.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never;
+        // Enums → string consistente ("Confirmed" en vez de 1). Cliente puede tipar uniones TS estables.
+        o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
 
@@ -283,6 +286,7 @@ if (app.Environment.IsDevelopment())
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureWaiterShiftsTableAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureReservationPreOrderTablesAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureConcurrencyAndSoftDeleteColumnsAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureTanda5DbObjectsAsync(context);
 
     // 3. Seed initial data
     await SmartMenu.Infrastructure.Data.DbInitializer.SeedAsync(context);
