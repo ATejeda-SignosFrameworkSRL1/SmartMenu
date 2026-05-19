@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
 
 namespace SmartMenu.API.Controllers;
 
@@ -10,6 +13,14 @@ public class UploadController : ControllerBase
 {
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<UploadController> _logger;
+
+    // S5.3 — variantes generadas automáticamente al subir.
+    // _200 sirve para listings/cart; _400 para tarjeta de menú; el original queda como fallback / detalle.
+    private static readonly (string Suffix, int Width)[] ThumbnailSizes = new[]
+    {
+        ("_200", 200),
+        ("_400", 400),
+    };
 
     public UploadController(IWebHostEnvironment env, ILogger<UploadController> logger)
     {
@@ -38,7 +49,8 @@ public class UploadController : ControllerBase
 
         var ext = Path.GetExtension(file.FileName);
         if (string.IsNullOrEmpty(ext)) ext = ".jpg";
-        var fileName = $"{Guid.NewGuid():N}{ext}";
+        var stem = Guid.NewGuid().ToString("N");
+        var fileName = $"{stem}{ext}";
         var filePath = Path.Combine(uploadsDir, fileName);
 
         try
@@ -52,7 +64,31 @@ public class UploadController : ControllerBase
             return StatusCode(500, new { error = "Error al guardar la imagen" });
         }
 
+        // S5.3 — generar variantes _200 y _400 (JPEG, calidad 85). Si falla,
+        // se loguea pero no rompe el upload — el original siempre sirve como fallback.
+        var thumbnails = new Dictionary<string, string>();
+        try
+        {
+            using var image = await Image.LoadAsync(filePath);
+            foreach (var (suffix, width) in ThumbnailSizes)
+            {
+                var thumbName = $"{stem}{suffix}.jpg";
+                var thumbPath = Path.Combine(uploadsDir, thumbName);
+                using var clone = image.Clone(ctx => ctx.Resize(new ResizeOptions
+                {
+                    Size = new Size(width, 0),
+                    Mode = ResizeMode.Max,
+                }));
+                await clone.SaveAsJpegAsync(thumbPath, new JpegEncoder { Quality = 85 });
+                thumbnails[$"w{width}"] = $"/uploads/dishes/{thumbName}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate thumbnails for {File} — original será usado como fallback", fileName);
+        }
+
         var url = $"/uploads/dishes/{fileName}";
-        return Ok(new { url });
+        return Ok(new { url, thumbnails });
     }
 }

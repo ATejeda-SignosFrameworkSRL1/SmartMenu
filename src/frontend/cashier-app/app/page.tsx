@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   LogOut, RefreshCw, FileText, X, Building2, CheckCircle2,
   DollarSign, CreditCard, ArrowRightLeft, Layers, Receipt,
   AlertCircle, Loader2, ShoppingCart, Plus, Minus, Trash2,
-  ShoppingBag, BarChart3, Search, ChevronRight, User
+  ShoppingBag, BarChart3, Search, ChevronRight, User, Radio
 } from 'lucide-react';
 import axios from 'axios';
+import * as signalR from '@microsoft/signalr';
 
 const api = axios.create({ baseURL: '' });
 
@@ -53,6 +54,9 @@ function CajaTab({ user }: { user: any }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [liveConnected, setLiveConnected] = useState(false);
+  const reloadRef = useRef<(() => void) | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fiscal modal
   const [showFiscalModal, setShowFiscalModal] = useState(false);
@@ -81,6 +85,54 @@ function CajaTab({ user }: { user: any }) {
   }, [date]);
 
   useEffect(() => { loadPayments(); }, [loadPayments]);
+
+  // Mantén una referencia mutable al último loadPayments para que el listener
+  // de SignalR (registrado una sola vez) siempre llame la versión más reciente.
+  useEffect(() => { reloadRef.current = loadPayments; }, [loadPayments]);
+
+  // S5.1 — SignalR: refresca caja en vivo sin polling.
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cashier_token') : null;
+    if (!token) return;
+
+    const hubUrl = typeof window !== 'undefined' ? `${window.location.origin}/hubs/orders` : '/hubs/orders';
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(hubUrl, {
+        accessTokenFactory: () => token,
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+      })
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+      .configureLogging(signalR.LogLevel.Warning)
+      .build();
+
+    const triggerReload = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => { reloadRef.current?.(); }, 400);
+    };
+
+    connection.on('PaymentRegistered', triggerReload);
+    connection.on('OrderCompleted', triggerReload);
+    connection.onreconnected(() => setLiveConnected(true));
+    connection.onclose(() => setLiveConnected(false));
+
+    let cancelled = false;
+    (async () => {
+      const delays = [0, 2000, 4000, 8000];
+      for (let i = 0; i < delays.length && !cancelled; i++) {
+        if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]));
+        if (cancelled) return;
+        try { await connection.start(); setLiveConnected(true); return; }
+        catch { setLiveConnected(false); }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      connection.stop().catch(() => {});
+      setLiveConnected(false);
+    };
+  }, []);
 
   const openFiscalModal = (id: number) => {
     setFiscalPaymentId(id); setFiscalRnc(''); setFiscalBusinessName('');
@@ -122,6 +174,11 @@ function CajaTab({ user }: { user: any }) {
           className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Actualizar
         </button>
+        <span title={liveConnected ? 'Caja en vivo conectada' : 'Caja en vivo desconectada'}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${liveConnected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          <Radio className={`w-3.5 h-3.5 ${liveConnected ? 'animate-pulse' : ''}`} />
+          {liveConnected ? 'Live' : 'Offline'}
+        </span>
       </div>
 
       {loading ? (

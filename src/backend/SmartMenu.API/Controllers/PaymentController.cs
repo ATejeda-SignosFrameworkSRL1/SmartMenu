@@ -118,6 +118,19 @@ public class PaymentController : ControllerBase
             _logger.LogInformation("Payment {PaymentId} created for Order {OrderId} by processor {ProcessorId}, Method: {Method}, Amount: {Amount}",
                 payment.Id, dto.OrderId, processorId, dto.PaymentMethod, dto.Amount);
 
+            // S5.1 — push a cashier-app (y cualquier suscriptor) para refrescar caja sin polling.
+            await _hub.Clients.All.SendAsync("PaymentRegistered", new
+            {
+                paymentId = payment.Id,
+                orderId = payment.OrderId,
+                orderNumber = order.OrderNumber,
+                method = payment.Method,
+                amount = payment.Amount,
+                tipAmount = payment.TipAmount,
+                totalAmount = payment.TotalAmount,
+                completedAt = payment.CompletedAt
+            });
+
             return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, new
             {
                 payment.Id,

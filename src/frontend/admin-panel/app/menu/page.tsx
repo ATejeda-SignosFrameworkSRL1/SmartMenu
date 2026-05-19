@@ -365,8 +365,21 @@ function DishFormModal({
   );
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // S5.2 — errores por campo, no solo toast. ASP.NET Core devuelve 400 con
+  // { errors: { Name: ["..."], Price: ["..."] } } cuando ModelState falla.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const fieldError = (name: string): string | undefined => {
+    const lower = name.toLowerCase();
+    for (const k of Object.keys(fieldErrors)) {
+      if (k.toLowerCase() === lower) return fieldErrors[k];
+    }
+    return undefined;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFieldErrors({});
     try {
       const token = localStorage.getItem('admin_token');
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -380,8 +393,19 @@ function DishFormModal({
         toast.success('Platillo creado');
       }
       onSuccess();
-    } catch (error) {
-      toast.error('Error al guardar');
+    } catch (error: any) {
+      const resp = error?.response?.data;
+      // ASP.NET ModelState validation: { errors: { Field: ["msg"] } }
+      if (resp?.errors && typeof resp.errors === 'object') {
+        const flat: Record<string, string> = {};
+        for (const [k, v] of Object.entries(resp.errors)) {
+          flat[k] = Array.isArray(v) ? v.join(' ') : String(v);
+        }
+        setFieldErrors(flat);
+        toast.error('Revisa los campos marcados en rojo');
+      } else {
+        toast.error(resp?.error || 'Error al guardar');
+      }
     }
   };
 
@@ -410,8 +434,10 @@ function DishFormModal({
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                aria-invalid={!!fieldError('name')}
+                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${fieldError('name') ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-primary-500'}`}
               />
+              {fieldError('name') && <p className="mt-1 text-xs text-red-600">{fieldError('name')}</p>}
             </div>
 
             <div>
@@ -423,8 +449,10 @@ function DishFormModal({
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                aria-invalid={!!fieldError('description')}
+                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent resize-none ${fieldError('description') ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-primary-500'}`}
               />
+              {fieldError('description') && <p className="mt-1 text-xs text-red-600">{fieldError('description')}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -441,8 +469,10 @@ function DishFormModal({
                   onChange={(e) =>
                     setFormData({ ...formData, price: parseFloat(e.target.value) })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  aria-invalid={!!fieldError('price')}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${fieldError('price') ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-primary-500'}`}
                 />
+                {fieldError('price') && <p className="mt-1 text-xs text-red-600">{fieldError('price')}</p>}
               </div>
 
               <div>

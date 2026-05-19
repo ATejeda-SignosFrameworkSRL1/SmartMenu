@@ -616,6 +616,25 @@ public class OrderController : ControllerBase
                 _logger.LogWarning(ex, "No se pudo notificar a cocina para orden POS {OrderId}", orderEntity.Id);
             }
 
+            // S5.1 — push a cashier-app (caja del día) sin polling.
+            try
+            {
+                await _orderHub.Clients.All.SendAsync("PaymentRegistered", new
+                {
+                    orderId = orderEntity.Id,
+                    orderNumber = orderEntity.OrderNumber,
+                    method = dto.PaymentMethod ?? (dto.SubPayments?.Count > 0 ? "Mixed" : "Cash"),
+                    amount = baseAmount,
+                    tipAmount = tipAmt,
+                    totalAmount = baseAmount + tipAmt,
+                    completedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo notificar PaymentRegistered para POS {OrderId}", orderEntity.Id);
+            }
+
             _logger.LogInformation("POS order {OrderId} created and paid by cashier {CashierId}", orderEntity.Id, dto.CashierId);
             return Ok(new
             {

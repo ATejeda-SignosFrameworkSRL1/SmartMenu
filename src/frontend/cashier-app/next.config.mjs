@@ -14,6 +14,7 @@ const nextConfig = {
     return [
       { source: '/api/:path*', destination: `${backendHttp}/api/:path*` },
       { source: '/uploads/:path*', destination: `${backendHttp}/uploads/:path*` },
+      { source: '/hubs/:path*', destination: `${backendHttp}/hubs/:path*` },
     ];
   },
   env: {
