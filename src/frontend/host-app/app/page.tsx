@@ -10,6 +10,53 @@ const api = axios.create({
   baseURL: '',
 });
 
+// S3.3 — JWT refresh interceptor: auto-renueva access_token cuando expira sin
+// botar al usuario a /login. Espejo del patrón en admin-panel/waiter-app.
+let _refreshPromise: Promise<string | null> | null = null;
+async function _tryRefresh(): Promise<string | null> {
+  if (_refreshPromise) return _refreshPromise;
+  const rt = typeof window !== 'undefined' ? localStorage.getItem('host_refresh') : null;
+  if (!rt) return null;
+  _refreshPromise = (async () => {
+    try {
+      const r = await axios.post('/api/auth/refresh', { refreshToken: rt });
+      const { accessToken, refreshToken: nrt, user } = r.data ?? {};
+      if (!accessToken) return null;
+      localStorage.setItem('host_token', accessToken);
+      if (nrt) localStorage.setItem('host_refresh', nrt);
+      if (user) localStorage.setItem('host_user', JSON.stringify(user));
+      return accessToken as string;
+    } catch { return null; }
+    finally { _refreshPromise = null; }
+  })();
+  return _refreshPromise;
+}
+api.interceptors.request.use((config) => {
+  const t = typeof window !== 'undefined' ? localStorage.getItem('host_token') : null;
+  if (t && config.headers) config.headers.Authorization = `Bearer ${t}`;
+  return config;
+});
+api.interceptors.response.use(
+  (r) => r,
+  async (error) => {
+    const o: any = error.config;
+    if (error.response?.status === 401 && o && !o._refreshAttempted) {
+      o._refreshAttempted = true;
+      const nt = await _tryRefresh();
+      if (nt) {
+        o.headers = o.headers ?? {};
+        o.headers.Authorization = `Bearer ${nt}`;
+        return api.request(o);
+      }
+      localStorage.removeItem('host_token');
+      localStorage.removeItem('host_refresh');
+      localStorage.removeItem('host_user');
+      if (typeof window !== 'undefined') window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 interface Zone {
   id: number;
   name: string;
