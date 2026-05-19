@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,17 +22,31 @@ public class WaiterShiftController : ControllerBase
         _logger = logger;
     }
 
+    // S1.3 — el turno se asigna al usuario autenticado salvo override Admin/Manager.
+    private int? GetShiftOwnerId(int? dtoWaiterId)
+    {
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var isPrivileged = role == "Admin" || role == "Manager";
+        if (isPrivileged && dtoWaiterId.HasValue && dtoWaiterId.Value > 0)
+            return dtoWaiterId.Value;
+        var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(sub, out var id) ? id : null;
+    }
+
     [HttpPost("start")]
     public async Task<IActionResult> StartShift([FromBody] StartShiftDto dto)
     {
+        var waiterId = GetShiftOwnerId(dto.WaiterId);
+        if (waiterId == null) return Unauthorized(new { error = "Usuario no identificado" });
+
         var existing = await _context.WaiterShifts
-            .FirstOrDefaultAsync(s => s.WaiterId == dto.WaiterId && s.IsActive);
+            .FirstOrDefaultAsync(s => s.WaiterId == waiterId.Value && s.IsActive);
         if (existing != null)
             return BadRequest(new { error = "Ya tienes un turno activo" });
 
         var shift = new WaiterShift
         {
-            WaiterId = dto.WaiterId,
+            WaiterId = waiterId.Value,
             StartTime = DateTime.UtcNow,
             IsActive = true,
             Notes = dto.Notes

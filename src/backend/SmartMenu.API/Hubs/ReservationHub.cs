@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace SmartMenu.API.Hubs;
 
+[Authorize(Roles = "Admin,Manager,Host,Hostess")]
 public class ReservationHub : Hub
 {
     public async Task NotifyNewReservation(object reservationData)

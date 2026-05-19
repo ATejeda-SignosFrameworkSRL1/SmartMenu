@@ -279,9 +279,20 @@ var app = builder.Build();
 // ===== MIDDLEWARE PIPELINE =====
 
 // Serilog request logging — una línea por request con duración + status code.
+// S1.5: NO loguear paths /hubs/* (donde el token JWT viaja como ?access_token=…) ni
+// /metrics ni /health/* (ruido de scraping/probes). El template default de Serilog
+// no incluye la QueryString, pero suprimimos el path entero para defensa en profundidad
+// — si alguien sube el log level a Debug en framework, los hubs no se logueen.
 app.UseSerilogRequestLogging(opts =>
 {
     opts.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+    opts.GetLevel = (httpCtx, _, _) =>
+    {
+        var p = httpCtx.Request.Path;
+        if (p.StartsWithSegments("/hubs") || p.StartsWithSegments("/metrics") || p.StartsWithSegments("/health"))
+            return Serilog.Events.LogEventLevel.Verbose; // sale por debajo de Information default
+        return Serilog.Events.LogEventLevel.Information;
+    };
 });
 
 if (app.Environment.IsDevelopment())

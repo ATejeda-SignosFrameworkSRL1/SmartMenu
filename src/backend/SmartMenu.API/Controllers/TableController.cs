@@ -88,6 +88,7 @@ public class TableController : ControllerBase
     /// Obtener mesa por ID
     /// </summary>
     [HttpGet("{id}")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTable(int id)
@@ -125,6 +126,7 @@ public class TableController : ControllerBase
     /// Obtener mesa por código QR
     /// </summary>
     [HttpGet("qr/{qrCode}")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTableByQR(string qrCode)

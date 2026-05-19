@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace SmartMenu.API.Hubs;
 
+[Authorize]
 public class OrderHub : Hub
 {
     public async Task NotifyNewOrder(int orderId, int tableId)

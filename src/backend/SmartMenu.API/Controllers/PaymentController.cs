@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -25,6 +27,19 @@ public class PaymentController : ControllerBase
         _hub = hub;
     }
 
+    // S1.3 — quien procesa el pago siempre es el usuario autenticado.
+    // Admin/Manager pueden hacer override pasando dto.WaiterId (registrar pago a otro mesero).
+    // Cualquier otro rol: se ignora dto.WaiterId, se usa el del JWT.
+    private int? GetProcessorIdFromContext(int? dtoWaiterId)
+    {
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var isPrivileged = role == "Admin" || role == "Manager";
+        if (isPrivileged && dtoWaiterId.HasValue && dtoWaiterId.Value > 0)
+            return dtoWaiterId.Value;
+        var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(sub, out var id) ? id : null;
+    }
+
     /// <summary>
     /// Crear nuevo pago
     /// </summary>
@@ -32,9 +47,14 @@ public class PaymentController : ControllerBase
     [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentDto dto)
     {
+        // S1.3 — usar identidad del JWT salvo override Admin/Manager.
+        var processorId = GetProcessorIdFromContext(dto.WaiterId);
+        if (processorId == null) return Unauthorized(new { error = "Usuario no identificado" });
+
+        // S1.2 — multi-table write protegido por transacción explícita.
+        await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
-            // Verificar que la orden existe e incluir la mesa
             var order = await _context.Orders
                 .Include(o => o.Items)
                 .Include(o => o.Table)
@@ -46,10 +66,8 @@ public class PaymentController : ControllerBase
             if (order.Status == Domain.Enums.OrderStatus.Completed)
                 return BadRequest(new { error = "Esta orden ya está pagada" });
 
-            // Calcular propina
             decimal tipAmount = 0;
             decimal tipPercentage = 0;
-            
             if (dto.TipPercentage > 0)
             {
                 tipPercentage = dto.TipPercentage;
@@ -63,7 +81,6 @@ public class PaymentController : ControllerBase
 
             decimal totalAmount = dto.Amount + tipAmount;
 
-            // Crear pago (soporta división de cuenta: varios pagos suman al total)
             var payment = new Payment
             {
                 OrderId = dto.OrderId,
@@ -72,7 +89,7 @@ public class PaymentController : ControllerBase
                 TipAmount = tipAmount,
                 TipPercentage = tipPercentage,
                 TotalAmount = totalAmount,
-                ProcessedByWaiterId = dto.WaiterId,
+                ProcessedByWaiterId = processorId,
                 TransactionId = dto.TransactionId,
                 Status = Domain.Enums.PaymentStatus.Completed,
                 CompletedAt = DateTime.UtcNow,
@@ -83,7 +100,6 @@ public class PaymentController : ControllerBase
 
             _context.Payments.Add(payment);
 
-            // Completar orden cuando el total pagado alcanza el total
             var totalPaidBefore = await _context.Payments.Where(p => p.OrderId == dto.OrderId).SumAsync(p => p.Amount);
             var totalPaidNow = totalPaidBefore + payment.Amount;
             if (totalPaidNow >= order.Total)
@@ -93,14 +109,14 @@ public class PaymentController : ControllerBase
                 order.UpdatedAt = DateTime.UtcNow;
             }
 
-            // Mesa pasa a "Por Cobrar" (Billing): el cliente inició el pago, el mesero aún debe recolectarlo
             if (order.Table != null && order.Table.Status != Domain.Enums.TableStatus.Billing)
                 order.Table.Status = Domain.Enums.TableStatus.Billing;
 
             await _context.SaveChangesAsync();
+            await tx.CommitAsync();
 
-            _logger.LogInformation("Payment created for Order {OrderId}, Method: {Method}, Amount: {Amount}",
-                dto.OrderId, dto.PaymentMethod, dto.Amount);
+            _logger.LogInformation("Payment {PaymentId} created for Order {OrderId} by processor {ProcessorId}, Method: {Method}, Amount: {Amount}",
+                payment.Id, dto.OrderId, processorId, dto.PaymentMethod, dto.Amount);
 
             return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, new
             {
@@ -115,7 +131,8 @@ public class PaymentController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating payment");
+            await tx.RollbackAsync();
+            _logger.LogError(ex, "Error creating payment — rolled back");
             return StatusCode(500, new { error = "Error al procesar pago" });
         }
     }
@@ -277,6 +294,12 @@ public class PaymentController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CollectPayment([FromBody] CollectPaymentDto dto)
     {
+        // S1.3 — processor del cobro siempre desde JWT (Admin puede override con dto.WaiterId).
+        var processorId = GetProcessorIdFromContext(dto.WaiterId);
+        if (processorId == null) return Unauthorized(new { error = "Usuario no identificado" });
+
+        // S1.2 — multi-table write protegido por transacción explícita (Order + Payments + Table).
+        await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
             var order = await _context.Orders
@@ -290,7 +313,15 @@ public class PaymentController : ControllerBase
             if (order.Status == Domain.Enums.OrderStatus.Pending)
                 return BadRequest(new { error = "La orden aún no ha sido servida" });
 
-            // Eliminar pagos previos no completados de esta orden (si el mesero está rehaciendo el cobro)
+            // S1.4 — Fiscal RNC sync Order↔Payment. Si Order pidió comprobante O dto lo pide, captura ambos
+            // valores y valida que RNC + BusinessName estén presentes. No se permite emitir sin esos datos.
+            var requiresReceipt = dto.RequiresFiscalReceipt || order.ClientRequiresFiscalReceipt;
+            var effectiveRnc = string.IsNullOrWhiteSpace(dto.RNC) ? order.ClientRNC : dto.RNC;
+            var effectiveBusinessName = string.IsNullOrWhiteSpace(dto.BusinessName) ? order.ClientBusinessName : dto.BusinessName;
+            if (requiresReceipt && (string.IsNullOrWhiteSpace(effectiveRnc) || string.IsNullOrWhiteSpace(effectiveBusinessName)))
+                return BadRequest(new { error = "Comprobante fiscal requiere RNC y razón social. Captura los datos del cliente antes de cobrar." });
+
+            // Eliminar pagos previos no completados de esta orden
             var existingPending = _context.Payments
                 .Where(p => p.OrderId == dto.OrderId && p.Status != Domain.Enums.PaymentStatus.Completed);
             _context.Payments.RemoveRange(existingPending);
@@ -299,7 +330,6 @@ public class PaymentController : ControllerBase
 
             if (dto.SubPayments != null && dto.SubPayments.Count > 0)
             {
-                // Pago mixto o split: varios subpagos
                 foreach (var sub in dto.SubPayments)
                 {
                     decimal subTip = sub.TipAmount;
@@ -311,12 +341,12 @@ public class PaymentController : ControllerBase
                         TipAmount = subTip,
                         TipPercentage = sub.Amount > 0 ? (subTip / sub.Amount) * 100 : 0,
                         TotalAmount = sub.Amount + subTip,
-                        ProcessedByWaiterId = dto.WaiterId,
+                        ProcessedByWaiterId = processorId,
                         BillSplitType = dto.BillSplitType,
                         SplitPartIndex = sub.SplitPartIndex,
-                        RequiresFiscalReceipt = dto.RequiresFiscalReceipt || order.ClientRequiresFiscalReceipt,
-                        RNC = dto.RNC ?? order.ClientRNC,
-                        BusinessName = dto.BusinessName ?? order.ClientBusinessName,
+                        RequiresFiscalReceipt = requiresReceipt,
+                        RNC = effectiveRnc,
+                        BusinessName = effectiveBusinessName,
                         Status = Domain.Enums.PaymentStatus.Completed,
                         CompletedAt = DateTime.UtcNow,
                         CreatedAt = DateTime.UtcNow,
@@ -327,7 +357,6 @@ public class PaymentController : ControllerBase
             }
             else
             {
-                // Pago simple
                 string method = dto.PaymentMethod ?? order.ClientRequestedPaymentMethod ?? "Cash";
                 decimal tipPct = dto.TipPercentage > 0 ? dto.TipPercentage : order.ClientTipPercentage;
                 decimal baseAmount = dto.Amount > 0 ? dto.Amount : order.Total;
@@ -342,12 +371,12 @@ public class PaymentController : ControllerBase
                     TipAmount = tipAmt,
                     TipPercentage = tipPct,
                     TotalAmount = baseAmount + tipAmt,
-                    ProcessedByWaiterId = dto.WaiterId,
+                    ProcessedByWaiterId = processorId,
                     BillSplitType = dto.BillSplitType,
                     SplitPartIndex = dto.SplitPartIndex,
-                    RequiresFiscalReceipt = dto.RequiresFiscalReceipt || order.ClientRequiresFiscalReceipt,
-                    RNC = dto.RNC ?? order.ClientRNC,
-                    BusinessName = dto.BusinessName ?? order.ClientBusinessName,
+                    RequiresFiscalReceipt = requiresReceipt,
+                    RNC = effectiveRnc,
+                    BusinessName = effectiveBusinessName,
                     Status = Domain.Enums.PaymentStatus.Completed,
                     CompletedAt = DateTime.UtcNow,
                     CreatedAt = DateTime.UtcNow,
@@ -369,13 +398,15 @@ public class PaymentController : ControllerBase
                 order.Table.Status = Domain.Enums.TableStatus.Cleaning;
 
             await _context.SaveChangesAsync();
+            await tx.CommitAsync();
 
-            _logger.LogInformation("Payment collected by waiter {WaiterId} for order {OrderId}, table set to Cleaning", dto.WaiterId, dto.OrderId);
+            _logger.LogInformation("Payment collected by processor {ProcessorId} for order {OrderId}, table set to Cleaning", processorId, dto.OrderId);
             return Ok(new { message = "Cobro registrado. Mesa en limpieza.", tableId = order.TableId });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error collecting payment for order {OrderId}", dto.OrderId);
+            await tx.RollbackAsync();
+            _logger.LogError(ex, "Error collecting payment for order {OrderId} — rolled back", dto.OrderId);
             return StatusCode(500, new { error = "Error al registrar cobro" });
         }
     }

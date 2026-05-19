@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace SmartMenu.API.Hubs;
 
+[Authorize]
 public class TableHub : Hub
 {
     public async Task NotifyTableStatusChanged(int tableId, string status)

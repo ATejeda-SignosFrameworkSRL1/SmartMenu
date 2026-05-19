@@ -49,7 +49,10 @@ public class OrderRepository : Repository<Order>, IOrderRepository
 
     public async Task<IEnumerable<Order>> GetActiveOrdersAsync(CancellationToken cancellationToken = default)
     {
+        // S1.6 — AsNoTracking + AsSplitQuery: evita cartesian explosion entre Items×Category×KitchenZone
+        // y elimina overhead de change tracking en queries read-only del KDS/admin polling.
         return await _dbSet
+            .AsNoTracking()
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
                 .ThenInclude(d => d!.KitchenZone)
@@ -57,6 +60,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
                 .ThenInclude(i => i.Dish)
                 .ThenInclude(d => d!.Category)
             .Include(o => o.Table)
+            .AsSplitQuery()
             .Where(o => o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled)
             .OrderBy(o => o.CreatedAt)
             .ToListAsync(cancellationToken);
