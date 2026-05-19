@@ -4,7 +4,8 @@ namespace SmartMenu.Application.Services;
 
 public interface IAuthService
 {
-    Task<AuthResultDto> RegisterAsync(RegisterDto dto);
-    Task<AuthResultDto> LoginAsync(LoginDto dto);
+    Task<AuthResultDto> RegisterAsync(RegisterDto dto, string? ip = null);
+    Task<AuthResultDto> LoginAsync(LoginDto dto, string? ip = null);
+    Task<AuthResultDto> RefreshAsync(string refreshToken, string? ip = null);
     Task<UserDto?> GetUserByEmailAsync(string email);
 }

@@ -45,30 +45,32 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResultDto>> Register([FromBody] RegisterDto dto)
     {
-        try
-        {
-            var result = await _authService.RegisterAsync(dto);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var result = await _authService.RegisterAsync(dto, ip);
+        return Ok(result);
     }
 
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResultDto>> Login([FromBody] LoginDto dto)
     {
-        try
-        {
-            var result = await _authService.LoginAsync(dto);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { error = ex.Message });
-        }
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var result = await _authService.LoginAsync(dto, ip);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Intercambia un refresh token vigente por un nuevo JWT + nuevo refresh
+    /// (rotación). El refresh anterior queda revocado. Reuso de un token ya
+    /// rotado revoca todas las sesiones del usuario (mitigación de replay).
+    /// </summary>
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResultDto>> Refresh([FromBody] RefreshTokenDto dto)
+    {
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var result = await _authService.RefreshAsync(dto.RefreshToken, ip);
+        return Ok(result);
     }
 
     [HttpPut("change-password")]

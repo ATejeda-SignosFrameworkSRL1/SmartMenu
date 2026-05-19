@@ -4,11 +4,30 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using System.Text;
 using System.Threading.RateLimiting;
 using SmartMenu.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ===== SERILOG =====
+// Reemplaza el logger default por Serilog: console estructurado + file rolling diario.
+// La config viene de appsettings.json sección "Serilog" si existe; los enrichers/sinks
+// por defecto se aplican como fallback.
+builder.Host.UseSerilog((ctx, services, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "SmartMenu.API")
+    .Enrich.WithProperty("Environment", ctx.HostingEnvironment.EnvironmentName)
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+    .WriteTo.File(
+        path: Path.Combine("logs", "smartmenu-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
 
 // HTTP 5041 + HTTPS 5042. Para evitar ERR_CERT_COMMON_NAME_INVALID en https://TU_IP:5042, ejecuta: .\scripts\create-dev-cert.ps1
 var devCertPath = Path.Combine(Directory.GetCurrentDirectory(), "dev-cert.pfx");
@@ -214,6 +233,12 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // ===== MIDDLEWARE PIPELINE =====
+
+// Serilog request logging — una línea por request con duración + status code.
+app.UseSerilogRequestLogging(opts =>
+{
+    opts.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+});
 
 if (app.Environment.IsDevelopment())
 {

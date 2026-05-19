@@ -34,6 +34,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<ReservationPreOrder> ReservationPreOrders => Set<ReservationPreOrder>();
     public DbSet<PreOrderItem> PreOrderItems => Set<PreOrderItem>();
     public DbSet<TableClaimRequest> TableClaimRequests => Set<TableClaimRequest>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -199,6 +200,20 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Dish>().HasIndex(d => new { d.CategoryId, d.IsAvailable });
         modelBuilder.Entity<Dish>().HasIndex(d => d.IsDeleted);
         modelBuilder.Entity<TableSession>().HasIndex(ts => new { ts.TableId, ts.IsActive });
+
+        // Refresh tokens — TokenHash indexado para lookup rápido, User cascade
+        modelBuilder.Entity<RefreshToken>(b =>
+        {
+            b.Property(rt => rt.TokenHash).HasMaxLength(128).IsRequired();
+            b.Property(rt => rt.ReplacedByTokenHash).HasMaxLength(128);
+            b.Property(rt => rt.CreatedByIp).HasMaxLength(64);
+            b.HasIndex(rt => rt.TokenHash).IsUnique();
+            b.HasIndex(rt => rt.UserId);
+            b.HasOne(rt => rt.User)
+             .WithMany()
+             .HasForeignKey(rt => rt.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

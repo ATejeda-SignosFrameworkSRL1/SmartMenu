@@ -135,14 +135,23 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
-    /// Obtener todas las órdenes (admin)
+    /// Obtener todas las órdenes (admin). Soporta paginación opt-in: si se pasa
+    /// <c>?page=N</c> devuelve PagedResult; sin paginación devuelve lista
+    /// completa (legacy, no romper consumidores existentes).
     /// </summary>
     [HttpGet("all")]
     [ProducesResponseType(typeof(List<OrderDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<OrderDto>>> GetAllOrders()
+    [ProducesResponseType(typeof(PagedResult<OrderDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllOrders([FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
-        var orders = await _orderService.GetAllOrdersAsync();
-        return Ok(orders);
+        if (page is null)
+        {
+            var orders = await _orderService.GetAllOrdersAsync();
+            return Ok(orders);
+        }
+
+        var paged = await _orderService.GetAllOrdersPagedAsync(page.Value, pageSize);
+        return Ok(paged);
     }
 
     /// <summary>

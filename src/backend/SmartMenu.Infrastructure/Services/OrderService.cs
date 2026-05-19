@@ -158,12 +158,39 @@ public class OrderService : IOrderService
     public async Task<IEnumerable<OrderDto>> GetAllOrdersAsync()
     {
         var orders = await _context.Orders
+            .AsNoTracking()
             .Include(o => o.Table)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
         return orders.Select(o => MapToOrderDto(o, false, 0));
+    }
+
+    public async Task<PagedResult<OrderDto>> GetAllOrdersPagedAsync(int page, int pageSize)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200; // cap defensivo
+
+        var baseQuery = _context.Orders.AsNoTracking();
+        var total = await baseQuery.CountAsync();
+        var orders = await baseQuery
+            .Include(o => o.Table)
+            .Include(o => o.Items)
+                .ThenInclude(i => i.Dish)
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<OrderDto>
+        {
+            Items = orders.Select(o => MapToOrderDto(o, false, 0)).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            Total = total
+        };
     }
 
     public async Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus)
