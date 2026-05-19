@@ -1,11 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Serilog;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using SmartMenu.Infrastructure.Data;
 
@@ -174,6 +180,44 @@ builder.Services.Configure<SmartMenu.Application.Settings.BillingSettings>(
 builder.Services.AddScoped<SmartMenu.Application.Services.IAuthService, SmartMenu.Infrastructure.Services.AuthService>();
 builder.Services.AddScoped<SmartMenu.Application.Services.IOrderService, SmartMenu.Infrastructure.Services.OrderService>();
 
+// ===== HEALTH CHECKS =====
+// /health/live   → liveness probe (sin checks, solo confirma que el proceso responde).
+// /health/ready  → readiness probe (chequea DB) — usado por load balancers / k8s para
+//                  saber si esta instancia puede recibir tráfico.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ApplicationDbContext>(
+        name: "database",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: new[] { "ready", "db" });
+
+// ===== OPENTELEMETRY =====
+// Traces + metrics instrumentación ASP.NET Core, EF Core (via DiagnosticSource),
+// HttpClient y runtime (.NET GC, threadpool, etc.).
+// Tracing: Console exporter en Dev (legible en logs). En prod añadir OTLP / Jaeger.
+// Metrics: expuestas en /metrics (formato Prometheus) para scraping.
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r
+        .AddService(serviceName: "SmartMenu.API", serviceVersion: "1.0.0")
+        .AddAttributes(new[] { new KeyValuePair<string, object>("environment", builder.Environment.EnvironmentName) }))
+    .WithTracing(t =>
+    {
+        t.AddAspNetCoreInstrumentation(o =>
+        {
+            // Ignorar /health/* y /metrics del tracing — son ruido constante.
+            o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health")
+                           && !ctx.Request.Path.StartsWithSegments("/metrics");
+        })
+         .AddHttpClientInstrumentation()
+         .AddSource("Microsoft.EntityFrameworkCore"); // EF Core emite ActivitySource propio
+        if (builder.Environment.IsDevelopment())
+            t.AddConsoleExporter();
+    })
+    .WithMetrics(m => m
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddPrometheusExporter());
+
 // ===== SIGNALR =====
 builder.Services.AddSignalR();
 
@@ -281,7 +325,22 @@ app.MapHub<SmartMenu.API.Hubs.KitchenHub>("/hubs/kitchen");
 app.MapHub<SmartMenu.API.Hubs.TableHub>("/hubs/tables");
 app.MapHub<SmartMenu.API.Hubs.ReservationHub>("/hubs/reservations");
 
-// Health Check
+// ===== HEALTH ENDPOINTS =====
+// Liveness — proceso vivo, no chequea dependencias. Para K8s liveness probe.
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = WriteHealthJson
+});
+
+// Readiness — chequea DB. Para K8s readiness probe / load balancer.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = c => c.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthJson
+});
+
+// Legacy: ping simple (compat con código existente). No chequea nada.
 app.MapGet("/health", () => Results.Ok(new
 {
     status = "Healthy",
@@ -289,6 +348,34 @@ app.MapGet("/health", () => Results.Ok(new
     version = "1.0.0",
     environment = app.Environment.EnvironmentName
 }));
+
+// ===== PROMETHEUS METRICS =====
+// Endpoint /metrics expone counters/histograms en formato Prometheus para scraping.
+app.MapPrometheusScrapingEndpoint();
+
+static Task WriteHealthJson(HttpContext ctx, HealthReport report)
+{
+    ctx.Response.ContentType = "application/json; charset=utf-8";
+    var payload = new
+    {
+        status = report.Status.ToString(),
+        totalDurationMs = report.TotalDuration.TotalMilliseconds,
+        entries = report.Entries.ToDictionary(
+            e => e.Key,
+            e => new
+            {
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                durationMs = e.Value.Duration.TotalMilliseconds,
+                error = e.Value.Exception?.Message
+            })
+    };
+    return ctx.Response.WriteAsync(JsonSerializer.Serialize(payload, new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false
+    }));
+}
 
 // Apply migrations + seed (solo en desarrollo). En producción `dotnet ef database update`
 // debe correr externamente (CI/CD), siguiendo la mejor práctica de no auto-migrar prod.
