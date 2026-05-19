@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using SmartMenu.Infrastructure.Data;
 using SmartMenu.Application.DTOs;
 using SmartMenu.Domain.Entities;
 using SmartMenu.Domain.Enums;
+using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.API.Controllers;
 
@@ -21,7 +21,7 @@ public class DishController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<DishDto>>> GetDishes([FromQuery] int? categoryId, [FromQuery] bool all = false)
+    public async Task<IActionResult> GetDishes([FromQuery] int? categoryId, [FromQuery] bool all = false, [FromQuery] int? page = null, [FromQuery] int pageSize = 50)
     {
         var query = _context.Dishes
             .AsNoTracking()
@@ -34,13 +34,27 @@ public class DishController : ControllerBase
             .AsQueryable();
         if (!all)
             query = query.Where(d => d.IsAvailable);
-
         if (categoryId.HasValue)
             query = query.Where(d => d.CategoryId == categoryId.Value);
 
-        var dishes = await query.ToListAsync();
-        var dishDtos = dishes.Select(d => MapToDishDto(d)).ToList();
-        return Ok(dishDtos);
+        // Legacy: sin ?page devuelve array completo (compat).
+        if (page is null)
+        {
+            var dishes = await query.OrderBy(d => d.Id).ToListAsync();
+            return Ok(dishes.Select(d => MapToDishDto(d)).ToList());
+        }
+
+        // Paginado.
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+        var total = await query.CountAsync();
+        var items = await query.OrderBy(d => d.Id).Skip((page.Value - 1) * pageSize).Take(pageSize).ToListAsync();
+        return Ok(new PagedResult<DishDto>
+        {
+            Items = items.Select(d => MapToDishDto(d)).ToList(),
+            Page = page.Value, PageSize = pageSize, Total = total
+        });
     }
 
     [HttpGet("{id}")]

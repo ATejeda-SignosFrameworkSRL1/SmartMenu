@@ -155,14 +155,20 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
-    /// Obtener órdenes activas
+    /// Obtener órdenes activas. Paginación opt-in con ?page=N&pageSize=M.
     /// </summary>
     [HttpGet("active")]
     [ProducesResponseType(typeof(List<OrderDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<OrderDto>>> GetActiveOrders()
+    [ProducesResponseType(typeof(PagedResult<OrderDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetActiveOrders([FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
-        var orders = await _orderService.GetActiveOrdersAsync();
-        return Ok(orders);
+        if (page is null)
+        {
+            var orders = await _orderService.GetActiveOrdersAsync();
+            return Ok(orders);
+        }
+        var paged = await _orderService.GetActiveOrdersPagedAsync(page.Value, pageSize);
+        return Ok(paged);
     }
 
     /// <summary>
@@ -378,12 +384,13 @@ public class OrderController : ControllerBase
     /// Obtener órdenes no asignadas (para vista "Mesas General")
     /// </summary>
     [HttpGet("unassigned")]
-    public async Task<IActionResult> GetUnassignedOrders()
+    public async Task<IActionResult> GetUnassignedOrders([FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
         try
         {
-            var orders = await _orderService.GetUnassignedOrdersAsync();
-            return Ok(orders);
+            if (page is null)
+                return Ok(await _orderService.GetUnassignedOrdersAsync());
+            return Ok(await _orderService.GetUnassignedOrdersPagedAsync(page.Value, pageSize));
         }
         catch (Exception ex)
         {
@@ -396,12 +403,13 @@ public class OrderController : ControllerBase
     /// Obtener órdenes por mesero (para vista "Mis Mesas")
     /// </summary>
     [HttpGet("my-orders/{waiterId}")]
-    public async Task<IActionResult> GetWaiterOrders(int waiterId)
+    public async Task<IActionResult> GetWaiterOrders(int waiterId, [FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
         try
         {
-            var orders = await _orderService.GetOrdersByWaiterAsync(waiterId);
-            return Ok(orders);
+            if (page is null)
+                return Ok(await _orderService.GetOrdersByWaiterAsync(waiterId));
+            return Ok(await _orderService.GetOrdersByWaiterPagedAsync(waiterId, page.Value, pageSize));
         }
         catch (Exception ex)
         {

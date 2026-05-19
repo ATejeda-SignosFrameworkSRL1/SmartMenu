@@ -33,7 +33,7 @@ public class TableController : ControllerBase
     {
         try
         {
-            var now = DateTime.Now;
+            var now = DateTime.UtcNow;
             var reservedTableIds = await _context.TableReservations
                 .Where(r => !r.IsCancelled
                          && r.IsConfirmed
@@ -43,27 +43,36 @@ public class TableController : ControllerBase
                 .Distinct()
                 .ToListAsync();
 
+            // S2.2 — Read sin tracking; si hay correcciones de status, hacer un UPDATE
+            // dirigido (segunda query) con tracking solo para las mesas que cambian.
             var tables = await _context.Tables
+                .AsNoTracking()
                 .Include(t => t.Zone)
                 .ToListAsync();
 
-            // Sincronizar status: si hay reserva activa y la mesa está Available, corregirla
-            bool changed = false;
+            var corrections = new List<(int Id, TableStatus NewStatus)>();
             foreach (var t in tables)
             {
                 if (reservedTableIds.Contains(t.Id) && t.Status == TableStatus.Available)
-                {
-                    t.Status = TableStatus.Reserved;
-                    changed = true;
-                }
+                    corrections.Add((t.Id, TableStatus.Reserved));
                 else if (!reservedTableIds.Contains(t.Id) && t.Status == TableStatus.Reserved)
+                    corrections.Add((t.Id, TableStatus.Available));
+            }
+
+            if (corrections.Count > 0)
+            {
+                var ids = corrections.Select(c => c.Id).ToList();
+                var tracked = await _context.Tables.Where(t => ids.Contains(t.Id)).ToListAsync();
+                foreach (var trackedT in tracked)
+                    trackedT.Status = corrections.First(c => c.Id == trackedT.Id).NewStatus;
+                await _context.SaveChangesAsync();
+                // Sincronizar el snapshot in-memory para el response.
+                foreach (var (id, newStatus) in corrections)
                 {
-                    // No hay reserva activa pero está como Reserved → liberar
-                    t.Status = TableStatus.Available;
-                    changed = true;
+                    var t = tables.First(x => x.Id == id);
+                    t.Status = newStatus;
                 }
             }
-            if (changed) await _context.SaveChangesAsync();
 
             var result = tables.Select(t => new
             {

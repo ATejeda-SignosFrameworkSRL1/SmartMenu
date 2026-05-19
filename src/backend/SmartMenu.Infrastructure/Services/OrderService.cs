@@ -155,6 +155,32 @@ public class OrderService : IOrderService
         return orders.Select(o => MapToOrderDto(o, false, 0));
     }
 
+    public async Task<PagedResult<OrderDto>> GetActiveOrdersPagedAsync(int page, int pageSize)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var baseQuery = _context.Orders
+            .AsNoTracking()
+            .Where(o => o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled);
+        var total = await baseQuery.CountAsync();
+        var orders = await baseQuery
+            .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.KitchenZone)
+            .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.Category)
+            .Include(o => o.Table)
+            .AsSplitQuery()
+            .OrderBy(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<OrderDto>
+        {
+            Items = orders.Select(o => MapToOrderDto(o, false, 0)).ToList(),
+            Page = page, PageSize = pageSize, Total = total
+        };
+    }
+
     public async Task<IEnumerable<OrderDto>> GetAllOrdersAsync()
     {
         var orders = await _context.Orders
@@ -303,6 +329,60 @@ public class OrderService : IOrderService
         _logger.LogInformation($"🔍 GetUnassignedOrdersAsync - Órdenes no asignadas: {allUnassignedOrders.Count}");
 
         return allUnassignedOrders.Select(o => MapToOrderDto(o, false));
+    }
+
+    public async Task<PagedResult<OrderDto>> GetUnassignedOrdersPagedAsync(int page, int pageSize)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var baseQuery = _context.Orders
+            .AsNoTracking()
+            .Where(o => o.AssignedWaiterId == null
+                && o.Status != OrderStatus.Completed
+                && o.Status != OrderStatus.Cancelled);
+        var total = await baseQuery.CountAsync();
+        var orders = await baseQuery
+            .Include(o => o.Table)
+            .Include(o => o.Items).ThenInclude(i => i.Dish)
+            .AsSplitQuery()
+            .OrderBy(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<OrderDto>
+        {
+            Items = orders.Select(o => MapToOrderDto(o, false)).ToList(),
+            Page = page, PageSize = pageSize, Total = total
+        };
+    }
+
+    public async Task<PagedResult<OrderDto>> GetOrdersByWaiterPagedAsync(int waiterId, int page, int pageSize)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var baseQuery = _context.Orders
+            .AsNoTracking()
+            .Where(o => o.AssignedWaiterId == waiterId
+                && (o.Status != OrderStatus.Completed
+                    || (o.Table != null && o.Table.Status == TableStatus.Cleaning)));
+        var total = await baseQuery.CountAsync();
+        var orders = await baseQuery
+            .Include(o => o.Table)
+            .Include(o => o.Items).ThenInclude(i => i.Dish)
+            .AsSplitQuery()
+            .OrderBy(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<OrderDto>
+        {
+            Items = orders.Select(o => MapToOrderDto(o, false, 0)).ToList(),
+            Page = page, PageSize = pageSize, Total = total
+        };
     }
 
     public async Task<IEnumerable<OrderDto>> GetOrdersByWaiterAsync(int waiterId)

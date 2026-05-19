@@ -262,7 +262,7 @@ public class TableReservationController : ControllerBase
             // Liberar la mesa si estaba Reserved y no hay otra reserva próxima (≤1h)
             if (reservation.Table != null && reservation.Table.Status == SmartMenu.Domain.Enums.TableStatus.Reserved)
             {
-                var now = DateTime.Now;
+                var now = DateTime.UtcNow;
                 var oneHourFromNow = now.AddHours(1);
                 var otherProxima = await _context.TableReservations
                     .AnyAsync(r => r.TableId == reservation.TableId

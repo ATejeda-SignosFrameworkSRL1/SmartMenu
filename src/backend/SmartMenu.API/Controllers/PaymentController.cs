@@ -461,49 +461,72 @@ public class PaymentController : ControllerBase
     /// Listar pagos en un rango de fechas (para cajero/admin)
     /// </summary>
     [HttpGet("list")]
-    public async Task<IActionResult> ListPayments([FromQuery] DateTime? from, [FromQuery] DateTime? to)
+    public async Task<IActionResult> ListPayments(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] int? page = null,
+        [FromQuery] int pageSize = 100)
     {
         var fromDate = (from ?? DateTime.UtcNow.Date).Date;
         var toDate = (to ?? DateTime.UtcNow.Date).Date.AddDays(1);
-        var list = await _context.Payments
-            .Include(p => p.Order)
-            .ThenInclude(o => o!.Table)
+
+        var baseQuery = _context.Payments
+            .AsNoTracking()
+            .Include(p => p.Order).ThenInclude(o => o!.Table)
             .Include(p => p.ProcessedByWaiter)
             .Where(p => p.CompletedAt >= fromDate && p.CompletedAt < toDate && p.Status == Domain.Enums.PaymentStatus.Completed)
-            .OrderByDescending(p => p.CompletedAt)
-            .Select(p => new
-            {
-                p.Id,
-                p.OrderId,
-                OrderNumber = p.Order != null ? p.Order.OrderNumber : "",
-                TableNumber = p.Order != null && p.Order.Table != null ? p.Order.Table.TableNumber : 0,
-                p.Method,
-                p.Amount,
-                p.TipAmount,
-                p.TotalAmount,
-                p.CompletedAt,
-                p.RequiresFiscalReceipt,
-                p.RNC,
-                p.BusinessName,
-                WaiterName = p.ProcessedByWaiter != null
-                    ? p.ProcessedByWaiter.FirstName + " " + p.ProcessedByWaiter.LastName
-                    : null
-            })
-            .ToListAsync();
+            .OrderByDescending(p => p.CompletedAt);
 
+        // Summary se calcula SIEMPRE sobre el set filtrado completo (no por página).
+        var summaryRaw = await baseQuery
+            .Select(p => new { p.Method, p.Amount, p.TipAmount, p.TotalAmount, p.RequiresFiscalReceipt })
+            .ToListAsync();
         var summary = new
         {
-            TotalAmount = list.Sum(p => p.Amount),
-            TotalTips = list.Sum(p => p.TipAmount),
-            TotalWithTips = list.Sum(p => p.TotalAmount),
-            Count = list.Count,
-            ByCash = list.Where(p => p.Method == "Cash").Sum(p => p.TotalAmount),
-            ByCard = list.Where(p => p.Method == "Card").Sum(p => p.TotalAmount),
-            ByTransfer = list.Where(p => p.Method == "Transfer").Sum(p => p.TotalAmount),
-            ByMixed = list.Where(p => p.Method == "Mixed").Sum(p => p.TotalAmount),
-            FiscalCount = list.Count(p => p.RequiresFiscalReceipt)
+            TotalAmount = summaryRaw.Sum(p => p.Amount),
+            TotalTips = summaryRaw.Sum(p => p.TipAmount),
+            TotalWithTips = summaryRaw.Sum(p => p.TotalAmount),
+            Count = summaryRaw.Count,
+            ByCash = summaryRaw.Where(p => p.Method == "Cash").Sum(p => p.TotalAmount),
+            ByCard = summaryRaw.Where(p => p.Method == "Card").Sum(p => p.TotalAmount),
+            ByTransfer = summaryRaw.Where(p => p.Method == "Transfer").Sum(p => p.TotalAmount),
+            ByMixed = summaryRaw.Where(p => p.Method == "Mixed").Sum(p => p.TotalAmount),
+            FiscalCount = summaryRaw.Count(p => p.RequiresFiscalReceipt)
         };
-        return Ok(new { from = fromDate, to = toDate.AddDays(-1), summary, payments = list });
+
+        var projection = baseQuery.Select(p => new
+        {
+            p.Id, p.OrderId,
+            OrderNumber = p.Order != null ? p.Order.OrderNumber : "",
+            TableNumber = p.Order != null && p.Order.Table != null ? p.Order.Table.TableNumber : 0,
+            p.Method, p.Amount, p.TipAmount, p.TotalAmount, p.CompletedAt,
+            p.RequiresFiscalReceipt, p.RNC, p.BusinessName,
+            WaiterName = p.ProcessedByWaiter != null
+                ? p.ProcessedByWaiter.FirstName + " " + p.ProcessedByWaiter.LastName
+                : null
+        });
+
+        // Legacy: sin ?page devuelve la lista completa (compat con reportes EOD existentes).
+        if (page is null)
+        {
+            var all = await projection.ToListAsync();
+            return Ok(new { from = fromDate, to = toDate.AddDays(-1), summary, payments = all });
+        }
+
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 100;
+        if (pageSize > 500) pageSize = 500;
+        var pageItems = await projection.Skip((page.Value - 1) * pageSize).Take(pageSize).ToListAsync();
+        return Ok(new
+        {
+            from = fromDate,
+            to = toDate.AddDays(-1),
+            summary,
+            payments = pageItems,
+            page = page.Value,
+            pageSize,
+            total = summary.Count
+        });
     }
 
     /// <summary>
