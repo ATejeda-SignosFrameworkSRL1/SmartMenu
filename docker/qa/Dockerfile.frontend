@@ -11,9 +11,12 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Cachear deps
+# Cachear deps. Alpine (musl) requiere @next/swc-linux-x64-musl que es una
+# optionalDependency de next — npm ci no la instala en todas las versiones.
+# Forzamos --include=optional para resolverla y add explicit como fallback.
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --include=optional && \
+    npm install --no-save --no-audit --no-fund @next/swc-linux-x64-musl@$(node -p "require('./node_modules/next/package.json').version") || true
 
 # Build
 COPY . .

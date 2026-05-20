@@ -5,57 +5,10 @@ import { Clock, Check, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
+import { createAuthApi } from '@/lib/auth-client';
 
-const api = axios.create({
-  baseURL: '',
-});
-
-// S3.3 — JWT refresh interceptor: auto-renueva access_token cuando expira sin
-// botar al usuario a /login. Espejo del patrón en admin-panel/waiter-app.
-let _refreshPromise: Promise<string | null> | null = null;
-async function _tryRefresh(): Promise<string | null> {
-  if (_refreshPromise) return _refreshPromise;
-  const rt = typeof window !== 'undefined' ? localStorage.getItem('kds_refresh') : null;
-  if (!rt) return null;
-  _refreshPromise = (async () => {
-    try {
-      const r = await axios.post('/api/auth/refresh', { refreshToken: rt });
-      const { accessToken, refreshToken: nrt, user } = r.data ?? {};
-      if (!accessToken) return null;
-      localStorage.setItem('kds_token', accessToken);
-      if (nrt) localStorage.setItem('kds_refresh', nrt);
-      if (user) localStorage.setItem('kds_user', JSON.stringify(user));
-      return accessToken as string;
-    } catch { return null; }
-    finally { _refreshPromise = null; }
-  })();
-  return _refreshPromise;
-}
-api.interceptors.request.use((config) => {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('kds_token') : null;
-  if (t && config.headers) config.headers.Authorization = `Bearer ${t}`;
-  return config;
-});
-api.interceptors.response.use(
-  (r) => r,
-  async (error) => {
-    const o: any = error.config;
-    if (error.response?.status === 401 && o && !o._refreshAttempted) {
-      o._refreshAttempted = true;
-      const nt = await _tryRefresh();
-      if (nt) {
-        o.headers = o.headers ?? {};
-        o.headers.Authorization = `Bearer ${nt}`;
-        return api.request(o);
-      }
-      localStorage.removeItem('kds_token');
-      localStorage.removeItem('kds_refresh');
-      localStorage.removeItem('kds_user');
-      if (typeof window !== 'undefined') window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+// F3 — auth-client centralizado reemplaza el interceptor JWT inline.
+const { api } = createAuthApi('kds');
 
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
