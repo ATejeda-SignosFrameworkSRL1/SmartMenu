@@ -29,14 +29,81 @@ http://localhost http://*.qa.smartmenu.local {
 	redir https://{host}:8443{uri} 308
 }
 
-# ─── HTTP plano vía LAN IP (sin redirect, sin cert) ───────────────────────
-# Para que el cell escanee QR sin warning de cert self-signed. Para producción
-# real usa cert válido (Let's Encrypt / corporate CA) y desactiva esto.
+# ─── HTTP plano vía LAN IP (legado — se queda como fallback) ──────────────
 http://172.31.98.54 {
 	encode gzip
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
 	reverse_proxy client-app:3000
+}
+
+# ─── nip.io HTTPS — URLs limpias, accesibles desde cualquier device LAN ───
+# *.172-31-98-54.nip.io resuelve a 172.31.98.54 sin tocar hosts file.
+# Cert sigue siendo self-signed (Caddy CA local) — el cell mostrará warning
+# una sola vez por hostname. Para evitar warning instala
+# docker/qa/caddy-root-ca.crt en el cell, o usa Let's Encrypt con port
+# forwarding 80/443 → 8080/8443.
+
+dev.172-31-98-54.nip.io:8443, client.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy client-app:3000
+}
+
+api.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	reverse_proxy backend:8080
+}
+
+admin.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy admin-panel:3001
+}
+
+kds.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy kds-app:3002
+}
+
+waiter.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy waiter-app:3003
+}
+
+host.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy host-app:3004
+}
+
+cashier.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy cashier-app:3005
+}
+
+reservation.172-31-98-54.nip.io:8443 {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy reservation-app:3007
 }
 
 # ─── Landing page en https://localhost:8443/ ───────────────────────────────

@@ -25,9 +25,12 @@ public class TableController : ControllerBase
     }
 
     /// <summary>
-    /// Obtener todas las mesas
+    /// Obtener todas las mesas. AllowAnonymous porque el customer-app las usa
+    /// para mostrar el listado de QR codes (no devuelve PII — solo número,
+    /// zona, capacidad, status, qrCode).
     /// </summary>
     [HttpGet]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTables()
     {
