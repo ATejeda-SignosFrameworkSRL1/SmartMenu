@@ -7,7 +7,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[AllowAnonymous] // Cliente escanea QR sin login — necesita leer el menú anónimo.
 public class MenuController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
