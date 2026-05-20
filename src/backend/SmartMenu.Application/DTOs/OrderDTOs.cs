@@ -51,6 +51,13 @@ public record UpdateOrderStatusDto
 {
     [Required, StringLength(32, MinimumLength = 1)]
     public string NewStatus { get; init; } = string.Empty;
+
+    /// <summary>
+    /// P0.2 — Razón obligatoria cuando Admin/Manager fuerza Completed sin pago
+    /// completo (override fiscal auditado). Para transiciones normales se ignora.
+    /// </summary>
+    [StringLength(512)]
+    public string? OverrideReason { get; init; }
 }
 
 public record CancelOrderDto

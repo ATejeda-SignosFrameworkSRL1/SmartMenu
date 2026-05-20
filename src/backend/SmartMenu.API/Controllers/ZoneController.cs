@@ -8,7 +8,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin,Manager")]
+[Authorize] // Default: cualquier staff autenticado. Mutaciones se restringen per-método.
 public class ZoneController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -93,6 +93,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> CreateZone([FromBody] CreateZoneDto dto)
     {
         try
@@ -137,6 +138,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> UpdateZone(int id, [FromBody] UpdateZoneDto dto)
     {
         try
@@ -177,6 +179,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> DeleteZone(int id)
     {
         try
@@ -205,6 +208,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpPut("{id}/toggle")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> ToggleActive(int id)
     {
         try

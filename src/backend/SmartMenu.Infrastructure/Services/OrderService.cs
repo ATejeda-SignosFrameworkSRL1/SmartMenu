@@ -244,7 +244,7 @@ public class OrderService : IOrderService
                 $"Desde {current} solo se permite: {string.Join(", ", allowed?.Select(s => s.ToString()) ?? Array.Empty<string>())}.");
     }
 
-    public async Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus, bool isAdminOverride = false)
+    public async Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus, bool isAdminOverride = false, string? overrideReason = null)
     {
         var order = await _context.Orders
             .Include(o => o.Table)
@@ -259,6 +259,29 @@ public class OrderService : IOrderService
         if (Enum.TryParse<OrderStatus>(newStatus, true, out var status))
         {
             ValidateStateTransition(order.Status, status, isAdminOverride);
+
+            // P0.2 — Guard fiscal: no se puede marcar Completed sin Payment row que cubra el total,
+            // salvo que un Admin/Manager pase un OverrideReason explícito (queda auditado).
+            if (status == OrderStatus.Completed && order.Status != OrderStatus.Completed)
+            {
+                var paidSum = await _context.Payments
+                    .Where(p => p.OrderId == order.Id && p.Status == Domain.Enums.PaymentStatus.Completed)
+                    .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+                var shortage = order.Total - paidSum;
+                if (shortage > 0.01m)
+                {
+                    if (!isAdminOverride)
+                        throw new InvalidOperationException(
+                            $"No se puede completar la orden sin cobro: total={order.Total:0.00}, cobrado={paidSum:0.00}, falta={shortage:0.00}. Procesa el pago primero via /api/payment/collect.");
+
+                    if (string.IsNullOrWhiteSpace(overrideReason))
+                        throw new InvalidOperationException(
+                            $"Override de Admin requiere OverrideReason explícito (falta cobrar {shortage:0.00}). Este cierre quedará auditado.");
+
+                    _logger?.LogWarning("ADMIN OVERRIDE: Order {OrderId} completed sin pago completo. Falta: {Shortage:0.00}. Razón: {Reason}", order.Id, shortage, overrideReason);
+                }
+            }
+
             order.Status = status;
 
             if (status == OrderStatus.Completed)

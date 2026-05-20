@@ -35,12 +35,18 @@ builder.Host.UseSerilog((ctx, services, lc) => lc
         retainedFileCountLimit: 14,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
 
-// HTTP 5041 + HTTPS 5042. Para evitar ERR_CERT_COMMON_NAME_INVALID en https://TU_IP:5042, ejecuta: .\scripts\create-dev-cert.ps1
+// HTTP 5041 + HTTPS 5042 (dev local). En contenedor (QA/prod) ASPNETCORE_URLS define
+// los binds y un reverse proxy (Caddy/nginx) termina TLS — no hardcodeamos los puertos
+// ni intentamos cargar dev-cert.pfx.
 var devCertPath = Path.Combine(Directory.GetCurrentDirectory(), "dev-cert.pfx");
 var devCertPassword = builder.Configuration["DevCert:Password"] ?? "SmartMenuDev";
+var inContainer = string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase);
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
     serverOptions.Limits.MaxRequestBodySize = 20_971_520; // 20 MB
+
+    if (inContainer) return; // honra ASPNETCORE_URLS — Kestrel hace HTTP plano detrás del proxy
+
     serverOptions.ListenAnyIP(5041); // HTTP
     serverOptions.ListenAnyIP(5042, listenOptions =>
     {

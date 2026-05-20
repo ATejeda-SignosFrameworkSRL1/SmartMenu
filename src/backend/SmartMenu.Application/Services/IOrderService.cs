@@ -10,7 +10,7 @@ public interface IOrderService
     Task<PagedResult<OrderDto>> GetActiveOrdersPagedAsync(int page, int pageSize);
     Task<IEnumerable<OrderDto>> GetAllOrdersAsync();
     Task<PagedResult<OrderDto>> GetAllOrdersPagedAsync(int page, int pageSize);
-    Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus, bool isAdminOverride = false);
+    Task<OrderDto> UpdateOrderStatusAsync(int id, string newStatus, bool isAdminOverride = false, string? overrideReason = null);
     Task<OrderDto> CancelOrderAsync(int id, string reason);
     Task MarkCustomerFinishedAsync(int orderId);
     Task AssignWaiterAsync(int orderId, int waiterId);

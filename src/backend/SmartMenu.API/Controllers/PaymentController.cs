@@ -280,8 +280,10 @@ public class PaymentController : ControllerBase
     /// <summary>
     /// Solicitar cuenta: el cliente abre la pantalla de pago, la mesa pasa a "Por Cobrar" (Billing).
     /// Ahora acepta las preferencias del cliente (método de pago y propina).
+    /// Cliente anónimo (QR) — necesita disparar el flujo de cobro sin JWT.
     /// </summary>
     [HttpPost("request-billing/{orderId}")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RequestBilling(int orderId, [FromBody] RequestBillingDto? dto)

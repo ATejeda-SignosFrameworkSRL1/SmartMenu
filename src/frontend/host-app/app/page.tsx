@@ -556,7 +556,9 @@ export default function HostApp() {
             <div className="flex items-center gap-6">
               <div>
                 <h1 className="text-xl font-bold text-white tracking-tight">Host App</h1>
-                <p className="text-sm text-slate-400">Bienvenido, {user?.name}</p>
+                <p className="text-sm text-slate-400">
+                  Bienvenido, {user?.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() : (user?.name ?? user?.email ?? '')}
+                </p>
               </div>
               {/* View Tabs */}
               <div className="flex rounded-xl bg-white/5 border border-white/10 overflow-hidden">

@@ -10,7 +10,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize] // Default: protegido. GETs marcados con [AllowAnonymous] son catálogo público para customer-app.
 public class DishController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -21,6 +21,7 @@ public class DishController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous] // Customer-app necesita listar el catálogo sin login (QR flow).
     public async Task<IActionResult> GetDishes([FromQuery] int? categoryId, [FromQuery] bool all = false, [FromQuery] int? page = null, [FromQuery] int pageSize = 50)
     {
         var query = _context.Dishes
@@ -58,6 +59,7 @@ public class DishController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [AllowAnonymous] // Customer-app necesita ver detalle de plato sin login.
     public async Task<ActionResult<DishDto>> GetDish(int id)
     {
         var dish = await _context.Dishes

@@ -74,9 +74,11 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
-    /// Crear nueva orden
+    /// Crear nueva orden. Cliente final (QR + sessionId, sin JWT) o staff autenticado.
+    /// La identidad del cliente está atada a la mesa via sessionId; staff identity vía JWT.
     /// </summary>
     [HttpPost]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status201Created)]
     public async Task<ActionResult<OrderDto>> CreateOrder([FromBody] CreateOrderDto request)
     {
@@ -105,9 +107,12 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
-    /// Obtener orden por ID
+    /// Obtener orden por ID. Anónimo permitido para que el cliente final tracking
+    /// el status de su orden tras escanear QR (no tiene JWT). IDOR para waiters
+    /// sigue aplicando vía CanAccessOrder.
     /// </summary>
     [HttpGet("{id}")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<OrderDto>> GetOrder(int id)
     {
@@ -176,10 +181,10 @@ public class OrderController : ControllerBase
     /// </summary>
     /// <summary>
     /// Cancelar orden (cliente o staff). Solo permitido en estados Pending o Confirmed.
-    /// El customer/sessionId match accede vía session (futuro endpoint); aquí el staff
-    /// con auth cancela órdenes propias o de su mesa. Admin/Manager cancelan cualquiera.
+    /// Cliente anónimo (QR) puede cancelar su propia orden; staff con JWT, según rol.
     /// </summary>
     [HttpPost("{id}/cancel")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CancelOrder(int id, [FromBody] CancelOrderDto? dto)
@@ -220,10 +225,11 @@ public class OrderController : ControllerBase
                 return Forbid();
 
             // S4.5 — Admin/Manager pueden hacer override de transiciones inválidas.
+            // P0.2 — Para Completed sin pago, además se exige OverrideReason auditado.
             var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
             var isAdmin = role == "Admin" || role == "Manager";
 
-            var order = await _orderService.UpdateOrderStatusAsync(id, request.NewStatus, isAdmin);
+            var order = await _orderService.UpdateOrderStatusAsync(id, request.NewStatus, isAdmin, request.OverrideReason);
             if (string.Equals(request.NewStatus, "Confirmed", StringComparison.OrdinalIgnoreCase))
                 await NotifyKitchenAsync(order);
             return Ok(new { message = "Estado actualizado correctamente", order });
@@ -356,9 +362,10 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
-    /// Cliente marca que terminó de comer
+    /// Cliente marca que terminó de comer. Anónimo: lo dispara el customer-app desde su QR.
     /// </summary>
     [HttpPut("{id}/customer-finished")]
+    [AllowAnonymous]
     public async Task<IActionResult> MarkCustomerFinished(int id)
     {
         try
@@ -460,9 +467,11 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
-    /// Cliente agrega más ítems a una orden existente (ej. postres).
+    /// Cliente agrega más ítems a una orden existente (ej. postres). Anónimo: lo dispara
+    /// el customer-app desde su QR, vinculado a la orden vía orderId+sessionId.
     /// </summary>
     [HttpPost("{id}/add-items")]
+    [AllowAnonymous]
     public async Task<IActionResult> AddItemsToOrder(int id, [FromBody] List<CreateOrderItemDto> items)
     {
         try
