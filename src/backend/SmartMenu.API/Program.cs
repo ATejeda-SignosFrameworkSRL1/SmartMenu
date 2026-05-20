@@ -435,3 +435,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+// Hace que la clase implícita Program sea pública y referenciable desde
+// WebApplicationFactory<Program> en SmartMenu.IntegrationTests.
+public partial class Program { }
