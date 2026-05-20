@@ -1,64 +1,52 @@
-using Xunit;
 using FluentAssertions;
 using SmartMenu.Domain.Entities;
 using SmartMenu.Domain.Enums;
 
 namespace SmartMenu.UnitTests.Domain;
 
+/// <summary>
+/// S1.D1 — User entity invariants: BCrypt hashing, todos los roles, defaults.
+/// </summary>
 public class UserTests
 {
     [Fact]
-    public void User_ShouldCreateWithDefaultActiveStatus()
+    public void Defaults_FirstName_LastName_empty()
     {
-        // Arrange & Act
-        var user = new User
-        {
-            Email = "test@example.com",
-            FirstName = "John",
-            LastName = "Doe",
-            Role = UserRole.Customer,
-            IsActive = true
-        };
-
-        // Assert
-        user.IsActive.Should().BeTrue();
-        user.Email.Should().Be("test@example.com");
-        user.Role.Should().Be(UserRole.Customer);
-    }
-
-    [Theory]
-    [InlineData(UserRole.Admin)]
-    [InlineData(UserRole.Waiter)]
-    [InlineData(UserRole.Chef)]
-    [InlineData(UserRole.Customer)]
-    public void User_ShouldAcceptAllValidRoles(UserRole role)
-    {
-        // Arrange & Act
-        var user = new User
-        {
-            Email = "test@example.com",
-            Role = role
-        };
-
-        // Assert
-        user.Role.Should().Be(role);
+        var u = new User();
+        u.FirstName.Should().Be(string.Empty);
+        u.LastName.Should().Be(string.Empty);
+        u.Email.Should().Be(string.Empty);
+        u.PasswordHash.Should().Be(string.Empty);
     }
 
     [Fact]
-    public void User_ShouldHavePasswordHash()
+    public void Defaults_AssignedZoneId_nullable()
     {
-        // Arrange
-        var passwordHash = BCrypt.Net.BCrypt.HashPassword("Test123!");
-        
-        // Act
-        var user = new User
-        {
-            Email = "test@example.com",
-            PasswordHash = passwordHash
-        };
+        new User().AssignedZoneId.Should().BeNull();
+    }
 
-        // Assert
-        user.PasswordHash.Should().NotBeNullOrEmpty();
-        BCrypt.Net.BCrypt.Verify("Test123!", user.PasswordHash).Should().BeTrue();
+    [Fact]
+    public void PasswordHash_BCrypt_verify_round_trip()
+    {
+        const string plain = "P@ssw0rd-Strong-2026";
+        var hash = BCrypt.Net.BCrypt.HashPassword(plain);
+        var u = new User { Email = "u@x.com", PasswordHash = hash };
+        BCrypt.Net.BCrypt.Verify(plain, u.PasswordHash).Should().BeTrue();
+        BCrypt.Net.BCrypt.Verify("wrong-password", u.PasswordHash).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(UserRole.Customer)]
+    [InlineData(UserRole.KitchenStaff)]
+    [InlineData(UserRole.Chef)]
+    [InlineData(UserRole.Waiter)]
+    [InlineData(UserRole.Host)]
+    [InlineData(UserRole.Cashier)]
+    [InlineData(UserRole.Manager)]
+    [InlineData(UserRole.Admin)]
+    [InlineData(UserRole.Bartender)]
+    public void Role_accepts_every_defined_enum_value(UserRole role)
+    {
+        new User { Role = role }.Role.Should().Be(role);
     }
 }
