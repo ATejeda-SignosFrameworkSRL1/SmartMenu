@@ -23,10 +23,20 @@
 }
 
 # ─── HTTP catch-all → HTTPS 8443 (cuando el browser olvida poner https://) ─
-# Container expone :80, mapeado a host :8080. Cualquier petición HTTP
-# (incluyendo `localhost:8080`) se redirige al equivalente HTTPS en :8443.
+# Container expone :80, mapeado a host :8080. Cualquier petición HTTP a localhost
+# o *.qa.smartmenu.local se redirige al equivalente HTTPS en :8443.
 http://localhost http://*.qa.smartmenu.local {
 	redir https://{host}:8443{uri} 308
+}
+
+# ─── HTTP plano vía LAN IP (sin redirect, sin cert) ───────────────────────
+# Para que el cell escanee QR sin warning de cert self-signed. Para producción
+# real usa cert válido (Let's Encrypt / corporate CA) y desactiva esto.
+http://172.31.98.54 {
+	encode gzip
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy client-app:3000
 }
 
 # ─── Landing page en https://localhost:8443/ ───────────────────────────────
@@ -88,10 +98,19 @@ HTML 200
 }
 
 # ─── Cliente final (customer-app, public PWA) ─────────────────────────────
-qa.smartmenu.local, localhost:8451 {
+# Tres maneras de acceder al PWA del cliente:
+#   - qa.smartmenu.local:8443   (con hosts file en la PC)
+#   - localhost:8451            (acceso local sin hosts file / MCP)
+#   - 172.31.98.54:8443         (LAN IP — QR scannable desde el cell)
+qa.smartmenu.local, localhost:8451, 172.31.98.54:8443 {
 	tls internal
-	reverse_proxy client-app:3000
 	encode gzip zstd
+	# /api, /uploads, /hubs deben ir al backend (no a Next.js) porque sus
+	# rewrites no toman process.env en runtime — y el cliente PWA hace fetch
+	# a paths relativos.
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy client-app:3000
 }
 
 # ─── Puertos localhost por app (para MCP/Chrome sin hosts file) ───────────

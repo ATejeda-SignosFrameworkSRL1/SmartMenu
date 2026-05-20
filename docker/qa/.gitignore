@@ -1,0 +1,4 @@
+# CA root generado por Caddy en runtime — no commitear
+caddy-root-ca.crt
+.env
+logs/
