@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Signos admin\\\\Documents\\\\GitHub\\\\SmartMenu\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(sed -i 's/<TargetFramework>net9.0<\\\\/TargetFramework>/<TargetFramework>net10.0<\\\\/TargetFramework>/g' \\\\ *)",
+      "PowerShell(netstat -ano)",
+      "PowerShell(Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\Signos admin\\\\Documents\\\\GitHub\\\\SmartMenu\\\\src\\\\backend'; dotnet run --project SmartMenu.API\")",
+      "PowerShell(Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\Signos admin\\\\Documents\\\\GitHub\\\\SmartMenu\\\\src\\\\frontend\\\\admin-panel'; npm run dev\")",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5041/health\" -TimeoutSec 5; $r.Content } catch { \"Backend no responde: $_\" })",
+      "Bash(dotnet build *)",
+      "Bash(sqlcmd -S localhost\\\\SQLEXPRESS -Q \"SELECT @@SERVERNAME, @@VERSION\" -W)",
+      "PowerShell(& sqlcmd -S \"localhost\\\\SQLEXPRESS\" -Q \"SELECT @@SERVERNAME\" -W 2>&1)",
+      "PowerShell(Get-Service | Select-Object Name, Status | Where-Object { $_.Name -match \"SQL|MSSQL|sql\" })",
+      "PowerShell(Get-Service -Name \"MSSQL`$SQLEXPRESS\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\Signos admin\\\\Documents\\\\GitHub\\\\SmartMenu\\\\src\\\\backend'; dotnet run --project SmartMenu.API\" -WindowStyle Normal)",
+      "Bash(timeout 30 dotnet run --project SmartMenu.API)",
+      "PowerShell(Test-NetConnection -ComputerName localhost -Port 5041 -WarningAction SilentlyContinue)",
+      "PowerShell(Test-NetConnection -ComputerName localhost -Port 5042 -WarningAction SilentlyContinue)",
+      "Bash(timeout 25 dotnet run --project SmartMenu.API --no-build)",
+      "Bash(dotnet ef *)",
+      "Bash(timeout 45 dotnet run --project SmartMenu.API --no-build)",
+      "Bash(timeout 60 dotnet run --project SmartMenu.API --no-build)",
+      "Bash(timeout 90 dotnet run --project SmartMenu.API)",
+      "PowerShell(netstat -ano | Select-String \":5041|:5042|:3000|:3001|:3002|:3003|:3004|:3005|:3007\" | Where-Object { $_ -match \"LISTENING\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5041/health\" -TimeoutSec 5 -UseBasicParsing; \"STATUS: $\\($r.StatusCode\\) | $\\($r.Content\\)\" } catch { \"ERROR: $_\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5041/swagger/v1/swagger.json\" -TimeoutSec 5 -UseBasicParsing; $j = $r.Content | ConvertFrom-Json; \"STATUS: $\\($r.StatusCode\\) | title=$\\($j.info.title\\) version=$\\($j.info.version\\) paths=$\\(\\($j.paths.PSObject.Properties | Measure-Object\\).Count\\)\" } catch { \"ERROR: $_\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5041/\" -TimeoutSec 5 -UseBasicParsing; \"STATUS: $\\($r.StatusCode\\) | Length=$\\($r.Content.Length\\) chars | Contains Swagger=$\\(if\\($r.Content -match 'swagger'\\) {'YES'} else {'NO'}\\)\" } catch { \"ERROR: $\\($_.Exception.Message\\)\" })"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Signos admin\\Documents\\GitHub\\SmartMenu\\src\\backend\\SmartMenu.API"
+    ]
+  }
+}
