@@ -75,6 +75,9 @@ build/
 # Testing
 coverage/
 *.cover
+*.cobertura.xml
+coverage.json
+TestResults/
 .hypothesis/
 .pytest_cache/
 
