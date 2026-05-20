@@ -1,0 +1,197 @@
+# SmartMenu QA — single Caddy con tls internal (Caddy auto-CA)
+# Termina TLS para el browser; proxy HTTP plano a los contenedores.
+#
+# Hosts (agrega a tu hosts file → 127.0.0.1):
+#   qa.smartmenu.local
+#   api.qa.smartmenu.local
+#   admin.qa.smartmenu.local
+#   kds.qa.smartmenu.local
+#   waiter.qa.smartmenu.local
+#   host.qa.smartmenu.local
+#   cashier.qa.smartmenu.local
+#   reservation.qa.smartmenu.local
+#
+# Para que el browser no marque rojo, instala el root CA de Caddy:
+#   docker exec smartmenu-qa-caddy cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
+#   (Windows) certutil -addstore -f Root caddy-root.crt
+
+{
+	# Caddy genera su propio CA local; se persiste en el volumen caddy-data.
+	# Si quisieras emitir certs reales (Let's Encrypt) tendrías que cambiar a global email + hosts públicos.
+	auto_https disable_redirects
+	admin off
+}
+
+# ─── HTTP catch-all → HTTPS 8443 (cuando el browser olvida poner https://) ─
+# Container expone :80, mapeado a host :8080. Cualquier petición HTTP
+# (incluyendo `localhost:8080`) se redirige al equivalente HTTPS en :8443.
+http://localhost http://*.qa.smartmenu.local {
+	redir https://{host}:8443{uri} 308
+}
+
+# ─── Landing page en https://localhost:8443/ ───────────────────────────────
+# Si no agregaste las entradas al hosts file todavía y abres directo localhost,
+# te mostramos un índice con todas las URLs del stack QA.
+localhost {
+	tls internal
+	header Content-Type "text/html; charset=utf-8"
+	respond <<HTML
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>SmartMenu QA</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto;margin:2rem auto;max-width:780px;padding:0 1rem;color:#1f2937;background:#f8fafc}
+h1{margin:0 0 .25rem}h1+p{color:#64748b;margin-top:0}
+section{background:#fff;padding:1rem 1.25rem;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:1rem;border:1px solid #e5e7eb}
+h2{margin-top:0;font-size:1rem;color:#0f172a}
+a.app{display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;border-radius:8px;text-decoration:none;color:#0f172a;border:1px solid #e5e7eb;margin-bottom:.4rem;transition:all .15s}
+a.app:hover{background:#eff6ff;border-color:#3b82f6}
+a.app .badge{background:#10b981;color:#fff;font-size:.7rem;padding:.15rem .45rem;border-radius:999px;font-weight:600}
+code{background:#f1f5f9;padding:.1rem .4rem;border-radius:4px;font-size:.85em}
+.warn{background:#fef3c7;border:1px solid #fbbf24;color:#78350f}
+</style></head>
+<body>
+<h1>🍽️  SmartMenu QA</h1>
+<p>Stack docker — HTTPS via Caddy <code>tls internal</code></p>
+
+<section class="warn">
+<h2>⚠️ Antes de empezar</h2>
+<p>Para que las URLs <code>*.qa.smartmenu.local</code> resuelvan, agrega esta línea a tu hosts file (Admin):</p>
+<p><code>127.0.0.1 qa.smartmenu.local api.qa.smartmenu.local admin.qa.smartmenu.local kds.qa.smartmenu.local waiter.qa.smartmenu.local host.qa.smartmenu.local cashier.qa.smartmenu.local reservation.qa.smartmenu.local</code></p>
+<p>Para certificado verde (no warning):</p>
+<p><code>docker exec smartmenu-qa-caddy cat /data/caddy/pki/authorities/local/root.crt &gt; caddy-root.crt &amp;&amp; certutil -addstore -f Root caddy-root.crt</code></p>
+</section>
+
+<section>
+<h2>👥 Customer-facing</h2>
+<a class="app" href="https://qa.smartmenu.local:8443/"><span>🛎️  Client PWA <code>qa.smartmenu.local</code></span><span class="badge">anon</span></a>
+</section>
+
+<section>
+<h2>👨‍💼 Staff (login requerido)</h2>
+<a class="app" href="https://admin.qa.smartmenu.local:8443/login"><span>⚙️  Admin Panel <code>admin@smartmenu.com / Admin123!</code></span><span class="badge">Admin</span></a>
+<a class="app" href="https://kds.qa.smartmenu.local:8443/login"><span>👨‍🍳 Kitchen Display <code>chef@smartmenu.com / Chef123!</code></span><span class="badge">Chef</span></a>
+<a class="app" href="https://waiter.qa.smartmenu.local:8443/login"><span>🧑‍💼 Waiter App <code>waiter@smartmenu.com / Waiter123!</code></span><span class="badge">Waiter</span></a>
+<a class="app" href="https://host.qa.smartmenu.local:8443/login"><span>🤵 Host App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
+<a class="app" href="https://cashier.qa.smartmenu.local:8443/login"><span>💰 Cashier App <code>cashier@smartmenu.com / Cash123!</code></span><span class="badge">Cashier</span></a>
+<a class="app" href="https://reservation.qa.smartmenu.local:8443/login"><span>📅 Reservation App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
+</section>
+
+<section>
+<h2>🔌 Backend</h2>
+<a class="app" href="https://api.qa.smartmenu.local:8443/health/ready"><span>❤️  API health</span><span class="badge">JSON</span></a>
+<a class="app" href="https://api.qa.smartmenu.local:8443/swagger"><span>📘 Swagger UI</span><span class="badge">docs</span></a>
+</section>
+
+</body></html>
+HTML 200
+}
+
+# ─── Cliente final (customer-app, public PWA) ─────────────────────────────
+qa.smartmenu.local, localhost:8451 {
+	tls internal
+	reverse_proxy client-app:3000
+	encode gzip zstd
+}
+
+# ─── Puertos localhost por app (para MCP/Chrome sin hosts file) ───────────
+# Cada app accesible directo via https://localhost:84XX.
+# Caddy enruta /api/*, /uploads/*, /hubs/* al backend directo porque las
+# rewrites de Next.js no toman process.env en runtime con `next start`.
+(app-with-backend) {
+	tls internal
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+}
+
+localhost:8444 {
+	import app-with-backend
+	reverse_proxy admin-panel:3001
+}
+
+localhost:8445 {
+	import app-with-backend
+	reverse_proxy kds-app:3002
+}
+
+localhost:8446 {
+	import app-with-backend
+	reverse_proxy waiter-app:3003
+}
+
+localhost:8447 {
+	import app-with-backend
+	reverse_proxy host-app:3004
+}
+
+localhost:8448 {
+	import app-with-backend
+	reverse_proxy cashier-app:3005
+}
+
+localhost:8449 {
+	import app-with-backend
+	reverse_proxy reservation-app:3007
+}
+
+localhost:8450 {
+	tls internal
+	reverse_proxy backend:8080
+	encode gzip zstd
+}
+
+# ─── Backend API + SignalR hubs ───────────────────────────────────────────
+api.qa.smartmenu.local {
+	tls internal
+	# WebSockets / SSE para /hubs/*
+	@hubs path /hubs/*
+	reverse_proxy @hubs backend:8080 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+	reverse_proxy backend:8080 {
+		header_up X-Forwarded-Proto {scheme}
+		# Permite uploads grandes (imágenes de dishes ~10MB)
+		transport http {
+			read_buffer 8192
+		}
+	}
+	encode gzip zstd
+}
+
+# ─── Staff apps ──────────────────────────────────────────────────────────
+admin.qa.smartmenu.local {
+	tls internal
+	reverse_proxy admin-panel:3001
+	encode gzip zstd
+}
+
+kds.qa.smartmenu.local {
+	tls internal
+	reverse_proxy kds-app:3002
+	encode gzip zstd
+}
+
+waiter.qa.smartmenu.local {
+	tls internal
+	reverse_proxy waiter-app:3003
+	encode gzip zstd
+}
+
+host.qa.smartmenu.local {
+	tls internal
+	reverse_proxy host-app:3004
+	encode gzip zstd
+}
+
+cashier.qa.smartmenu.local {
+	tls internal
+	reverse_proxy cashier-app:3005
+	encode gzip zstd
+}
+
+reservation.qa.smartmenu.local {
+	tls internal
+	reverse_proxy reservation-app:3007
+	encode gzip zstd
+}
