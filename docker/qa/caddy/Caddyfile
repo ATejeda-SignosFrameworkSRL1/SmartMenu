@@ -22,6 +22,29 @@
 	admin off
 }
 
+# ─── Security headers — aplica a TODOS los hosts vía snippet importado ────
+(security-headers) {
+	header {
+		# HSTS: forzar HTTPS por 6 meses (browsers cachean esto). Solo aplica
+		# cuando el server responde por HTTPS — sin includeSubDomains porque
+		# el stack usa muchos subdomains nip.io y queremos opt-in per-cert.
+		Strict-Transport-Security "max-age=15552000"
+		# Bloquea iframe embedding desde otros sites (anti-clickjacking).
+		X-Frame-Options "DENY"
+		# Browsers no deben adivinar el content-type del response.
+		X-Content-Type-Options "nosniff"
+		# Permissions Policy mínima — deshabilita features sensibles que no usamos.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Referrer mínimo en navegación cross-origin (no leak de paths internos).
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# CSP relajado para QA (Next.js usa inline scripts/styles + necesita 'unsafe-eval'
+		# en dev). Para producción real, restringir aún más.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'none';"
+		# Quita el header Server (info disclosure)
+		-Server
+	}
+}
+
 # ─── HTTP catch-all → HTTPS 8443 (cuando el browser olvida poner https://) ─
 # Container expone :80, mapeado a host :8080. Cualquier petición HTTP a localhost
 # o *.qa.smartmenu.local se redirige al equivalente HTTPS en :8443.
@@ -46,6 +69,7 @@ http://172.31.98.54 {
 
 dev.172-31-98-54.nip.io, client.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -54,12 +78,14 @@ dev.172-31-98-54.nip.io, client.172-31-98-54.nip.io {
 
 api.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	reverse_proxy backend:8080
 }
 
 admin.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -68,6 +94,7 @@ admin.172-31-98-54.nip.io {
 
 kds.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -76,6 +103,7 @@ kds.172-31-98-54.nip.io {
 
 waiter.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -84,6 +112,7 @@ waiter.172-31-98-54.nip.io {
 
 host.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -92,6 +121,7 @@ host.172-31-98-54.nip.io {
 
 cashier.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -100,6 +130,7 @@ cashier.172-31-98-54.nip.io {
 
 reservation.172-31-98-54.nip.io {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -111,6 +142,7 @@ reservation.172-31-98-54.nip.io {
 # te mostramos un índice con todas las URLs del stack QA.
 localhost {
 	tls internal
+	import security-headers
 	header Content-Type "text/html; charset=utf-8"
 	respond <<HTML
 <!doctype html>
@@ -171,6 +203,7 @@ HTML 200
 #   - 172.31.98.54:8443         (LAN IP — QR scannable desde el cell)
 qa.smartmenu.local, localhost:8451, 172.31.98.54:8443 {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	# /api, /uploads, /hubs deben ir al backend (no a Next.js) porque sus
 	# rewrites no toman process.env en runtime — y el cliente PWA hace fetch
@@ -186,6 +219,7 @@ qa.smartmenu.local, localhost:8451, 172.31.98.54:8443 {
 # rewrites de Next.js no toman process.env en runtime con `next start`.
 (app-with-backend) {
 	tls internal
+	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -223,6 +257,7 @@ localhost:8449 {
 
 localhost:8450 {
 	tls internal
+	import security-headers
 	reverse_proxy backend:8080
 	encode gzip zstd
 }
@@ -230,6 +265,7 @@ localhost:8450 {
 # ─── Backend API + SignalR hubs ───────────────────────────────────────────
 api.qa.smartmenu.local {
 	tls internal
+	import security-headers
 	# WebSockets / SSE para /hubs/*
 	@hubs path /hubs/*
 	reverse_proxy @hubs backend:8080 {
@@ -248,36 +284,42 @@ api.qa.smartmenu.local {
 # ─── Staff apps ──────────────────────────────────────────────────────────
 admin.qa.smartmenu.local {
 	tls internal
+	import security-headers
 	reverse_proxy admin-panel:3001
 	encode gzip zstd
 }
 
 kds.qa.smartmenu.local {
 	tls internal
+	import security-headers
 	reverse_proxy kds-app:3002
 	encode gzip zstd
 }
 
 waiter.qa.smartmenu.local {
 	tls internal
+	import security-headers
 	reverse_proxy waiter-app:3003
 	encode gzip zstd
 }
 
 host.qa.smartmenu.local {
 	tls internal
+	import security-headers
 	reverse_proxy host-app:3004
 	encode gzip zstd
 }
 
 cashier.qa.smartmenu.local {
 	tls internal
+	import security-headers
 	reverse_proxy cashier-app:3005
 	encode gzip zstd
 }
 
 reservation.qa.smartmenu.local {
 	tls internal
+	import security-headers
 	reverse_proxy reservation-app:3007
 	encode gzip zstd
 }
