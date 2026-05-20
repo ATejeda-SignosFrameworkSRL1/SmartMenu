@@ -45,11 +45,14 @@ stage 1 "Lint + Build (frontends + backend)"
 
 FRONTENDS=(client-app admin-panel kds-app waiter-app host-app cashier-app reservation-app)
 for app in "${FRONTENDS[@]}"; do
-  echo "  → $app  (lint + type-check)..."
+  echo "  → $app  (lint + type-check + test --if-present)..."
   (cd "$REPO_ROOT/src/frontend/$app" \
     && npm run lint > /dev/null 2>&1 || fail 1 "$app lint") || exit 1
   (cd "$REPO_ROOT/src/frontend/$app" \
     && npm run type-check > /dev/null 2>&1 || fail 1 "$app type-check") || exit 1
+  # S1.D5: vitest si la app tiene script `test`.
+  (cd "$REPO_ROOT/src/frontend/$app" \
+    && npm test --if-present > /dev/null 2>&1 || fail 1 "$app test") || exit 1
 done
 
 echo "  → backend  dotnet build Release..."

@@ -66,13 +66,16 @@ $frontends = @('client-app', 'admin-panel', 'kds-app', 'waiter-app', 'host-app',
 
 foreach ($app in $frontends) {
     $appPath = Join-Path $repoRoot "src\frontend\$app"
-    Write-Host "  → $app  (lint + type-check)..." -ForegroundColor DarkGray
+    Write-Host "  → $app  (lint + type-check + test --if-present)..." -ForegroundColor DarkGray
     Push-Location $appPath
     try {
         npm run lint 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { Fail-Stage 1 "$app  lint" }
         npm run type-check 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { Fail-Stage 1 "$app  type-check" }
+        # S1.D5: vitest si la app tiene script `test`. --if-present no falla si no existe.
+        npm test --if-present 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { Fail-Stage 1 "$app  test" }
     } finally { Pop-Location }
 }
 

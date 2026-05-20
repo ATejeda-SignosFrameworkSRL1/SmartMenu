@@ -137,6 +137,11 @@ jobs:
       - name: Type-check
         run: npm run type-check
 
+      # S1.D5 — corre vitest si la app tiene script "test" (--if-present no falla si no existe).
+      # Hoy: solo admin-panel. Roadmap S2/S3: replicar a las otras 6 apps.
+      - name: Unit tests (vitest, si existen)
+        run: npm test --if-present
+
       - name: Build
         env:
           NEXT_TELEMETRY_DISABLED: '1'
