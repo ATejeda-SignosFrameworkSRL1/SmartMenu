@@ -431,7 +431,7 @@ if (app.Environment.IsDevelopment())
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureExtraWaiterAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCashierAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishTagsSeedAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBarUserAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBartenderRoleAsync(context);
 }
 
 app.Run();

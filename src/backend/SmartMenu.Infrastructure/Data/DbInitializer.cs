@@ -74,7 +74,9 @@ public static class DbInitializer
                 FirstName = "Carlos",
                 LastName = "Martínez",
                 Phone = "809-555-0103",
-                Role = UserRole.Waiter,  // Bartender también es mesero
+                // El KDS expone una vista separada del bar (filtrada por categoría Bebidas).
+                // Para entrar a esa vista se requiere Role=Bartender, no Waiter.
+                Role = UserRole.Bartender,
                 IsActive = true,
                 RestaurantId = restaurant.Id
             },
@@ -697,49 +699,47 @@ public static class DbInitializer
     }
 
     /// <summary>
-    /// Ensures bar@smartmenu.com bartender user exists.
+    /// Ensures bartender@smartmenu.com has Role=Bartender (corrective for DBs sembradas
+    /// con el bug previo Role=Waiter) y elimina el duplicado legacy bar@smartmenu.com
+    /// si existe — antes había dos usuarios para el bar y eso confundía al quick-login
+    /// del KDS. Idempotente: si todo está correcto, no hace nada.
     /// </summary>
-    public static async Task EnsureBarUserAsync(ApplicationDbContext context)
+    public static async Task EnsureBartenderRoleAsync(ApplicationDbContext context)
     {
         try
         {
-            const string barEmail = "bar@smartmenu.com";
-            if (!context.Users.Any(u => u.Email == barEmail))
+            // 1. Corregir rol de bartender@smartmenu.com si está mal sembrado.
+            var bartender = context.Users.FirstOrDefault(u => u.Email == "bartender@smartmenu.com");
+            if (bartender != null && bartender.Role != UserRole.Bartender)
             {
-                // Obtener el primer restaurante
-                var restaurant = context.Restaurants.FirstOrDefault();
-                if (restaurant != null)
-                {
-                    context.Users.Add(new User
-                    {
-                        Email = barEmail,
-                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("Bar123!"),
-                        FirstName = "Bar",
-                        LastName = "SmartMenu",
-                        Phone = "809-555-0199",
-                        Role = UserRole.Bartender,
-                        IsActive = true,
-                        RestaurantId = restaurant.Id
-                    });
-                    await context.SaveChangesAsync();
-                    Console.WriteLine("✅ Usuario bar@smartmenu.com creado.");
-                }
+                bartender.Role = UserRole.Bartender;
+                await context.SaveChangesAsync();
+                Console.WriteLine("✅ Rol de bartender@smartmenu.com corregido a Bartender.");
             }
-            else
+
+            // 2. Limpiar el duplicado legacy bar@smartmenu.com si quedó de migraciones previas.
+            var legacy = context.Users.FirstOrDefault(u => u.Email == "bar@smartmenu.com");
+            if (legacy != null)
             {
-                // Asegurar que el usuario tenga rol Bartender
-                var barUser = context.Users.FirstOrDefault(u => u.Email == barEmail);
-                if (barUser != null && barUser.Role != UserRole.Bartender)
+                // Sólo borrar si no tiene shifts ni FKs activas (defensa pasiva: si EF
+                // arroja constraint, simplemente lo logueamos y seguimos).
+                context.Users.Remove(legacy);
+                try
                 {
-                    barUser.Role = UserRole.Bartender;
                     await context.SaveChangesAsync();
-                    Console.WriteLine("✅ Rol de bar@smartmenu.com actualizado a Bartender.");
+                    Console.WriteLine("✅ Usuario legacy bar@smartmenu.com eliminado (duplicado).");
+                }
+                catch (Exception fkEx)
+                {
+                    Console.WriteLine("ℹ️ No se pudo eliminar bar@smartmenu.com (probable FK activa): " + fkEx.Message);
+                    // Deshacer el Remove en memoria para no contaminar el ChangeTracker.
+                    context.Entry(legacy).State = EntityState.Unchanged;
                 }
             }
         }
         catch (Exception ex)
         {
-            try { Console.WriteLine("⚠️ EnsureBarUser: " + ex.Message); } catch { }
+            try { Console.WriteLine("⚠️ EnsureBartenderRole: " + ex.Message); } catch { }
         }
     }
 

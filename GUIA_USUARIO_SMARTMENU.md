@@ -58,7 +58,7 @@ Estos usuarios sirven para probar el sistema en ambiente local:
 | --- | --- | --- |
 | Administrador | `admin@smartmenu.com` | `Admin123!` |
 | Chef | `chef@smartmenu.com` | `Chef123!` |
-| Bar | `bar@smartmenu.com` | `Bar123!` |
+| Bartender | `bartender@smartmenu.com` | `Bar123!` |
 | Mesero | `waiter@smartmenu.com` | `Waiter123!` |
 | Host | `host@smartmenu.com` | `Host123!` |
 | Cajero | `cashier@smartmenu.com` | `Cash123!` |

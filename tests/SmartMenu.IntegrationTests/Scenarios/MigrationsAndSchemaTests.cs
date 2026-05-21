@@ -71,7 +71,7 @@ public class MigrationsAndSchemaTests
     [Fact]
     public async Task Seed_creates_baseline_users_after_startup()
     {
-        // DbInitializer.SeedAsync + EnsureExtraWaiterAsync + EnsureCashierAsync + EnsureBarUserAsync
+        // DbInitializer.SeedAsync + EnsureExtraWaiterAsync + EnsureCashierAsync + EnsureBartenderRoleAsync
         // poblan usuarios de roles operativos. Verifica al menos un usuario admin.
         _ = _factory.CreateClient();
         using var scope = _factory.Services.CreateScope();
