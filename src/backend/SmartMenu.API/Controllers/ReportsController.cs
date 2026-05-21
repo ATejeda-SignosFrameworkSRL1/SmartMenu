@@ -138,4 +138,40 @@ public class ReportsController : ControllerBase
             TransactionCount = payments.Count
         });
     }
+
+    /// <summary>
+    /// Ventas del día: total cobrado vía Payments Completed con ProcessedAt en el día actual (UTC).
+    /// Bug-Fix.3: el dashboard admin antes sumaba /api/order/active que filtra Completed
+    /// → Ventas siempre 0. Ahora consulta Payments directamente.
+    /// </summary>
+    [HttpGet("sales-today")]
+    public async Task<IActionResult> GetSalesToday()
+    {
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
+
+        // En SmartMenu, el "ProcessedAt" del JSON mapea a Payment.CompletedAt (DateTime?)
+        // que se setea cuando el pago se procesa (ver PaymentController línea ~95).
+        var paymentsToday = await _context.Payments
+            .AsNoTracking()
+            .Where(p => p.Status == PaymentStatus.Completed
+                     && p.CompletedAt != null
+                     && p.CompletedAt >= today
+                     && p.CompletedAt < tomorrow)
+            .ToListAsync();
+
+        var totalSales = paymentsToday.Sum(p => p.Amount);
+        var tipsTotal = paymentsToday.Sum(p => p.TipAmount);
+        var transactions = paymentsToday.Count;
+        var avgTicket = transactions > 0 ? totalSales / transactions : 0m;
+
+        return Ok(new
+        {
+            Date = today,
+            TotalSales = totalSales,
+            TipsTotal = tipsTotal,
+            TransactionCount = transactions,
+            AverageTicket = avgTicket
+        });
+    }
 }

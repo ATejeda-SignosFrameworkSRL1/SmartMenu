@@ -23,6 +23,7 @@ function AdminDashboardInner() {
   const [orders, setOrders] = useState<any[]>([]);
   const [dishes, setDishes] = useState<any[]>([]);
   const [dishAvgTimes, setDishAvgTimes] = useState<any[]>([]);
+  const [salesToday, setSalesToday] = useState<{ totalSales: number; transactionCount: number; averageTicket: number }>({ totalSales: 0, transactionCount: 0, averageTicket: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,17 +58,20 @@ function AdminDashboardInner() {
 
   const loadData = async () => {
     try {
-      const [tablesRes, ordersRes, dishesRes, avgTimesRes] = await Promise.all([
+      const [tablesRes, ordersRes, dishesRes, avgTimesRes, salesTodayRes] = await Promise.all([
         api.get('/api/table'),
         api.get('/api/order/active'),
         api.get('/api/dish'),
-        api.get('/api/reports/dish-avg-time').catch(() => ({ data: [] }))
+        api.get('/api/reports/dish-avg-time').catch(() => ({ data: [] })),
+        // Bug-Fix.3: Ventas del Día viene de Payments del día, no de órdenes activas.
+        api.get('/api/reports/sales-today').catch(() => ({ data: { totalSales: 0, transactionCount: 0, averageTicket: 0 } }))
       ]);
 
       setTables(Array.isArray(tablesRes.data) ? tablesRes.data : []);
       setOrders(Array.isArray(ordersRes.data) ? ordersRes.data : []);
       setDishes(Array.isArray(dishesRes.data) ? dishesRes.data : []);
       setDishAvgTimes(Array.isArray(avgTimesRes.data) ? avgTimesRes.data : []);
+      setSalesToday(salesTodayRes.data ?? { totalSales: 0, transactionCount: 0, averageTicket: 0 });
       setLoading(false);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -77,7 +81,10 @@ function AdminDashboardInner() {
 
   const activeTables = tables.filter((t: any) => (t.status || t.Status) === 'Occupied');
   const availableTables = tables.filter((t: any) => (t.status || t.Status) === 'Available');
-  const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.total ?? order.Total ?? 0), 0);
+  // Bug-Fix.3: totalRevenue del día viene de Payments completados, no de órdenes activas
+  // (las completadas salen del query /api/order/active y por eso quedaba en $0).
+  const totalRevenue = salesToday.totalSales ?? 0;
+  const transactionCount = salesToday.transactionCount ?? 0;
   const preparingOrders = orders.filter((o: any) => (o.status || o.Status) === 'Preparing');
   
   const stats = [
@@ -131,14 +138,14 @@ function AdminDashboardInner() {
     {
       label: 'Ventas del Día',
       value: `RD$ ${totalRevenue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
-      subtext: 'órdenes activas',
+      subtext: `${transactionCount} ${transactionCount === 1 ? 'pago cobrado' : 'pagos cobrados'}`,
       icon: DollarSign,
       color: 'text-success',
       bgColor: 'bg-success/10'
     },
     {
       label: 'Ticket Promedio',
-      value: orders.length > 0 ? `RD$ ${(totalRevenue / orders.length).toFixed(2)}` : 'RD$ 0.00',
+      value: transactionCount > 0 ? `RD$ ${(totalRevenue / transactionCount).toFixed(2)}` : 'RD$ 0.00',
       subtext: 'por orden',
       icon: TrendingUp,
       color: 'text-info',

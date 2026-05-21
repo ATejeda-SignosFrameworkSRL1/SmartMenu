@@ -104,11 +104,19 @@ export function createAuthApi(appKey: string, options: AuthApiOptions = {}): Aut
   });
 
   // Response: 401 → refresh + retry. Si falla refresh, limpiar + /login.
+  // Excepción: si nunca hubo sesión (cliente anónimo a endpoint público), NO redirigir;
+  // propagar el error para que el componente muestre toast.error/etc.
   api.interceptors.response.use(
     (r) => r,
     async (error) => {
       const original = error.config as (AxiosRequestConfig & { _refreshAttempted?: boolean }) | undefined;
       if (error.response?.status === 401 && original && !original._refreshAttempted) {
+        const hadSession = typeof window !== 'undefined' && (
+          !!localStorage.getItem(TOKEN_KEY) || !!localStorage.getItem(REFRESH_KEY)
+        );
+        if (!hadSession) {
+          return Promise.reject(error);
+        }
         original._refreshAttempted = true;
         const newToken = await tryRefresh();
         if (newToken) {

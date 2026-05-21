@@ -121,8 +121,11 @@ public class TableReservationController : ControllerBase
         }
     }
 
-    /// <summary>Public endpoint for portal reservations (no auth required, status=Pending)</summary>
+    /// <summary>Public endpoint for portal reservations (no auth required, status=Pending).
+    /// Cliente anónimo: scan QR en reservation-app → form sin login → POST aquí.
+    /// El [Authorize] a nivel de clase exige [AllowAnonymous] explícito en métodos públicos.</summary>
     [HttpPost("public")]
+    [AllowAnonymous]
     public async Task<IActionResult> CreatePublicReservation([FromBody] CreateReservationDto dto)
     {
         try
@@ -176,8 +179,9 @@ public class TableReservationController : ControllerBase
         }
     }
 
-    /// <summary>Get available tables for a date/time (public)</summary>
+    /// <summary>Get available tables for a date/time (public). Customer-facing — sin login.</summary>
     [HttpGet("public/available-tables")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetAvailableTables([FromQuery] DateTime dateTime, [FromQuery] int guests)
     {
         try
