@@ -139,7 +139,7 @@ export default function ReservationsPage() {
     obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)] ?? '';
 
   const formatTime = (dt: string) => {
-    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }); }
+    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }); }
     catch { return '-'; }
   };
 

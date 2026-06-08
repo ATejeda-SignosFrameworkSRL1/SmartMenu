@@ -8,7 +8,6 @@ import {
   DashboardStats,
   OrderStatus,
   TableStatus,
-  MenuItemStatus,
 } from '../types';
 import {
   mockMenuItems,
@@ -17,7 +16,6 @@ import {
   mockOrders,
   mockUsers,
   generateMockOrder,
-  getElapsedMinutes,
 } from '../mock-data';
 
 // Simular delay de red

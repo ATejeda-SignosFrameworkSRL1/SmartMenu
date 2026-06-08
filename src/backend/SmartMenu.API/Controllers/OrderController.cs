@@ -22,14 +22,25 @@ public class OrderController : ControllerBase
     private readonly IHubContext<KitchenHub> _kitchenHub;
     private readonly IHubContext<OrderHub> _orderHub;
     private readonly ApplicationDbContext _context;
+    private readonly SmartMenu.Application.Services.IAuditService _audit;
 
-    public OrderController(IOrderService orderService, ILogger<OrderController> logger, IHubContext<KitchenHub> kitchenHub, IHubContext<OrderHub> orderHub, ApplicationDbContext context)
+    public OrderController(IOrderService orderService, ILogger<OrderController> logger, IHubContext<KitchenHub> kitchenHub, IHubContext<OrderHub> orderHub, ApplicationDbContext context, SmartMenu.Application.Services.IAuditService audit)
     {
         _orderService = orderService;
         _logger = logger;
         _kitchenHub = kitchenHub;
         _orderHub = orderHub;
         _context = context;
+        _audit = audit;
+    }
+
+    // Sprint 4.2 — helper para extraer datos del JWT en endpoints autenticados
+    private (int userId, string authMethod) GetActorFromJwt()
+    {
+        var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int.TryParse(sub, out var uid);
+        var method = User.FindFirst("auth_method")?.Value ?? "password";
+        return (uid, method);
     }
 
     private static string GetInnermostMessage(Exception ex)
@@ -86,6 +97,23 @@ public class OrderController : ControllerBase
         {
             var order = await _orderService.CreateOrderAsync(request);
             // No notificar a cocina al crear: la orden va al KDS solo cuando el mesero la confirme (UpdateStatus → Confirmed).
+
+            // Sprint 4.2 — audit log (fail-safe, no aborta si falla)
+            var (userId, authMethod) = GetActorFromJwt();
+            await _audit.LogAsync(
+                userId: userId,
+                action: "Order.Created",
+                entityType: "Order",
+                entityId: order.Id,
+                ip: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                authMethod: authMethod,
+                metadata: new {
+                    tableId = order.TableId,
+                    total = order.Total,
+                    itemsCount = order.Items?.Count ?? 0,
+                    assignedWaiterId = order.AssignedWaiterId
+                });
+
             return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, order);
         }
         catch (DbUpdateException ex)
@@ -667,6 +695,8 @@ public class OrderController : ControllerBase
 
     /// <summary>
     /// Mover comensal: cambiar la orden de mesa (de una mesa a otra disponible).
+    /// CHANGE-TABLE.1 — Permisos: waiter dueño de la orden, O Manager/Admin override.
+    /// Cross-zone permitido (cliente puede pedir cambio a otra zona).
     /// </summary>
     [HttpPut("{orderId}/move-to-table/{newTableId}")]
     public async Task<IActionResult> MoveOrderToTable(int orderId, int newTableId)
@@ -676,7 +706,39 @@ public class OrderController : ControllerBase
             var order = await _orderService.GetOrderByIdAsync(orderId);
             if (order == null)
                 return NotFound(new { error = "Orden no encontrada" });
+
+            // CHANGE-TABLE.1 — autorización fina:
+            //   Waiter: solo puede mover SU propia orden (o sin asignar)
+            //   Manager/Admin: puede mover cualquier orden
+            //   Otros roles: prohibido
+            var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            if (role != "Admin" && role != "Manager")
+            {
+                if (role != "Waiter")
+                    return Forbid();
+                var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!int.TryParse(sub, out var userId)) return Unauthorized();
+                if (order.AssignedWaiterId != null && order.AssignedWaiterId != userId)
+                    return Forbid();
+            }
+
             await _orderService.MoveOrderToTableAsync(orderId, newTableId);
+
+            // Sprint 4.2 — audit DGII (fail-safe)
+            var (actorUserId, authMethod) = GetActorFromJwt();
+            await _audit.LogAsync(
+                userId: actorUserId,
+                action: "Order.MovedToTable",
+                entityType: "Order",
+                entityId: orderId,
+                ip: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                authMethod: authMethod,
+                metadata: new {
+                    fromTableId = order.TableId,
+                    toTableId = newTableId,
+                    orderNumber = order.OrderNumber
+                });
+
             var updated = await _orderService.GetOrderByIdAsync(orderId);
             return Ok(new { message = "Orden movida a la nueva mesa", order = updated });
         }

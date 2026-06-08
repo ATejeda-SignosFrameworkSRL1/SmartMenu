@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, FormEvent } from 'react';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import {
   ChefHat,
@@ -10,10 +9,8 @@ import {
   Clock,
   MapPin,
   Phone,
-  Mail,
   Star,
   Users,
-  CalendarDays,
   ArrowRight,
   Instagram,
   Facebook,
@@ -22,10 +19,16 @@ import {
   X,
   UtensilsCrossed,
   Wine,
-  CheckCircle2,
 } from 'lucide-react';
 
+import dynamic from 'next/dynamic';
 import { createAuthApi } from '@/lib/auth-client';
+
+// Client-only: BookingEngineWarm calcula fechas con `new Date()` en el render
+// inicial; al prerenderizar (SSG) la fecha queda congelada a la hora de build y
+// no coincide con la del cliente → mismatch de hidratación (React #418/#423/#425).
+// Cargarlo solo en cliente elimina esos errores sin afectar el SEO del landing.
+const BookingEngineWarm = dynamic(() => import('@/components/BookingEngineWarm'), { ssr: false });
 
 // F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('reservation');
@@ -47,6 +50,11 @@ interface AvailableTable {
   zoneName?: string;
 }
 
+interface ZoneOption {
+  id: number;
+  name: string;
+}
+
 /* ───────── Helpers ───────── */
 function formatPrice(n: number) {
   return `RD$ ${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
@@ -62,33 +70,14 @@ function cn(...classes: (string | false | undefined | null)[]) {
 export default function ReservationPage() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem('reservation_token');
-    if (!token) {
-      window.location.href = '/login';
-      return;
-    }
-    setAuthChecked(true);
-  }, []);
+  // Landing público — sin auth-gate. Staff entra a /login (panel propio) si necesita.
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
-
-  if (!authChecked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-rose-50">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-gray-600">Verificando sesión…</p>
-        </div>
-      </div>
-    );
-  }
 
   const scrollTo = (id: string) => {
     setMobileNav(false);
@@ -658,450 +647,21 @@ function MenuHighlights() {
    RESERVATION SECTION
    ═══════════════════════════════════════════════════════ */
 function ReservationSection() {
-  const [form, setForm] = useState({
-    date: '',
-    time: '19:00',
-    guests: '2',
-    tableId: '',
-    name: '',
-    phone: '',
-    email: '',
-    notes: '',
-  });
-
-  const [tables, setTables] = useState<AvailableTable[]>([]);
-  const [loadingTables, setLoadingTables] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [reservationId, setReservationId] = useState<number | null>(null);
-
-  // Pre-order state
-  const [showPreOrder, setShowPreOrder] = useState(false);
-  const [menuDishes, setMenuDishes] = useState<any[]>([]);
-  const [preOrderItems, setPreOrderItems] = useState<{ dishId: number; name: string; price: number; quantity: number }[]>([]);
-  const [loadingMenu, setLoadingMenu] = useState(false);
-
-  const loadMenu = async () => {
-    if (menuDishes.length > 0) return;
-    setLoadingMenu(true);
-    try {
-      const res = await api.get('/api/dish');
-      setMenuDishes(Array.isArray(res.data) ? res.data : []);
-    } catch { /* ignore */ }
-    setLoadingMenu(false);
-  };
-
-  const addToPreOrder = (dish: any) => {
-    setPreOrderItems(prev => {
-      const existing = prev.find(i => i.dishId === dish.id);
-      if (existing) return prev.map(i => i.dishId === dish.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { dishId: dish.id, name: dish.name, price: dish.price, quantity: 1 }];
-    });
-  };
-
-  const removeFromPreOrder = (dishId: number) => {
-    setPreOrderItems(prev => {
-      const existing = prev.find(i => i.dishId === dishId);
-      if (existing && existing.quantity > 1) return prev.map(i => i.dishId === dishId ? { ...i, quantity: i.quantity - 1 } : i);
-      return prev.filter(i => i.dishId !== dishId);
-    });
-  };
-
-  const preOrderTotal = preOrderItems.reduce((s, i) => s + i.price * i.quantity, 0);
-
-  const fetchTables = useCallback(async () => {
-    if (!form.date || !form.time) return;
-    setLoadingTables(true);
-    setForm((prev) => ({ ...prev, tableId: '' }));
-    try {
-      const dateTime = `${form.date}T${form.time}:00`;
-      const res = await api.get('/api/tablereservation/public/available-tables', {
-        params: { dateTime, guests: Number(form.guests) },
-      });
-      const data: AvailableTable[] = Array.isArray(res.data)
-        ? res.data
-        : res.data?.data ?? [];
-      setTables(data);
-    } catch {
-      setTables([]);
-    } finally {
-      setLoadingTables(false);
-    }
-  }, [form.date, form.time, form.guests]);
-
-  useEffect(() => {
-    if (form.date && form.time && form.guests) {
-      const debounce = setTimeout(fetchTables, 400);
-      return () => clearTimeout(debounce);
-    }
-  }, [form.date, form.time, form.guests, fetchTables]);
-
-  const update = (field: string, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-
-    if (!form.date || !form.time || !form.tableId || !form.name || !form.phone) {
-      toast.error('Por favor completa todos los campos requeridos.');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const dateTime = `${form.date}T${form.time}:00`;
-      const resv = await api.post('/api/tablereservation/public', {
-        tableId: Number(form.tableId),
-        reservationDateTime: dateTime,
-        numberOfGuests: Number(form.guests),
-        customerName: form.name,
-        customerPhone: form.phone,
-        customerEmail: form.email || undefined,
-        specialRequests: form.notes || undefined,
-      });
-      const newReservationId = resv.data?.id;
-      setReservationId(newReservationId);
-
-      if (preOrderItems.length > 0 && newReservationId) {
-        try {
-          await api.post(`/api/tablereservation/${newReservationId}/preorder`, {
-            notes: form.notes || null,
-            items: preOrderItems.map(i => ({ dishId: i.dishId, quantity: i.quantity })),
-          });
-        } catch { /* pre-order is optional, don't fail the whole reservation */ }
-      }
-
-      setSuccess(true);
-      toast.success('¡Reserva enviada correctamente!');
-    } catch (err: unknown) {
-      const message =
-        axios.isAxiosError(err) && err.response?.data?.message
-          ? err.response.data.message
-          : 'No se pudo procesar la reserva. Intenta de nuevo.';
-      toast.error(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const today = new Date().toISOString().split('T')[0];
-
-  if (success) {
-    return (
-      <section id="reservar" className="section-padding bg-warm-950">
-        <div className="container-narrow">
-          <div className="mx-auto max-w-lg rounded-3xl border border-primary/20 bg-warm-900/50 p-12 text-center shadow-2xl">
-            <CheckCircle2 className="mx-auto h-20 w-20 text-primary-light" />
-            <h2 className="mt-6 font-display text-3xl font-bold text-white">
-              ¡Reserva Recibida!
-            </h2>
-            <p className="mt-4 text-warm-400">
-              Te contactaremos pronto para confirmar tu reservación. Mientras tanto,
-              puedes llamarnos al <strong className="text-white">(809) 555-0100</strong>{' '}
-              si tienes alguna pregunta.
-            </p>
-            <button
-              onClick={() => {
-                setSuccess(false);
-                setForm({
-                  date: '',
-                  time: '19:00',
-                  guests: '2',
-                  tableId: '',
-                  name: '',
-                  phone: '',
-                  email: '',
-                  notes: '',
-                });
-                setTables([]);
-              }}
-              className="btn-primary mt-8"
-            >
-              Hacer Otra Reserva
-            </button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section id="reservar" className="section-padding bg-warm-950">
       <div className="container-narrow">
-        <div className="text-center">
+        <div className="text-center mb-10 sm:mb-12">
           <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary-light">
             Reservaciones
           </span>
           <h2 className="font-display text-3xl font-bold text-white sm:text-4xl">
-            Reserva Tu Mesa
+            Reserva tu mesa
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-warm-400">
-            Selecciona la fecha, hora y número de comensales para ver las mesas
-            disponibles.
+            Capacidad dinámica por intervalo — elige tu horario en vivo y te confirmamos en segundos.
           </p>
         </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="mx-auto mt-12 max-w-3xl rounded-3xl border border-warm-800 bg-warm-900/50 p-8 shadow-2xl backdrop-blur-sm sm:p-10"
-        >
-          {/* Row 1: Date, Time, Guests */}
-          <div className="grid gap-5 sm:grid-cols-3">
-            <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                <CalendarDays className="h-4 w-4" /> Fecha *
-              </span>
-              <input
-                type="date"
-                required
-                min={today}
-                value={form.date}
-                onChange={(e) => update('date', e.target.value)}
-                className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors placeholder:text-warm-600 focus:border-primary focus:ring-1 focus:ring-primary"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                <Clock className="h-4 w-4" /> Hora *
-              </span>
-              <select
-                required
-                value={form.time}
-                onChange={(e) => update('time', e.target.value)}
-                className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-              >
-                {[
-                  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-                  '15:00', '15:30', '18:00', '18:30', '19:00', '19:30',
-                  '20:00', '20:30', '21:00', '21:30', '22:00',
-                ].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                <Users className="h-4 w-4" /> Comensales *
-              </span>
-              <select
-                required
-                value={form.guests}
-                onChange={(e) => update('guests', e.target.value)}
-                className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-              >
-                {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {n} {n === 1 ? 'persona' : 'personas'}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {/* Available tables grouped by zone */}
-          {form.date && (
-            <div className="mt-6">
-              <span className="mb-2 block text-sm font-medium text-warm-300">
-                Mesa Disponible *
-              </span>
-              {loadingTables ? (
-                <div className="flex items-center gap-2 text-sm text-warm-500">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-light border-t-transparent" />
-                  Buscando mesas disponibles...
-                </div>
-              ) : tables.length > 0 ? (
-                <div className="space-y-5">
-                  {Object.entries(
-                    tables.reduce<Record<string, AvailableTable[]>>((acc, t) => {
-                      const zone = t.zoneName || 'Sin zona';
-                      if (!acc[zone]) acc[zone] = [];
-                      acc[zone].push(t);
-                      return acc;
-                    }, {})
-                  ).map(([zone, zoneTables]) => (
-                    <div key={zone}>
-                      <div className="mb-2 flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5 text-primary-light" />
-                        <span className="text-sm font-semibold text-primary-light">{zone}</span>
-                        <span className="text-xs text-warm-500">({zoneTables.length} mesa{zoneTables.length !== 1 ? 's' : ''})</span>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {zoneTables.map((table) => (
-                          <button
-                            key={table.id}
-                            type="button"
-                            onClick={() => update('tableId', String(table.id))}
-                            className={cn(
-                              'rounded-xl border px-4 py-3 text-left transition-all',
-                              form.tableId === String(table.id)
-                                ? 'border-primary bg-primary/20 text-white ring-1 ring-primary'
-                                : 'border-warm-700 bg-warm-800/30 text-warm-400 hover:border-warm-600',
-                            )}
-                          >
-                            <span className="font-semibold text-white">
-                              Mesa {table.tableNumber}
-                            </span>
-                            <span className="ml-2 text-sm">
-                              ({table.capacity} persona{table.capacity !== 1 ? 's' : ''})
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-warm-500">
-                  No hay mesas disponibles para esta fecha/hora. Prueba otro horario.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Row 2: Name, Phone */}
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                Nombre Completo *
-              </span>
-              <input
-                type="text"
-                required
-                placeholder="Juan Pérez"
-                value={form.name}
-                onChange={(e) => update('name', e.target.value)}
-                className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors placeholder:text-warm-600 focus:border-primary focus:ring-1 focus:ring-primary"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                <Phone className="h-4 w-4" /> Teléfono *
-              </span>
-              <input
-                type="tel"
-                required
-                placeholder="(809) 555-0000"
-                value={form.phone}
-                onChange={(e) => update('phone', e.target.value)}
-                className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors placeholder:text-warm-600 focus:border-primary focus:ring-1 focus:ring-primary"
-              />
-            </label>
-          </div>
-
-          {/* Row 3: Email */}
-          <label className="mt-5 block">
-            <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-              <Mail className="h-4 w-4" /> Correo Electrónico
-            </span>
-            <input
-              type="email"
-              placeholder="correo@ejemplo.com"
-              value={form.email}
-              onChange={(e) => update('email', e.target.value)}
-              className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors placeholder:text-warm-600 focus:border-primary focus:ring-1 focus:ring-primary"
-            />
-          </label>
-
-          {/* Row 4: Notes */}
-          <label className="mt-5 block">
-            <span className="mb-1.5 block text-sm font-medium text-warm-300">
-              Solicitudes Especiales
-            </span>
-            <textarea
-              rows={3}
-              placeholder="Alergias, celebraciones, preferencias de ubicación..."
-              value={form.notes}
-              onChange={(e) => update('notes', e.target.value)}
-              className="w-full resize-none rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors placeholder:text-warm-600 focus:border-primary focus:ring-1 focus:ring-primary"
-            />
-          </label>
-
-          {/* Pre-order Section */}
-          <div className="mt-8 rounded-2xl border border-warm-700/50 bg-warm-800/30 p-6">
-            <button
-              type="button"
-              onClick={() => { setShowPreOrder(!showPreOrder); if (!showPreOrder) loadMenu(); }}
-              className="flex w-full items-center justify-between text-left"
-            >
-              <div>
-                <h3 className="text-lg font-semibold text-white">
-                  ¿Deseas pre-ordenar? <span className="text-sm font-normal text-warm-400">(opcional)</span>
-                </h3>
-                <p className="text-sm text-warm-400">Selecciona platos anticipadamente para agilizar tu visita</p>
-              </div>
-              <span className={`text-primary-light transition-transform ${showPreOrder ? 'rotate-180' : ''}`}>▼</span>
-            </button>
-
-            {showPreOrder && (
-              <div className="mt-4 space-y-4">
-                {loadingMenu ? (
-                  <p className="text-sm text-warm-400 animate-pulse">Cargando menú...</p>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2 max-h-64 overflow-y-auto pr-2">
-                    {menuDishes.filter((d: any) => d.isAvailable !== false).map((dish: any) => {
-                      const inCart = preOrderItems.find(i => i.dishId === dish.id);
-                      return (
-                        <div key={dish.id} className="flex items-center justify-between rounded-xl border border-warm-700/50 bg-warm-800/50 p-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-white truncate">{dish.name}</p>
-                            <p className="text-xs text-primary-light">RD$ {Number(dish.price).toLocaleString('es-DO')}</p>
-                          </div>
-                          <div className="flex items-center gap-1.5 ml-2">
-                            {inCart ? (
-                              <>
-                                <button type="button" onClick={() => removeFromPreOrder(dish.id)} className="h-7 w-7 rounded-full bg-warm-700 text-white text-xs font-bold hover:bg-warm-600">-</button>
-                                <span className="w-5 text-center text-sm text-white font-bold">{inCart.quantity}</span>
-                                <button type="button" onClick={() => addToPreOrder(dish)} className="h-7 w-7 rounded-full bg-primary text-white text-xs font-bold hover:bg-primary-light">+</button>
-                              </>
-                            ) : (
-                              <button type="button" onClick={() => addToPreOrder(dish)} className="rounded-lg bg-primary/20 px-3 py-1.5 text-xs font-semibold text-primary-light hover:bg-primary/30">Agregar</button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {preOrderItems.length > 0 && (
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-                    <h4 className="text-sm font-semibold text-primary-light mb-2">Tu pre-orden</h4>
-                    {preOrderItems.map(item => (
-                      <div key={item.dishId} className="flex justify-between text-sm text-warm-300">
-                        <span>{item.quantity}x {item.name}</span>
-                        <span className="text-primary-light">RD$ {(item.price * item.quantity).toLocaleString('es-DO')}</span>
-                      </div>
-                    ))}
-                    <div className="mt-2 border-t border-warm-700 pt-2 flex justify-between text-sm font-bold text-white">
-                      <span>Total estimado</span>
-                      <span className="text-primary-light">RD$ {preOrderTotal.toLocaleString('es-DO')}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="btn-primary-lg mt-8 w-full disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {submitting ? (
-              <>
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Procesando...
-              </>
-            ) : (
-              <>
-                Confirmar Reserva
-                <ArrowRight className="h-5 w-5" />
-              </>
-            )}
-          </button>
-        </form>
+        <BookingEngineWarm />
       </div>
     </section>
   );

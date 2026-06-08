@@ -87,6 +87,7 @@ public record OrderDto
     public bool BarPreparing { get; init; }
     public bool BarReady { get; init; }
     public bool BarServed { get; init; }
+    public bool CustomerFinishedEating { get; init; }
     public string? SpecialInstructions { get; init; }
     public DateTime CreatedAt { get; init; }
     public List<OrderItemDto> Items { get; init; } = new();

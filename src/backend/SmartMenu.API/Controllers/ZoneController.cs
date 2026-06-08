@@ -20,6 +20,23 @@ public class ZoneController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Endpoint público: lista zonas activas (Dining) para el portal de reservas.
+    /// Sólo expone id + name — no incluye info sensible como restaurantId.
+    /// </summary>
+    [HttpGet("public")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetPublicZones()
+    {
+        var zones = await _context.Zones
+            .AsNoTracking()
+            .Where(z => z.IsActive && z.Type == "Dining")
+            .OrderBy(z => z.Id)
+            .Select(z => new { id = z.Id, name = z.Name })
+            .ToListAsync();
+        return Ok(zones);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAllZones([FromQuery] string? type)
     {

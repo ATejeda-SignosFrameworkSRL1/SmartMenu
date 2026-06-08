@@ -60,6 +60,30 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// SPRINT 3 — Login por PIN del waiter (modo PUBLIC en device compartido).
+    /// El device no necesita login previo; cualquier waiter del restaurante con PIN
+    /// configurado puede autenticarse desde el numpad. JWT más corto (60 min) y
+    /// SIN refresh token — al expirar hay que re-ingresar PIN.
+    /// </summary>
+    [HttpPost("pin-verify")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResultDto>> PinVerify([FromBody] PinVerifyDto dto)
+    {
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Pin))
+            return BadRequest(new { error = "PIN requerido" });
+        try
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var result = await _authService.LoginByPinAsync(dto.Pin, ip);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Intercambia un refresh token vigente por un nuevo JWT + nuevo refresh
     /// (rotación). El refresh anterior queda revocado. Reuso de un token ya
     /// rotado revoca todas las sesiones del usuario (mitigación de replay).
@@ -111,4 +135,11 @@ public class ChangePasswordDto
 {
     public string CurrentPassword { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
+}
+
+/// <summary>SPRINT 3 — DTO para login por PIN del waiter en modo PUBLIC.</summary>
+public class PinVerifyDto
+{
+    /// <summary>PIN de exactamente 6 dígitos numéricos.</summary>
+    public string Pin { get; set; } = string.Empty;
 }

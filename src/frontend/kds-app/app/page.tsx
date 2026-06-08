@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Clock, Check, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
@@ -293,7 +293,7 @@ export default function KDSPage() {
       {/* Header */}
       <div className="border-b border-gray-800 bg-gray-950">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
               <h1 className="text-2xl font-bold">
                 {isBar ? '🍹 Bar Display System' : '🍳 Kitchen Display System'}
@@ -395,7 +395,45 @@ export default function KDSPage() {
             <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
             <p className="text-2xl text-gray-400">¡Todo listo! No hay órdenes pendientes</p>
           </div>
-        ) : (
+        ) : (() => {
+          // KDS-NAV.1 — antes: cuando un tab filtraba a 0 items, la página quedaba
+          // EN BLANCO (orders.length > 0 → entraba al grid, pero items.length === 0
+          // en cada card devolvía null → nada visible). Ahora computamos el total
+          // filtrado para mostrar un empty state claro por tab vacío.
+          const matchingItemsTotal = orders.reduce((acc, o) => {
+            const all = o.items || [];
+            const filtered = isBar
+              ? (drinkTimingFilter === 'all' ? all : all.filter((i: any) => resolveDrinkTiming(i) === drinkTimingFilter))
+              : (courseFilter === 'all' ? all : all.filter((i: any) => resolveItemCourse(i) === courseFilter));
+            return acc + filtered.length;
+          }, 0);
+
+          if (matchingItemsTotal === 0) {
+            const tabLabel = isBar
+              ? (DRINK_TIMING_META[drinkTimingFilter as 'Before'|'During'|'After']?.label ?? 'esta categoría')
+              : (COURSE_META[courseFilter as 'Entrada'|'PlatoFuerte'|'Postre']?.label ?? 'esta categoría');
+            const tabIcon = isBar
+              ? (DRINK_TIMING_META[drinkTimingFilter as 'Before'|'During'|'After']?.icon ?? '🍹')
+              : (COURSE_META[courseFilter as 'Entrada'|'PlatoFuerte'|'Postre']?.icon ?? '📋');
+            return (
+              <div className="text-center py-20">
+                <div className="text-6xl mb-4">{tabIcon}</div>
+                <p className="text-2xl text-gray-300 mb-2">Sin pedidos en <span className="text-primary-400 font-semibold">{tabLabel}</span></p>
+                <p className="text-sm text-gray-500">
+                  Tienes {orders.length} {orders.length === 1 ? 'orden activa' : 'órdenes activas'},
+                  pero ningún ítem está en este filtro. Cambia de tab para verlos.
+                </p>
+                <button
+                  onClick={() => isBar ? setDrinkTimingFilter('all') : setCourseFilter('all')}
+                  className="mt-6 px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Ver todos
+                </button>
+              </div>
+            );
+          }
+
+          return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {orders.map((order) => {
               const elapsed = getTimeElapsed(order.createdAt);
@@ -537,7 +575,8 @@ export default function KDSPage() {
               );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Eye, EyeOff, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
@@ -47,7 +46,6 @@ interface Category {
 }
 
 export default function MenuManagementPage() {
-  const router = useRouter();
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dishTags, setDishTags] = useState<{ id: number; code: string; label: string; icon: string; isActive: boolean }[]>([]);

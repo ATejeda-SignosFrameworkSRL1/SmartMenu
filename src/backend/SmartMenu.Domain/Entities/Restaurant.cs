@@ -1,3 +1,5 @@
+using SmartMenu.Domain.Enums;
+
 namespace SmartMenu.Domain.Entities;
 
 public class Restaurant : BaseEntity
@@ -9,7 +11,14 @@ public class Restaurant : BaseEntity
     public string? RNC { get; set; }
     public string? Logo { get; set; }
     public bool IsActive { get; set; } = true;
-    
+
+    /// <summary>
+    /// Modo de autenticación del waiter-app:
+    /// PrivateOnly (login JWT por device) | PublicPin (PIN en device compartido) | Hybrid (ambos).
+    /// Decidido por el dueño/admin del restaurante.
+    /// </summary>
+    public WaiterAuthMode WaiterAuthMode { get; set; } = WaiterAuthMode.PrivateOnly;
+
     // Navigation properties
     public ICollection<User> Staff { get; set; } = new List<User>();
     public ICollection<Table> Tables { get; set; } = new List<Table>();

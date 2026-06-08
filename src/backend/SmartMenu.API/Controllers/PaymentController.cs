@@ -19,12 +19,14 @@ public class PaymentController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<PaymentController> _logger;
     private readonly IHubContext<OrderHub> _hub;
+    private readonly SmartMenu.Application.Services.IAuditService _audit;
 
-    public PaymentController(ApplicationDbContext context, ILogger<PaymentController> logger, IHubContext<OrderHub> hub)
+    public PaymentController(ApplicationDbContext context, ILogger<PaymentController> logger, IHubContext<OrderHub> hub, SmartMenu.Application.Services.IAuditService audit)
     {
         _context = context;
         _logger = logger;
         _hub = hub;
+        _audit = audit;
     }
 
     // S1.3 — quien procesa el pago siempre es el usuario autenticado.
@@ -117,6 +119,25 @@ public class PaymentController : ControllerBase
 
             _logger.LogInformation("Payment {PaymentId} created for Order {OrderId} by processor {ProcessorId}, Method: {Method}, Amount: {Amount}",
                 payment.Id, dto.OrderId, processorId, dto.PaymentMethod, dto.Amount);
+
+            // Sprint 4.2 — audit DGII (fail-safe)
+            var authMethod = User.FindFirst("auth_method")?.Value ?? "password";
+            await _audit.LogAsync(
+                userId: processorId.Value,
+                action: "Payment.Created",
+                entityType: "Payment",
+                entityId: payment.Id,
+                ip: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                authMethod: authMethod,
+                metadata: new {
+                    orderId = payment.OrderId,
+                    orderNumber = order.OrderNumber,
+                    amount = payment.Amount,
+                    tipAmount = payment.TipAmount,
+                    totalAmount = payment.TotalAmount,
+                    method = payment.Method.ToString(),
+                    orderCompleted = order.Status == Domain.Enums.OrderStatus.Completed
+                });
 
             // S5.1 — push a cashier-app (y cualquier suscriptor) para refrescar caja sin polling.
             await _hub.Clients.All.SendAsync("PaymentRegistered", new

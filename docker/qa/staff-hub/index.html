@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmartMenu — Acceso de personal (LAN)</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#334155; --txt:#e2e8f0;
+    --muted:#94a3b8; --accent:#38bdf8; --ok:#34d399; --warn-bg:#422006; --warn-bd:#a16207;
+  }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;
+       background:var(--bg);color:var(--txt);line-height:1.5}
+  .wrap{max-width:920px;margin:0 auto;padding:1.5rem 1rem 3rem}
+  header h1{margin:.2rem 0 .1rem;font-size:1.5rem}
+  header p{margin:.1rem 0;color:var(--muted);font-size:.9rem}
+  .ip{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent)}
+  .note{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:12px;
+        padding:.85rem 1rem;margin:1.1rem 0;font-size:.88rem}
+  .note b{color:#fde68a}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-top:1rem}
+  .card{background:var(--card);border:1px solid var(--card2);border-radius:16px;
+        padding:1rem;display:flex;flex-direction:column;align-items:center;text-align:center}
+  .card .emoji{font-size:1.8rem;line-height:1}
+  .card h2{margin:.4rem 0 .15rem;font-size:1.05rem}
+  .card .role{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ok);font-weight:700}
+  .qr{background:#fff;border-radius:12px;padding:.5rem;margin:.7rem 0 .55rem}
+  .qr img{display:block;width:160px;height:160px;image-rendering:pixelated}
+  .open{display:inline-block;background:var(--accent);color:#06283d;font-weight:700;
+        text-decoration:none;padding:.5rem .9rem;border-radius:10px;font-size:.85rem;margin-bottom:.5rem}
+  .open:hover{filter:brightness(1.08)}
+  .url{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.7rem;color:var(--muted);
+       word-break:break-all;margin-bottom:.5rem}
+  .cred{font-size:.78rem;background:var(--card2);border-radius:8px;padding:.4rem .55rem;width:100%}
+  .cred code{color:#fde68a}
+  .cred .anon{color:var(--ok);font-weight:600}
+  footer{margin-top:2rem;color:var(--muted);font-size:.8rem;text-align:center}
+  .setup{background:#0b2a3a;border:1px solid #155e75;border-radius:12px;padding:1rem 1.1rem;margin:1.1rem 0}
+  .setup>summary{cursor:pointer;font-weight:700;color:#7dd3fc;list-style:none}
+  .setup>summary::-webkit-details-marker{display:none}
+  .setup h3{margin:.85rem 0 .3rem;font-size:.95rem;color:#bae6fd}
+  .setup ol{margin:.2rem 0 .6rem 1.15rem;padding:0;font-size:.86rem}
+  .setup li{margin:.25rem 0}
+  .btn-cert{display:inline-block;background:var(--ok);color:#04241a;font-weight:800;text-decoration:none;
+            padding:.6rem 1rem;border-radius:10px;font-size:.92rem;margin:.45rem 0}
+  .btn-cert:hover{filter:brightness(1.08)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🍽️ SmartMenu — Acceso de personal</h1>
+    <p>Abre cualquier panel desde tu celular en la misma red Wi-Fi. Servidor: <span class="ip">172.31.98.60</span></p>
+    <p>Estas URLs usan la <b>IP directa</b> (sin DNS) — funcionan aunque tu router bloquee nip.io. Escanea el QR.</p>
+  </header>
+
+  <div class="note">
+    <b>⚠️ Aviso de certificado (una vez por dispositivo):</b> al abrir cada URL verás
+    <i>"La conexión no es privada"</i> → <b>Avanzado → Continuar</b>. Para quitar el aviso
+    (y que funcione la <b>cámara</b> del waiter), instala el certificado QA:
+    <div><a class="btn-cert" href="caddy-root-ca.crt">⬇️ Descargar certificado QA</a></div>
+    <span style="font-size:.82rem">¿Prefieres usar las URLs <code>nip.io</code>? Cambia el DNS del Wi-Fi del teléfono a <span class="ip">8.8.8.8</span> y volverán a resolver.</span>
+  </div>
+
+  <details class="setup">
+    <summary>🔐 Instalar el certificado QA (quita el aviso + habilita la cámara)</summary>
+    <h3>🍏 iPad / iPhone (Safari)</h3>
+    <ol>
+      <li>Abre esta página <b>en Safari</b> y toca <b>⬇️ Descargar certificado QA</b> → <b>Permitir</b>.</li>
+      <li><b>Ajustes → General → VPN y gestión de dispositivos</b> → toca el perfil → <b>Instalar</b>.</li>
+      <li><b>Ajustes → General → Información → Ajustes de confianza de certificados</b> → <b>activa</b> "Caddy Local Authority".</li>
+      <li>Abre <code>https://172.31.98.60:8446/login</code> → candado válido → la cámara del waiter funciona.</li>
+    </ol>
+    <h3>🤖 Android (Chrome)</h3>
+    <ol>
+      <li>Toca <b>⬇️ Descargar certificado QA</b> → <b>Ajustes → Seguridad → Cifrado y credenciales → Instalar un certificado → Certificado de CA</b>.</li>
+      <li>Atajo: basta aceptar <i>"La conexión no es privada → Continuar"</i> una vez.</li>
+    </ol>
+  </details>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="emoji">🛎️</div>
+      <div class="role">Cliente · sin login</div>
+      <h2>Client PWA</h2>
+      <div class="qr"><img src="qr/client.png" alt="QR Client PWA"></div>
+      <a class="open" href="https://172.31.98.60:8443/" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8443</div>
+      <div class="cred"><span class="anon">Anónimo — escanea el QR de la mesa</span></div>
+    </div>
+
+    <div class="card">
+      <div class="emoji">⚙️</div>
+      <div class="role">Admin</div>
+      <h2>Panel de Administración</h2>
+      <div class="qr"><img src="qr/admin.png" alt="QR Admin"></div>
+      <a class="open" href="https://172.31.98.60:8444/login" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8444/login</div>
+      <div class="cred"><code>admin@smartmenu.com</code><br>Admin123!</div>
+    </div>
+
+    <div class="card">
+      <div class="emoji">👨‍🍳</div>
+      <div class="role">Chef · Cocina</div>
+      <h2>Kitchen Display</h2>
+      <div class="qr"><img src="qr/kds.png" alt="QR Kitchen Display"></div>
+      <a class="open" href="https://172.31.98.60:8445/login" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8445/login</div>
+      <div class="cred"><code>chef@smartmenu.com</code><br>Chef123!</div>
+    </div>
+
+    <div class="card">
+      <div class="emoji">🍹</div>
+      <div class="role">Bartender · Bar</div>
+      <h2>Bar Display</h2>
+      <div class="qr"><img src="qr/bar.png" alt="QR Bar Display"></div>
+      <a class="open" href="https://172.31.98.60:8455/login" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8455/login</div>
+      <div class="cred"><code>bartender@smartmenu.com</code><br>Bar123!</div>
+    </div>
+
+    <div class="card">
+      <div class="emoji">🧑‍💼</div>
+      <div class="role">Waiter · Mesero</div>
+      <h2>Waiter App</h2>
+      <div class="qr"><img src="qr/waiter.png" alt="QR Waiter App"></div>
+      <a class="open" href="https://172.31.98.60:8446/login" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8446/login</div>
+      <div class="cred"><code>waiter@smartmenu.com</code><br>Waiter123!</div>
+    </div>
+
+    <div class="card">
+      <div class="emoji">🤵</div>
+      <div class="role">Host · Anfitrión</div>
+      <h2>Host App</h2>
+      <div class="qr"><img src="qr/host.png" alt="QR Host App"></div>
+      <a class="open" href="https://172.31.98.60:8447/login" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8447/login</div>
+      <div class="cred"><code>host@smartmenu.com</code><br>Host123!</div>
+    </div>
+
+    <div class="card">
+      <div class="emoji">💰</div>
+      <div class="role">Cashier · Caja</div>
+      <h2>Cashier App</h2>
+      <div class="qr"><img src="qr/cashier.png" alt="QR Cashier App"></div>
+      <a class="open" href="https://172.31.98.60:8448/login" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8448/login</div>
+      <div class="cred"><code>cashier@smartmenu.com</code><br>Cash123!</div>
+    </div>
+
+    <div class="card">
+      <div class="emoji">📅</div>
+      <div class="role">Host · Reservas</div>
+      <h2>Reservation App</h2>
+      <div class="qr"><img src="qr/reservation.png" alt="QR Reservation App"></div>
+      <a class="open" href="https://172.31.98.60:8449/login" target="_blank" rel="noopener">Abrir</a>
+      <div class="url">172.31.98.60:8449/login</div>
+      <div class="cred"><code>host@smartmenu.com</code><br>Host123!</div>
+    </div>
+
+  </div>
+
+  <footer>
+    SmartMenu QA · Cocina (<span class="ip">:8445</span>) y Bar (<span class="ip">:8455</span>) son la misma app KDS en
+    puertos distintos — puedes abrir ambas a la vez. Si cambia la IP del Wi-Fi, corre
+    <code>node gen-qr.cjs &lt;nueva-ip&gt;</code> y actualiza el Caddyfile.
+  </footer>
+</div>
+</body>
+</html>

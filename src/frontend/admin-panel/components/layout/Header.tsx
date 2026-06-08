@@ -54,10 +54,7 @@ export function Header({ title, subtitle }: HeaderProps) {
   }, []);
 
   // SignalR para solicitudes de mesa en tiempo real
-  const { claimRequests, unreadClaimCount, markRead: markClaimRead, removeRequest } = useAdminNotifications(adminToken);
-
-  // IDs de solicitudes ya mostradas (para no duplicar entre SignalR y polling)
-  const shownClaimIdsRef = useRef<Set<number>>(new Set());
+  const { claimRequests, markRead: markClaimRead, removeRequest } = useAdminNotifications(adminToken);
 
   // Convertir un claim en notificación
   const buildClaimNotif = (cr: TableClaimNotification): Notification => ({

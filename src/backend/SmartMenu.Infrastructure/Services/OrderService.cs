@@ -724,6 +724,7 @@ public class OrderService : IOrderService
             BarPreparing = order.BarPreparing,
             BarReady = order.BarReady,
             BarServed = order.BarServed,
+            CustomerFinishedEating = order.CustomerFinishedEating,
             SpecialInstructions = order.SpecialInstructions,
             CreatedAt = order.CreatedAt,
             Items = order.Items.Select(i => new OrderItemDto

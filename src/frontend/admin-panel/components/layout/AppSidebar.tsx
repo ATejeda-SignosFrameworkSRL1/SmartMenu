@@ -18,7 +18,6 @@ import {
   Wrench,
   LogOut,
   X,
-  User,
   KeyRound,
   Shield,
 } from 'lucide-react';

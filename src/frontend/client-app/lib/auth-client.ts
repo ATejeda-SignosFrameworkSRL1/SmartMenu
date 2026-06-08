@@ -46,7 +46,7 @@ export interface AuthApi {
   /** Limpia + redirige a /login (o options.loginPath). */
   logout: () => void;
   /** Guarda access/refresh/user tras un login exitoso. */
-  setSession: (accessToken: string, refreshToken: string | null, user: SessionUser) => void;
+  setSession: (_accessToken: string, _refreshToken: string | null, _user: SessionUser) => void;
   /** Lee el user actual del localStorage. null si no hay sesión. */
   getUser: () => SessionUser | null;
   /** Lee el access token. null si no hay. */

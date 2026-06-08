@@ -6,7 +6,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Users, ShoppingBag, CreditCard, TrendingUp, Clock, ChefHat, Wine, AlertCircle, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, TrendingUp, Clock, ChefHat, Wine, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import axios from 'axios';

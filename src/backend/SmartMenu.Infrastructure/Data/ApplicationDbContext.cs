@@ -36,6 +36,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<TableClaimRequest> TableClaimRequests => Set<TableClaimRequest>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<ServicePeriod> ServicePeriods => Set<ServicePeriod>();
+    public DbSet<ReservationTable> ReservationTables => Set<ReservationTable>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -133,10 +136,56 @@ public class ApplicationDbContext : DbContext
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<TableReservation>()
+            .HasOne(tr => tr.RequestedZone)
+            .WithMany()
+            .HasForeignKey(tr => tr.RequestedZoneId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<TableReservation>()
             .HasOne(tr => tr.CreatedByHost)
             .WithMany()
             .HasForeignKey(tr => tr.CreatedByHostId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // ─── Reservas: capacidad dinámica por intervalo ───
+        modelBuilder.Entity<TableReservation>()
+            .HasOne(tr => tr.TableSession)
+            .WithMany()
+            .HasForeignKey(tr => tr.TableSessionId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<TableReservation>()
+            .HasOne(tr => tr.ServicePeriod)
+            .WithMany()
+            .HasForeignKey(tr => tr.ServicePeriodId)
+            .OnDelete(DeleteBehavior.NoAction);
+        // Solape de ventana (sargable sobre EndDateTime persistido) + pacing + lookup por código.
+        modelBuilder.Entity<TableReservation>()
+            .HasIndex(tr => new { tr.Status, tr.ReservationDateTime, tr.EndDateTime });
+        modelBuilder.Entity<TableReservation>()
+            .HasIndex(tr => new { tr.ServicePeriodId, tr.ReservationDateTime });
+        modelBuilder.Entity<TableReservation>()
+            .HasIndex(tr => tr.ConfirmationCode);
+
+        modelBuilder.Entity<ServicePeriod>()
+            .HasOne(sp => sp.Restaurant)
+            .WithMany()
+            .HasForeignKey(sp => sp.RestaurantId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ServicePeriod>()
+            .HasIndex(sp => new { sp.RestaurantId, sp.IsActive });
+
+        modelBuilder.Entity<ReservationTable>()
+            .HasKey(rt => new { rt.ReservationId, rt.TableId });
+        modelBuilder.Entity<ReservationTable>()
+            .HasOne(rt => rt.Reservation)
+            .WithMany(r => r.AssignedTables)
+            .HasForeignKey(rt => rt.ReservationId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReservationTable>()
+            .HasOne(rt => rt.Table)
+            .WithMany()
+            .HasForeignKey(rt => rt.TableId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<VirtualTable>()
             .HasOne(v => v.CreatedByWaiter)

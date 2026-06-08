@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SmartMenu.Infrastructure.Data;
 using SmartMenu.Domain.Enums;
 using SmartMenu.API.Hubs;
+using SmartMenu.Application.Common;
 
 namespace SmartMenu.API.Controllers;
 
@@ -36,13 +37,17 @@ public class TableController : ControllerBase
     {
         try
         {
-            var now = DateTime.UtcNow;
+            // Capacidad dinámica por intervalo: una mesa está Reserved solo si tiene una reserva
+            // ACTIVA asignada cuya VENTANA [inicio, fin) solapa [ahora, ahora+60min] — ya NO se
+            // bloquea el día completo. Hora local del restaurante (las reservas se guardan naive-local).
+            var nowLocal = RestaurantClock.Now;
+            var horizon = nowLocal.AddMinutes(60);
             var reservedTableIds = await _context.TableReservations
-                .Where(r => !r.IsCancelled
-                         && r.IsConfirmed
-                         && r.ReservedUntil != null && r.ReservedUntil > now
-                         && r.ReservationDateTime <= now.AddMinutes(r.AdvanceBlockMinutes))
-                .Select(r => r.TableId)
+                .Where(r => ReservationMath.ActiveStatuses.Contains(r.Status)
+                         && r.TableId != null
+                         && r.ReservationDateTime < horizon
+                         && nowLocal < r.EndDateTime)
+                .Select(r => r.TableId!.Value)
                 .Distinct()
                 .ToListAsync();
 

@@ -39,13 +39,15 @@ public class VirtualTableController : ControllerBase
         if (missing.Count > 0)
             return BadRequest(new { error = $"Mesas no encontradas: {string.Join(", ", missing)}" });
 
-        // Verificar que ninguna mesa esté ya ocupada
-        var occupiedTables = tables.Where(t => t.Status == Domain.Enums.TableStatus.Occupied).ToList();
-        if (occupiedTables.Any())
-        {
-            var occupiedNumbers = string.Join(", ", occupiedTables.Select(t => $"#{t.TableNumber}"));
-            return BadRequest(new { error = $"Las siguientes mesas ya están ocupadas: {occupiedNumbers}" });
-        }
+        // VT-PAY: la mesa pagadora (si se indica) debe ser una de las mesas del grupo
+        if (dto.PayerTableId.HasValue && !dto.TableIds.Contains(dto.PayerTableId.Value))
+            return BadRequest(new { error = "La mesa pagadora debe ser una de las mesas seleccionadas." });
+
+        // NOTA: Antes se rechazaban las mesas Ocupadas. Ahora SÍ se permite unir mesas
+        // que ya tienen clientes/orden activa — sus órdenes existentes se muestran
+        // unificadas en la vista de la mesa virtual (ver endpoint GetOrders).
+        // La única restricción que se mantiene es que una mesa no esté ya en OTRA
+        // mesa virtual activa al mismo tiempo (validación de abajo).
 
         // Verificar que ninguna de las mesas esté ya en otra mesa virtual activa
         var alreadyInVirtualTable = await _context.VirtualTableTables
@@ -67,6 +69,7 @@ public class VirtualTableController : ControllerBase
         {
             Name = dto.Name ?? $"Mesa Virtual {DateTime.UtcNow:HHmm}",
             CreatedByWaiterId = dto.CreatedByWaiterId,
+            PayerTableId = dto.PayerTableId,
             IsActive = true
         };
         
@@ -91,6 +94,7 @@ public class VirtualTableController : ControllerBase
             vt.Name,
             vt.IsActive,
             vt.CreatedByWaiterId,
+            vt.PayerTableId,
             TableIds = dto.TableIds
         });
     }
@@ -152,6 +156,7 @@ public class VirtualTableController : ControllerBase
                 v.Name,
                 v.IsActive,
                 v.CreatedByWaiterId,
+                v.PayerTableId,
                 Tables = v.Tables.Select(t => new
                 {
                     Id = t.TableId,
@@ -220,19 +225,142 @@ public class VirtualTableController : ControllerBase
         vt.IsActive = false;
         vt.DeactivatedAt = DateTime.UtcNow;
         
-        // Liberar las mesas: volver su estado a Available
+        // Liberar las mesas: volver a Available SOLO si ya no tienen órdenes activas.
+        // (Como ahora una VT puede unir mesas que ya tenían cliente/orden, al deshacerla
+        //  no debemos liberar una mesa que aún tiene comensales/orden en curso.)
         var tableIds = vt.Tables.Select(t => t.TableId).ToList();
+        var tablesWithActiveOrders = await _context.Orders
+            .Where(o => o.TableId.HasValue && tableIds.Contains(o.TableId.Value)
+                && o.Status != Domain.Enums.OrderStatus.Completed
+                && o.Status != Domain.Enums.OrderStatus.Cancelled)
+            .Select(o => o.TableId!.Value)
+            .Distinct()
+            .ToListAsync();
         var tables = await _context.Tables.Where(t => tableIds.Contains(t.Id)).ToListAsync();
+        int released = 0;
         foreach (var table in tables)
         {
+            if (tablesWithActiveOrders.Contains(table.Id))
+            {
+                _logger.LogInformation($"🗑️ Mesa #{table.TableNumber} (ID: {table.Id}) NO liberada — conserva Occupied (tiene órdenes activas)");
+                continue;
+            }
             table.Status = Domain.Enums.TableStatus.Available;
+            released++;
             _logger.LogInformation($"🗑️ Mesa #{table.TableNumber} (ID: {table.Id}) liberada (Available)");
         }
-        
+
         await _context.SaveChangesAsync();
-        
-        _logger.LogInformation($"🗑️ Mesa virtual ID {id} desactivada y {tables.Count} mesas liberadas");
-        return Ok(new { message = "Mesa virtual desactivada", id = vt.Id, tablesReleased = tables.Count });
+
+        _logger.LogInformation($"🗑️ Mesa virtual ID {id} desactivada y {released} mesas liberadas");
+        return Ok(new { message = "Mesa virtual desactivada", id = vt.Id, tablesReleased = released });
+    }
+
+    /// <summary>
+    /// VT-PAY — Cobro unificado de la mesa virtual: UN solo pago (comprobante único) bajo la
+    /// mesa pagadora que cubre TODAS las órdenes activas del grupo. Marca todas como Completed,
+    /// pasa las mesas a Cleaning y cierra la mesa virtual.
+    /// </summary>
+    [HttpPost("{id}/pay")]
+    public async Task<IActionResult> PayUnified(int id, [FromBody] PayVirtualTableDto dto)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            var vt = await _context.VirtualTables
+                .Include(v => v.Tables)
+                .FirstOrDefaultAsync(v => v.Id == id && v.IsActive);
+            if (vt == null)
+                return NotFound(new { error = "Mesa virtual no encontrada o ya cerrada" });
+
+            var tableIds = vt.Tables.Select(t => t.TableId).ToList();
+            var payerTableId = vt.PayerTableId ?? tableIds.FirstOrDefault();
+
+            // Órdenes activas (no completadas/canceladas) de todas las mesas del grupo
+            var orders = await _context.Orders
+                .Where(o => o.TableId.HasValue && tableIds.Contains(o.TableId.Value)
+                    && o.Status != Domain.Enums.OrderStatus.Completed
+                    && o.Status != Domain.Enums.OrderStatus.Cancelled)
+                .ToListAsync();
+
+            if (orders.Count == 0)
+                return BadRequest(new { error = "La mesa virtual no tiene órdenes pendientes de cobro." });
+
+            // Validación fiscal (igual que el cobro por orden): comprobante exige RNC + razón social
+            if (dto.RequiresFiscalReceipt && (string.IsNullOrWhiteSpace(dto.RNC) || string.IsNullOrWhiteSpace(dto.BusinessName)))
+                return BadRequest(new { error = "Comprobante fiscal requiere RNC y razón social." });
+
+            // Total combinado = suma de los totales por orden (cada uno ya con ITBIS 18% + propina 10%)
+            decimal groupSubtotal = orders.Sum(o => o.Subtotal);
+            decimal groupTax = orders.Sum(o => o.Tax);
+            decimal groupTip = orders.Sum(o => o.Tip);
+            decimal groupTotal = orders.Sum(o => o.Total);
+
+            // Orden de la mesa pagadora — ancla del comprobante único
+            var payerOrder = orders.FirstOrDefault(o => o.TableId == payerTableId) ?? orders.First();
+
+            // UN solo Payment (comprobante único) por el total del grupo
+            var payment = new Payment
+            {
+                OrderId = payerOrder.Id,
+                Method = dto.PaymentMethod ?? "Cash",
+                Amount = groupSubtotal + groupTax,
+                TipAmount = groupTip,
+                TipPercentage = groupSubtotal > 0 ? (groupTip / groupSubtotal) * 100 : 0,
+                TotalAmount = groupTotal,
+                ProcessedByWaiterId = dto.ProcessedByWaiterId,
+                BillSplitType = "VirtualTableUnified",
+                RequiresFiscalReceipt = dto.RequiresFiscalReceipt,
+                RNC = dto.RequiresFiscalReceipt ? dto.RNC : null,
+                BusinessName = dto.RequiresFiscalReceipt ? dto.BusinessName : null,
+                Status = Domain.Enums.PaymentStatus.Completed,
+                CompletedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+            };
+            _context.Payments.Add(payment);
+
+            // Marcar TODAS las órdenes del grupo como Completed
+            foreach (var o in orders)
+            {
+                o.Status = Domain.Enums.OrderStatus.Completed;
+                o.CompletedAt = DateTime.UtcNow;
+                o.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // Liberar mesas del grupo (Cleaning) y cerrar la mesa virtual
+            var tables = await _context.Tables.Where(t => tableIds.Contains(t.Id)).ToListAsync();
+            foreach (var t in tables)
+                t.Status = Domain.Enums.TableStatus.Cleaning;
+            vt.IsActive = false;
+            vt.DeactivatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            var payerNumber = tables.FirstOrDefault(t => t.Id == payerTableId)?.TableNumber;
+            _logger.LogInformation($"💰 Cobro unificado VT {vt.Id}: {orders.Count} órdenes, total {groupTotal:0.00}, pagadora mesa #{payerNumber}");
+            return Ok(new
+            {
+                message = "Mesa virtual cobrada",
+                virtualTableId = vt.Id,
+                paymentId = payment.Id,
+                payerTableId,
+                payerTableNumber = payerNumber,
+                ordersPaid = orders.Count,
+                subtotal = groupSubtotal,
+                tax = groupTax,
+                tip = groupTip,
+                total = groupTotal,
+                method = payment.Method,
+                requiresFiscalReceipt = payment.RequiresFiscalReceipt
+            });
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            _logger.LogError(ex, "Error en cobro unificado de mesa virtual {Id}", id);
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
@@ -277,4 +405,15 @@ public class CreateVirtualTableDto
     public string? Name { get; set; }
     public int CreatedByWaiterId { get; set; }
     public List<int> TableIds { get; set; } = new();
+    /// <summary>Mesa designada para el pago general (cobro unificado). Debe ser una de TableIds.</summary>
+    public int? PayerTableId { get; set; }
+}
+
+public class PayVirtualTableDto
+{
+    public string? PaymentMethod { get; set; }   // Cash, Card, Transfer, Mixed
+    public int? ProcessedByWaiterId { get; set; }
+    public bool RequiresFiscalReceipt { get; set; } = false;
+    public string? RNC { get; set; }
+    public string? BusinessName { get; set; }
 }

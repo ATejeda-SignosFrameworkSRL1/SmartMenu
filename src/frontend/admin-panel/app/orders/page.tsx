@@ -6,7 +6,6 @@ import {
   Clock,
   RefreshCw,
   CheckCircle2,
-  UtensilsCrossed,
   TableProperties,
   Hash,
   ChevronRight,
@@ -34,8 +33,6 @@ interface Order {
     subtotal: number;
   }>;
 }
-
-const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Preparing', 'Ready', 'Served', 'Completed', 'Cancelled'];
 
 const STATUS_LABELS: Record<string, string> = {
   Pending: 'Pendiente',
@@ -283,7 +280,7 @@ export default function OrdersPage() {
                       {createdAt && (
                         <div className="flex items-center gap-1.5 text-xs text-gray-400">
                           <Clock className="w-3 h-3" />
-                          <span>{timeAgo(createdAt)} · {new Date(createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{timeAgo(createdAt)} · {new Date(createdAt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                         </div>
                       )}
                     </div>

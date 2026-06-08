@@ -2,12 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  LogOut, RefreshCw, FileText, X, Building2, CheckCircle2,
+  LogOut, RefreshCw, X, Building2, CheckCircle2,
   DollarSign, CreditCard, ArrowRightLeft, Layers, Receipt,
   AlertCircle, Loader2, ShoppingCart, Plus, Minus, Trash2,
-  ShoppingBag, BarChart3, Search, ChevronRight, User, Radio
+  ShoppingBag, BarChart3, Search, User, Radio
 } from 'lucide-react';
-import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
 import { createAuthApi } from '@/lib/auth-client';
 
@@ -259,7 +258,7 @@ function CajaTab({ user }: { user: any }) {
                   {payments.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-500">
-                        {p.completedAt ? new Date(p.completedAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        {p.completedAt ? new Date(p.completedAt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }) : '-'}
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-700">{p.orderNumber || '-'}</td>
                       <td className="px-4 py-3 font-medium">{p.tableNumber || 'Mostrador'}</td>
@@ -704,7 +703,7 @@ function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Caja</h1>
             <p className="text-sm text-gray-500">

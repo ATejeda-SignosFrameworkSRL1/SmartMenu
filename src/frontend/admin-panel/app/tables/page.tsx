@@ -8,14 +8,11 @@ import { Button } from '@/components/ui/button';
 import {
   Users,
   RefreshCw,
-  MapPin,
   Plus,
   X,
   Download,
   QrCode,
   Trash2,
-  Edit,
-  Filter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QRCodeSVG } from 'qrcode.react';
@@ -26,7 +23,54 @@ const api = axios.create({
   baseURL: '',
 });
 
-const CLIENT_URL = process.env.NEXT_PUBLIC_CLIENT_URL || (typeof window !== 'undefined' ? window.location.origin.replace(':3001', ':3000') : '');
+/**
+ * QR-FIX.2 — URL base del client-app para QRs físicos.
+ *
+ * Prioridad:
+ *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://172.31.98.60:8443).
+ *      Esta es la opción CORRECTA para producción/QA — sobreescribe todo.
+ *   2. Fallback runtime: derivar del hostname actual.
+ *      - Si admin está en https://localhost:8444 → cambiar a https://localhost:8451 (client Caddy)
+ *      - Si admin está en https://admin.X.nip.io:8443 → cambiar a https://X.nip.io:8443
+ *      - Si admin está en una IP directa → mismo origen
+ *
+ * IMPORTANTE: El QR generado se IMPRIME y se pega en mesas físicas. Los clientes
+ * lo escanean con su celular. Por eso NUNCA debe contener "localhost" — ningún
+ * celular puede resolverlo. Usar siempre IP LAN o domain accesible en la red.
+ */
+function deriveClientUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_CLIENT_URL;
+  if (envUrl) return envUrl;
+  if (typeof window === 'undefined') return '';
+
+  const { protocol, hostname, port } = window.location;
+
+  // localhost detection — usar la convención del stack QA (client en :8451)
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:8451`;
+  }
+
+  // admin.X.nip.io → derivar el client.X.nip.io (mismo cert raíz)
+  // Patrón: cualquier subdomain.* → reemplazar primer label
+  if (hostname.includes('.nip.io') || hostname.includes('.qa.smartmenu.local')) {
+    const parts = hostname.split('.');
+    if (parts.length > 0) {
+      parts[0] = 'client';
+      return `${protocol}//${parts.join('.')}${port ? `:${port}` : ''}`;
+    }
+  }
+
+  // IP directa (192.168.x, 172.x, 10.x) — mismo host
+  // El stack QA expone client-app en :8443 (block qa.smartmenu.local, localhost:8451, IP:8443)
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    return `${protocol}//${hostname}:8443`;
+  }
+
+  // Fallback genérico: mismo origin (puede no funcionar, pero al menos no rompe)
+  return window.location.origin;
+}
+
+const CLIENT_URL = deriveClientUrl();
 
 interface Table {
   id: number;
@@ -126,7 +170,6 @@ export default function TablesPage() {
   }, []);
 
   // Tras normalización todos los campos son camelCase con tipos correctos
-  const getVal = (obj: any, key: string) => obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)] ?? '';
   const getTableStatus = (t: Table) => t.status;
   const getZoneId = (z: Zone) => z.id;
 

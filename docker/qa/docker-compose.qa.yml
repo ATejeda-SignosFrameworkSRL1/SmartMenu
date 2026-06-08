@@ -25,6 +25,13 @@ x-frontend-base: &frontend-base
     # https://localhost:84XX (MCP/Chrome) como via https://*.qa.smartmenu.local:8443.
     NEXT_PUBLIC_API_URL: ""
     NEXT_PUBLIC_WS_URL: ""
+    # QR-FIX.2 — URL del client-app PWA usada al generar QRs de mesas.
+    # Debe ser alcanzable desde el celular del cliente (NO localhost).
+    # Usamos nip.io porque:
+    #   - 172-31-98-60.nip.io resuelve a 172.31.98.60 sin que el cell configure DNS
+    #   - Caddy genera cert válido por hostname (SNI), evita errores SChannel
+    #   - Si tu IP cambia, actualiza este valor + rebuild admin-panel
+    NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-60.nip.io:8443"
 
 services:
   # ─── SQL Server ─────────────────────────────────────────────────────────
@@ -122,13 +129,26 @@ services:
   # ─── Frontends (7 apps Next.js 14) ─────────────────────────────────────
   client-app:
     <<: *frontend-base
-    build: { context: ../../src/frontend/client-app, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3000" } }
+    build:
+      context: ../../src/frontend/client-app
+      dockerfile: ../../../docker/qa/Dockerfile.frontend
+      args:
+        APP_PORT: "3000"
+        # QR-MOBILE.1 — URL alcanzable desde celular usada en los QRs físicos de mesas
+        NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-60.nip.io:8443"
     image: smartmenu-qa/client-app:latest
     container_name: smartmenu-qa-client
 
   admin-panel:
     <<: *frontend-base
-    build: { context: ../../src/frontend/admin-panel, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3001" } }
+    build:
+      context: ../../src/frontend/admin-panel
+      dockerfile: ../../../docker/qa/Dockerfile.frontend
+      args:
+        APP_PORT: "3001"
+        # QR-FIX.2 — URL del client-app PWA usada al generar QRs físicos de mesas.
+        # Debe ser alcanzable desde el celular del cliente (NO localhost).
+        NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-60.nip.io:8443"
     image: smartmenu-qa/admin-panel:latest
     container_name: smartmenu-qa-admin
 
@@ -177,8 +197,11 @@ services:
       - "8449:8449"           # reservation-app
       - "8450:8450"           # backend API
       - "8451:8451"           # client-app PWA (localhost direct)
+      - "8455:8455"           # kds-app 2º origen (Bar) — abrir Cocina+Bar a la vez
     volumes:
       - ../qa/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Staff hub estático (landing con QR de cada panel) servido por Caddy
+      - ../qa/staff-hub:/srv/hub:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:

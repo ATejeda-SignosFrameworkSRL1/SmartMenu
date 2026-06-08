@@ -24,6 +24,13 @@ COPY . .
 # vacía para que el COPY de la fase runtime nunca falle.
 RUN mkdir -p public
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# QR-FIX.2 — NEXT_PUBLIC_* deben inyectarse en build-time (Next.js los reemplaza
+# en el bundle del cliente). Aceptar como build arg para que docker-compose
+# pueda pasarlos sin modificar este Dockerfile.
+ARG NEXT_PUBLIC_CLIENT_URL=""
+ENV NEXT_PUBLIC_CLIENT_URL=${NEXT_PUBLIC_CLIENT_URL}
+
 RUN npm run build
 
 # ===== runtime =====

@@ -10,6 +10,8 @@ public class VirtualTable : BaseEntity
     public int CreatedByWaiterId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime? DeactivatedAt { get; set; }
+    /// <summary>Mesa designada para el pago general (cobro unificado de la mesa virtual). Null = sin pagadora.</summary>
+    public int? PayerTableId { get; set; }
 
     public User CreatedByWaiter { get; set; } = null!;
     public ICollection<VirtualTableTable> Tables { get; set; } = new List<VirtualTableTable>();

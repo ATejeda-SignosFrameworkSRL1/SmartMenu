@@ -1,7 +1,7 @@
-# SmartMenu QA — single Caddy con tls internal (Caddy auto-CA)
+﻿# SmartMenu QA â€” single Caddy con tls internal (Caddy auto-CA)
 # Termina TLS para el browser; proxy HTTP plano a los contenedores.
 #
-# Hosts (agrega a tu hosts file → 127.0.0.1):
+# Hosts (agrega a tu hosts file â†’ 127.0.0.1):
 #   qa.smartmenu.local
 #   api.qa.smartmenu.local
 #   admin.qa.smartmenu.local
@@ -17,57 +17,57 @@
 
 {
 	# Caddy genera su propio CA local; se persiste en el volumen caddy-data.
-	# Si quisieras emitir certs reales (Let's Encrypt) tendrías que cambiar a global email + hosts públicos.
+	# Si quisieras emitir certs reales (Let's Encrypt) tendrÃ­as que cambiar a global email + hosts pÃºblicos.
 	auto_https disable_redirects
 	admin off
 }
 
-# ─── Security headers — aplica a TODOS los hosts vía snippet importado ────
+# â”€â”€â”€ Security headers â€” aplica a TODOS los hosts vÃ­a snippet importado â”€â”€â”€â”€
 (security-headers) {
 	header {
 		# HSTS: forzar HTTPS por 6 meses (browsers cachean esto). Solo aplica
-		# cuando el server responde por HTTPS — sin includeSubDomains porque
+		# cuando el server responde por HTTPS â€” sin includeSubDomains porque
 		# el stack usa muchos subdomains nip.io y queremos opt-in per-cert.
 		Strict-Transport-Security "max-age=15552000"
 		# Bloquea iframe embedding desde otros sites (anti-clickjacking).
 		X-Frame-Options "DENY"
 		# Browsers no deben adivinar el content-type del response.
 		X-Content-Type-Options "nosniff"
-		# Permissions Policy mínima — deshabilita features sensibles que no usamos.
-		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-		# Referrer mínimo en navegación cross-origin (no leak de paths internos).
+		# Permissions Policy â€” camera=(self) para QR scanner del waiter; resto bloqueado.
+		Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=()"
+		# Referrer mÃ­nimo en navegaciÃ³n cross-origin (no leak de paths internos).
 		Referrer-Policy "strict-origin-when-cross-origin"
 		# CSP relajado para QA (Next.js usa inline scripts/styles + necesita 'unsafe-eval'
-		# en dev). Para producción real, restringir aún más.
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'none';"
+		# en dev). Para producciÃ³n real, restringir aÃºn mÃ¡s.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' wss: https:; frame-ancestors 'none';"
 		# Quita el header Server (info disclosure)
 		-Server
 	}
 }
 
-# ─── HTTP catch-all → HTTPS 8443 (cuando el browser olvida poner https://) ─
-# Container expone :80, mapeado a host :8080. Cualquier petición HTTP a localhost
+# â”€â”€â”€ HTTP catch-all â†’ HTTPS 8443 (cuando el browser olvida poner https://) â”€
+# Container expone :80, mapeado a host :8080. Cualquier peticiÃ³n HTTP a localhost
 # o *.qa.smartmenu.local se redirige al equivalente HTTPS en :8443.
 http://localhost http://*.qa.smartmenu.local {
 	redir https://{host}:8443{uri} 308
 }
 
-# ─── HTTP plano vía LAN IP (legado — se queda como fallback) ──────────────
-http://172.31.98.54 {
+# â”€â”€â”€ HTTP plano vÃ­a LAN IP (legado â€” se queda como fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+http://172.31.98.60 {
 	encode gzip
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
 	reverse_proxy client-app:3000
 }
 
-# ─── nip.io HTTPS — URLs limpias, accesibles desde cualquier device LAN ───
-# *.172-31-98-54.nip.io resuelve a 172.31.98.54 sin tocar hosts file.
-# Cert sigue siendo self-signed (Caddy CA local) — el cell mostrará warning
+# â”€â”€â”€ nip.io HTTPS â€” URLs limpias, accesibles desde cualquier device LAN â”€â”€â”€
+# *.172-31-98-60.nip.io resuelve a 172.31.98.60 sin tocar hosts file.
+# Cert sigue siendo self-signed (Caddy CA local) â€” el cell mostrarÃ¡ warning
 # una sola vez por hostname. Para evitar warning instala
 # docker/qa/caddy-root-ca.crt en el cell, o usa Let's Encrypt con port
-# forwarding 80/443 → 8080/8443.
+# forwarding 80/443 â†’ 8080/8443.
 
-dev.172-31-98-54.nip.io, client.172-31-98-54.nip.io {
+dev.172-31-98-60.nip.io, client.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
@@ -76,14 +76,14 @@ dev.172-31-98-54.nip.io, client.172-31-98-54.nip.io {
 	reverse_proxy client-app:3000
 }
 
-api.172-31-98-54.nip.io {
+api.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
 	reverse_proxy backend:8080
 }
 
-admin.172-31-98-54.nip.io {
+admin.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
@@ -92,7 +92,7 @@ admin.172-31-98-54.nip.io {
 	reverse_proxy admin-panel:3001
 }
 
-kds.172-31-98-54.nip.io {
+kds.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
@@ -101,7 +101,7 @@ kds.172-31-98-54.nip.io {
 	reverse_proxy kds-app:3002
 }
 
-waiter.172-31-98-54.nip.io {
+waiter.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
@@ -110,7 +110,7 @@ waiter.172-31-98-54.nip.io {
 	reverse_proxy waiter-app:3003
 }
 
-host.172-31-98-54.nip.io {
+host.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
@@ -119,7 +119,7 @@ host.172-31-98-54.nip.io {
 	reverse_proxy host-app:3004
 }
 
-cashier.172-31-98-54.nip.io {
+cashier.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
@@ -128,7 +128,7 @@ cashier.172-31-98-54.nip.io {
 	reverse_proxy cashier-app:3005
 }
 
-reservation.172-31-98-54.nip.io {
+reservation.172-31-98-60.nip.io {
 	tls internal
 	import security-headers
 	encode gzip zstd
@@ -137,9 +137,9 @@ reservation.172-31-98-54.nip.io {
 	reverse_proxy reservation-app:3007
 }
 
-# ─── Landing page en https://localhost:8443/ ───────────────────────────────
-# Si no agregaste las entradas al hosts file todavía y abres directo localhost,
-# te mostramos un índice con todas las URLs del stack QA.
+# â”€â”€â”€ Landing page en https://localhost:8443/ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Si no agregaste las entradas al hosts file todavÃ­a y abres directo localhost,
+# te mostramos un Ã­ndice con todas las URLs del stack QA.
 localhost {
 	tls internal
 	import security-headers
@@ -160,60 +160,60 @@ code{background:#f1f5f9;padding:.1rem .4rem;border-radius:4px;font-size:.85em}
 .warn{background:#fef3c7;border:1px solid #fbbf24;color:#78350f}
 </style></head>
 <body>
-<h1>🍽️  SmartMenu QA</h1>
-<p>Stack docker — HTTPS via Caddy <code>tls internal</code></p>
+<h1>ðŸ½ï¸  SmartMenu QA</h1>
+<p>Stack docker â€” HTTPS via Caddy <code>tls internal</code></p>
 
 <section class="warn">
-<h2>⚠️ Antes de empezar</h2>
-<p>Para que las URLs <code>*.qa.smartmenu.local</code> resuelvan, agrega esta línea a tu hosts file (Admin):</p>
+<h2>âš ï¸ Antes de empezar</h2>
+<p>Para que las URLs <code>*.qa.smartmenu.local</code> resuelvan, agrega esta lÃ­nea a tu hosts file (Admin):</p>
 <p><code>127.0.0.1 qa.smartmenu.local api.qa.smartmenu.local admin.qa.smartmenu.local kds.qa.smartmenu.local waiter.qa.smartmenu.local host.qa.smartmenu.local cashier.qa.smartmenu.local reservation.qa.smartmenu.local</code></p>
 <p>Para certificado verde (no warning):</p>
 <p><code>docker exec smartmenu-qa-caddy cat /data/caddy/pki/authorities/local/root.crt &gt; caddy-root.crt &amp;&amp; certutil -addstore -f Root caddy-root.crt</code></p>
 </section>
 
 <section>
-<h2>👥 Customer-facing</h2>
-<a class="app" href="https://qa.smartmenu.local:8443/"><span>🛎️  Client PWA <code>qa.smartmenu.local</code></span><span class="badge">anon</span></a>
+<h2>ðŸ‘¥ Customer-facing</h2>
+<a class="app" href="https://qa.smartmenu.local:8443/"><span>ðŸ›Žï¸  Client PWA <code>qa.smartmenu.local</code></span><span class="badge">anon</span></a>
 </section>
 
 <section>
-<h2>👨‍💼 Staff (login requerido)</h2>
-<a class="app" href="https://admin.qa.smartmenu.local:8443/login"><span>⚙️  Admin Panel <code>admin@smartmenu.com / Admin123!</code></span><span class="badge">Admin</span></a>
-<a class="app" href="https://kds.qa.smartmenu.local:8443/login"><span>👨‍🍳 Kitchen Display <code>chef@smartmenu.com / Chef123!</code></span><span class="badge">Chef</span></a>
-<a class="app" href="https://waiter.qa.smartmenu.local:8443/login"><span>🧑‍💼 Waiter App <code>waiter@smartmenu.com / Waiter123!</code></span><span class="badge">Waiter</span></a>
-<a class="app" href="https://host.qa.smartmenu.local:8443/login"><span>🤵 Host App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
-<a class="app" href="https://cashier.qa.smartmenu.local:8443/login"><span>💰 Cashier App <code>cashier@smartmenu.com / Cash123!</code></span><span class="badge">Cashier</span></a>
-<a class="app" href="https://reservation.qa.smartmenu.local:8443/login"><span>📅 Reservation App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
+<h2>ðŸ‘¨â€ðŸ’¼ Staff (login requerido)</h2>
+<a class="app" href="https://admin.qa.smartmenu.local:8443/login"><span>âš™ï¸  Admin Panel <code>admin@smartmenu.com / Admin123!</code></span><span class="badge">Admin</span></a>
+<a class="app" href="https://kds.qa.smartmenu.local:8443/login"><span>ðŸ‘¨â€ðŸ³ Kitchen Display <code>chef@smartmenu.com / Chef123!</code></span><span class="badge">Chef</span></a>
+<a class="app" href="https://waiter.qa.smartmenu.local:8443/login"><span>ðŸ§‘â€ðŸ’¼ Waiter App <code>waiter@smartmenu.com / Waiter123!</code></span><span class="badge">Waiter</span></a>
+<a class="app" href="https://host.qa.smartmenu.local:8443/login"><span>ðŸ¤µ Host App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
+<a class="app" href="https://cashier.qa.smartmenu.local:8443/login"><span>ðŸ’° Cashier App <code>cashier@smartmenu.com / Cash123!</code></span><span class="badge">Cashier</span></a>
+<a class="app" href="https://reservation.qa.smartmenu.local:8443/login"><span>ðŸ“… Reservation App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
 </section>
 
 <section>
-<h2>🔌 Backend</h2>
-<a class="app" href="https://api.qa.smartmenu.local:8443/health/ready"><span>❤️  API health</span><span class="badge">JSON</span></a>
-<a class="app" href="https://api.qa.smartmenu.local:8443/swagger"><span>📘 Swagger UI</span><span class="badge">docs</span></a>
+<h2>ðŸ”Œ Backend</h2>
+<a class="app" href="https://api.qa.smartmenu.local:8443/health/ready"><span>â¤ï¸  API health</span><span class="badge">JSON</span></a>
+<a class="app" href="https://api.qa.smartmenu.local:8443/swagger"><span>ðŸ“˜ Swagger UI</span><span class="badge">docs</span></a>
 </section>
 
 </body></html>
 HTML 200
 }
 
-# ─── Cliente final (customer-app, public PWA) ─────────────────────────────
+# â”€â”€â”€ Cliente final (customer-app, public PWA) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Tres maneras de acceder al PWA del cliente:
 #   - qa.smartmenu.local:8443   (con hosts file en la PC)
 #   - localhost:8451            (acceso local sin hosts file / MCP)
-#   - 172.31.98.54:8443         (LAN IP — QR scannable desde el cell)
-qa.smartmenu.local, localhost:8451, 172.31.98.54:8443 {
+#   - 172.31.98.60:8443         (LAN IP â€” QR scannable desde el cell)
+qa.smartmenu.local, localhost:8451, 172.31.98.60:8443 {
 	tls internal
 	import security-headers
 	encode gzip zstd
 	# /api, /uploads, /hubs deben ir al backend (no a Next.js) porque sus
-	# rewrites no toman process.env en runtime — y el cliente PWA hace fetch
+	# rewrites no toman process.env en runtime â€” y el cliente PWA hace fetch
 	# a paths relativos.
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
 	reverse_proxy client-app:3000
 }
 
-# ─── Puertos localhost por app (para MCP/Chrome sin hosts file) ───────────
+# â”€â”€â”€ Puertos localhost por app (para MCP/Chrome sin hosts file) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Cada app accesible directo via https://localhost:84XX.
 # Caddy enruta /api/*, /uploads/*, /hubs/* al backend directo porque las
 # rewrites de Next.js no toman process.env en runtime con `next start`.
@@ -225,32 +225,32 @@ qa.smartmenu.local, localhost:8451, 172.31.98.54:8443 {
 	reverse_proxy @apipath backend:8080
 }
 
-localhost:8444 {
+localhost:8444, 172.31.98.60:8444 {
 	import app-with-backend
 	reverse_proxy admin-panel:3001
 }
 
-localhost:8445 {
+localhost:8445, 172.31.98.60:8445 {
 	import app-with-backend
 	reverse_proxy kds-app:3002
 }
 
-localhost:8446 {
+localhost:8446, 172.31.98.60:8446 {
 	import app-with-backend
 	reverse_proxy waiter-app:3003
 }
 
-localhost:8447 {
+localhost:8447, 172.31.98.60:8447 {
 	import app-with-backend
 	reverse_proxy host-app:3004
 }
 
-localhost:8448 {
+localhost:8448, 172.31.98.60:8448 {
 	import app-with-backend
 	reverse_proxy cashier-app:3005
 }
 
-localhost:8449 {
+localhost:8449, 172.31.98.60:8449 {
 	import app-with-backend
 	reverse_proxy reservation-app:3007
 }
@@ -262,7 +262,14 @@ localhost:8450 {
 	encode gzip zstd
 }
 
-# ─── Backend API + SignalR hubs ───────────────────────────────────────────
+# Bar Display = segundo origen del KDS (mismo app, distinto origen).
+# Permite tener Cocina (chef) en :8445 y Bar (bartender) en :8455 logueados a la vez.
+localhost:8455, 172.31.98.60:8455 {
+	import app-with-backend
+	reverse_proxy kds-app:3002
+}
+
+# â”€â”€â”€ Backend API + SignalR hubs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 api.qa.smartmenu.local {
 	tls internal
 	import security-headers
@@ -273,7 +280,7 @@ api.qa.smartmenu.local {
 	}
 	reverse_proxy backend:8080 {
 		header_up X-Forwarded-Proto {scheme}
-		# Permite uploads grandes (imágenes de dishes ~10MB)
+		# Permite uploads grandes (imÃ¡genes de dishes ~10MB)
 		transport http {
 			read_buffer 8192
 		}
@@ -281,7 +288,7 @@ api.qa.smartmenu.local {
 	encode gzip zstd
 }
 
-# ─── Staff apps ──────────────────────────────────────────────────────────
+# â”€â”€â”€ Staff apps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 admin.qa.smartmenu.local {
 	tls internal
 	import security-headers
@@ -322,4 +329,19 @@ reservation.qa.smartmenu.local {
 	import security-headers
 	reverse_proxy reservation-app:3007
 	encode gzip zstd
+}
+
+# ─── Staff hub — landing con QR de cada panel (LAN, scannable desde el cell) ─
+# Pagina estatica servida desde /srv/hub (bind-mount docker/qa/staff-hub).
+# Lista todos los paneles de rol con su URL nip.io + QR + credenciales seed.
+# Accesible desde cualquier device de la LAN: https://hub.172-31-98-60.nip.io:8443
+hub.172-31-98-60.nip.io {
+	tls internal
+	import security-headers
+	encode gzip zstd
+	root * /srv/hub
+	# iOS/Android: forzar el Content-Type para que el .crt se reconozca como CA instalable
+	@cacert path /caddy-root-ca.crt
+	header @cacert Content-Type "application/x-x509-ca-cert"
+	file_server
 }
