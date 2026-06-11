@@ -42,6 +42,8 @@ function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
   return DRINK_KEYWORDS.some(k => name.includes(k));
 }
+// Código de pedido corto y legible para el mesero: ORD-20260611144054-7cfdfa → "7CFDFA"
+const shortOrder = (on?: string | null) => ((on ?? '').split('-').pop() ?? '').toUpperCase();
 function getElapsedMinutes(createdAt: string | number | undefined): number {
   if (createdAt == null) return 0;
   const utcStr = typeof createdAt === 'string' && !createdAt.endsWith('Z') ? createdAt + 'Z' : createdAt;
@@ -56,6 +58,19 @@ function isBartender(_u: any): boolean {
 function getOrderId(order: Order): number {
   return (order as any).id ?? (order as any).Id;
 }
+
+// Estilo del banner por tipo de notificación — para renderizar el aviso del bell también en la tarjeta de Mis Mesas.
+// Cualquier tipo no listado igual se muestra con NOTIF_CARD_DEFAULT (todas las notificaciones aparecen en la tarjeta).
+const NOTIF_CARD_DEFAULT = { cls: 'bg-slate-100 text-slate-700 border-slate-300', icon: '🔔' };
+const NOTIF_CARD: Record<string, { cls: string; icon: string; pulse?: boolean }> = {
+  kitchen_ready:     { cls: 'bg-green-100 text-green-800 border-green-300', icon: '🍽' },
+  bar_ready:         { cls: 'bg-green-100 text-green-800 border-green-300', icon: '🍹' },
+  customer_finished: { cls: 'bg-amber-100 text-amber-800 border-amber-300', icon: '🔔', pulse: true },
+  items_added:       { cls: 'bg-blue-100 text-blue-800 border-blue-300', icon: '➕' },
+  billing_requested: { cls: 'bg-red-100 text-red-800 border-red-300', icon: '💳', pulse: true },
+  claim_approved:    { cls: 'bg-indigo-100 text-indigo-800 border-indigo-300', icon: '✅' },
+  claim_rejected:    { cls: 'bg-rose-100 text-rose-800 border-rose-300', icon: '🚫' },
+};
 
 // Reloj digital LCD 7-segment estilo radio-despertador
 function DigitalClock() {
@@ -276,7 +291,7 @@ export default function WaiterPage() {
   
   // SignalR notifications
   const waiterId = user ? getUserId(user) : null;
-  const { notifications, unreadCount, connected, markAllRead, dismiss, clearAll } = useWaiterNotifications({
+  const { notifications, unreadCount, connected, markAllRead, markRead, dismiss, clearAll } = useWaiterNotifications({
     waiterId: waiterId ?? null,
     token: notifToken,
   });
@@ -2173,7 +2188,7 @@ export default function WaiterPage() {
                 .filter(o => ((o as any).tableId ?? (o as any).TableId) === identifiedTableId)
                 .map((o: Order) => (
                   <div key={getOrderId(o)} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                    <span className="font-mono">{o.orderNumber ?? (o as any).orderNumber}</span>
+                    <span className="font-mono">Pedido #{shortOrder(o.orderNumber ?? (o as any).orderNumber)}</span>
                     <span className={getOrderStatusColor((o as any).status ?? o.status)}>{(o as any).status ?? o.status}</span>
                     <span>RD$ {((o as any).total ?? o.total ?? 0).toFixed(2)}</span>
                   </div>
@@ -2415,7 +2430,26 @@ export default function WaiterPage() {
                         {(order as any).customerName && (
                           <p className="text-xs text-primary-600 font-medium truncate mb-1">{(order as any).customerName}</p>
                         )}
-                        <p className="text-xs text-gray-400 font-mono truncate mb-2">{order.orderNumber?.split('-').slice(-1)[0]}</p>
+                        <p className="text-xs text-gray-400 font-mono truncate mb-2">Pedido #{shortOrder(order.orderNumber)}</p>
+                        {/* WAITER-CARD-NOTIF: el aviso del bell también se renderiza aquí, en la mesa que se atiende */}
+                        {!transferMode && (() => {
+                          const oid = getOrderId(order);
+                          const tn = notifications.filter(n => !n.read
+                            && (n.orderId === oid || (!!n.tableNumber && n.tableNumber === String(order.tableNumber))));
+                          if (tn.length === 0) return null;
+                          const nt = tn[0];
+                          const s = NOTIF_CARD[nt.type] ?? NOTIF_CARD_DEFAULT;
+                          return (
+                            <div className={`mb-2 rounded-lg border px-2 py-1.5 flex items-start gap-1.5 ${s.cls} ${s.pulse ? 'animate-pulse' : ''}`} style={s.pulse ? { animationDuration: '1.4s' } : undefined}>
+                              <span className="text-sm leading-none mt-0.5">{s.icon}</span>
+                              <span className="flex-1 text-[11px] font-semibold leading-snug">{nt.message}</span>
+                              {tn.length > 1 && <span className="text-[10px] font-bold opacity-70 mt-0.5">+{tn.length - 1}</span>}
+                              <button onClick={(e) => { e.stopPropagation(); markRead(nt.id); }} className="opacity-60 hover:opacity-100 mt-0.5" aria-label="Descartar aviso">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })()}
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-bold text-gray-800">RD$ {((order as any).total ?? 0).toFixed(0)}</p>
                           <div className="flex gap-1">
@@ -2596,7 +2630,7 @@ export default function WaiterPage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Pedido sin asignar</h2>
-                  <p className="text-sm text-gray-600">Mesa {orderModalOrder.tableNumber} · {orderModalOrder.orderNumber}</p>
+                  <p className="text-sm text-gray-600">Mesa {orderModalOrder.tableNumber} · Pedido #{shortOrder(orderModalOrder.orderNumber)}</p>
                   {(orderModalOrder as any).customerName && (
                     <p className="text-xs text-primary-600 font-medium mt-0.5">Cliente: {(orderModalOrder as any).customerName}</p>
                   )}
@@ -2746,7 +2780,7 @@ export default function WaiterPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">Cobrar — Mesa {selectedOrder.tableNumber}</h2>
-                    <p className="text-sm text-gray-500">Orden #{selectedOrder.orderNumber}</p>
+                    <p className="text-sm text-gray-500">Pedido #{shortOrder(selectedOrder.orderNumber)}</p>
                   </div>
                   <button
                     onClick={() => { setShowPaymentModal(false); setSelectedOrder(null); }}
@@ -3407,7 +3441,7 @@ export default function WaiterPage() {
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getOrderStatusColor(order.status)}`}>{order.status}</span>
                   </div>
                   {(order as any).customerName && <p className="text-sm text-primary-600 font-medium">{(order as any).customerName}</p>}
-                  <p className="text-xs text-gray-400 font-mono">{order.orderNumber}</p>
+                  <p className="text-xs text-gray-400 font-mono">Pedido #{shortOrder(order.orderNumber)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold">RD$ {((order as any).total ?? 0).toFixed(2)}</p>
@@ -3617,7 +3651,7 @@ export default function WaiterPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Mover comensal a otra mesa</h2>
-            <p className="text-sm text-gray-600 mb-4">Orden {showMoveModal.order.orderNumber} · Mesa actual: {showMoveModal.order.tableNumber}</p>
+            <p className="text-sm text-gray-600 mb-4">Pedido #{shortOrder(showMoveModal.order.orderNumber)} · Mesa actual: {showMoveModal.order.tableNumber}</p>
             <label className="block text-sm font-medium text-gray-700 mb-2">Mesa destino</label>
             <select
               value={moveTargetTableId ?? ''}
@@ -3814,7 +3848,7 @@ export default function WaiterPage() {
                               <div key={getOrderId(order)} className="bg-white rounded-lg border-2 border-purple-200 p-4 shadow-sm">
                               <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-lg text-gray-900">{order.orderNumber}</span>
+                                  <span className="font-bold text-lg text-gray-900">Pedido #{shortOrder(order.orderNumber)}</span>
                                   {(order.items ?? []).some((i: any) => (i.allergies ?? i.Allergies ?? '').trim()) && (
                                     <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1">
                                       <AlertCircle className="w-3.5 h-3.5" /> ALERGIA

@@ -40,6 +40,13 @@ function getHubUrl(): string {
   return `${window.location.origin}/hubs/orders`;
 }
 
+// Reemplaza el código largo (ORD-20260611144054-7cfdfa) por su parte corta (7CFDFA) dentro de un texto.
+function withShortOrder(msg: string, orderNumber?: string): string {
+  if (!orderNumber) return msg;
+  const short = (orderNumber.split('-').pop() ?? '').toUpperCase();
+  return short ? msg.split(orderNumber).join(short) : msg;
+}
+
 export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificationsOptions) {
   const [notifications, setNotifications] = useState<WaiterNotification[]>([]);
   const [connected, setConnected] = useState(false);
@@ -50,6 +57,10 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
 
   const markAllRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  }, []);
+
+  const markRead = useCallback((id: string) => {
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
   }, []);
 
   const dismiss = useCallback((id: string) => {
@@ -88,7 +99,8 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
     const hubUrl = getHubUrl();
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+        accessTokenFactory: () => localStorage.getItem('waiter_token') ?? token ?? '',
         // Intenta WebSocket primero; si el proxy no soporta upgrade, cae a LongPolling.
         // Ambos van a través del proxy Next.js (mismo origen → sin problema de cert SSL).
         skipNegotiation: false,
@@ -107,7 +119,7 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
         orderId: data.orderId,
         orderNumber: data.orderNumber,
         tableNumber: data.tableNumber,
-        message: data.message ?? `Orden #${data.orderNumber} lista para servir`,
+        message: withShortOrder(data.message ?? `Orden #${data.orderNumber} lista para servir`, data.orderNumber),
         timestamp: new Date(),
       });
     });
@@ -118,7 +130,7 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
         orderId: data.orderId,
         orderNumber: data.orderNumber,
         tableNumber: data.tableNumber,
-        message: data.message ?? `Mesa ${data.tableNumber} terminó de comer`,
+        message: withShortOrder(data.message ?? `Mesa ${data.tableNumber} terminó de comer`, data.orderNumber),
         timestamp: new Date(),
       });
     });
@@ -129,7 +141,7 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
         orderId: data.orderId,
         orderNumber: data.orderNumber,
         tableNumber: data.tableNumber,
-        message: data.message ?? `Mesa ${data.tableNumber} agregó más ítems`,
+        message: withShortOrder(data.message ?? `Mesa ${data.tableNumber} agregó más ítems`, data.orderNumber),
         timestamp: new Date(),
       });
     });
@@ -140,7 +152,7 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
         orderId: data.orderId,
         orderNumber: data.orderNumber,
         tableNumber: String(data.tableNumber ?? ''),
-        message: data.message ?? `Mesa ${data.tableNumber} solicita la cuenta`,
+        message: withShortOrder(data.message ?? `Mesa ${data.tableNumber} solicita la cuenta`, data.orderNumber),
         timestamp: new Date(),
       });
     });
@@ -224,5 +236,5 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
     };
   }, [waiterId, token, addNotification]);
 
-  return { notifications, unreadCount, connected, markAllRead, dismiss, clearAll };
+  return { notifications, unreadCount, connected, markAllRead, markRead, dismiss, clearAll };
 }

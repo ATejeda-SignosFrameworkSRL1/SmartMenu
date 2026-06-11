@@ -48,7 +48,8 @@ export function useAdminNotifications(token: string | null) {
     const hubUrl = getHubUrl();
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+        accessTokenFactory: () => localStorage.getItem('admin_token') ?? token ?? '',
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })

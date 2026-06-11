@@ -84,7 +84,8 @@ export default function ReservationsPage() {
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/hubs/reservations', {
-        accessTokenFactory: () => token,
+        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+        accessTokenFactory: () => localStorage.getItem('admin_token') ?? '',
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })

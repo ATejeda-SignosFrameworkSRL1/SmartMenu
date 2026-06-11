@@ -100,7 +100,8 @@ function CajaTab({ user }: { user: any }) {
     const hubUrl = typeof window !== 'undefined' ? `${window.location.origin}/hubs/orders` : '/hubs/orders';
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+        accessTokenFactory: () => localStorage.getItem('cashier_token') ?? '',
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])

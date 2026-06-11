@@ -47,10 +47,13 @@ interface Reservation {
   customerName: string;
   customerPhone: string;
   customerEmail?: string;
+  confirmationCode?: string;
   numberOfGuests: number;
   reservationDateTime: string;
   isConfirmed: boolean;
   isCancelled?: boolean;
+  status?: string; // Pending | Confirmed | Seated | Completed | Cancelled | Expired | NoShow
+  assignedTableIds?: number[];
   tableNumber: number | null;
   tableId: number | null;
   zoneName: string | null;
@@ -85,26 +88,6 @@ interface AssignableTable {
   isCurrent: boolean;
 }
 
-// CAL-FE — Disponibilidad/ocupación (endpoints read-only nuevos del backend)
-interface OccupancyBlock {
-  time: string;            // "19:00"
-  covers: number;
-  maxCovers: number;
-  reservations: number;
-  maxReservations: number;
-  status: 'available' | 'limited' | 'full';
-}
-interface OccupancyServiceWindow {
-  label: string;
-  start: string;
-  end: string;
-}
-interface OccupancyResponse {
-  date: string;
-  slotMinutes: number;
-  serviceWindows: OccupancyServiceWindow[];
-  blocks: OccupancyBlock[];
-}
 interface TableAvailability {
   tableId: number;
   tableNumber: number;
@@ -131,7 +114,9 @@ export default function HostApp() {
   useEffect(() => { setMounted(true); }, []);
   const [showAssignModal, setShowAssignModal] = useState(false);
   // HOST-MESAS-RESERVAS.2 — mini-modal para "+N más" reservas de una mesa
-  const [tableReservasModal, setTableReservasModal] = useState<{ table: Table; reservas: Reservation[] } | null>(null);
+  const [tableReservasModal, setTableReservasModal] = useState<{ table: Table } | null>(null);
+  const [occTableDate, setOccTableDate] = useState<string>('');               // ocupación por mesa: día seleccionado (YYYY-MM-DD)
+  const [occTableMonth, setOccTableMonth] = useState<Date>(() => new Date()); // mes navegable del calendario del modal de ocupación por mesa
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
 
@@ -180,14 +165,6 @@ export default function HostApp() {
   const [filterTime, setFilterTime] = useState<'any' | 'today' | 'tomorrow' | 'week' | 'custom'>('any');
   const [filterTimeFrom, setFilterTimeFrom] = useState<string>('');
   const [filterTimeTo, setFilterTimeTo] = useState<string>('');
-
-  // CAL-FE FEATURE 1 — Modal calendario + ocupación por bloque
-  const [showOccupancyModal, setShowOccupancyModal] = useState(false);
-  const [occupancyDate, setOccupancyDate] = useState<string>(() => new Date().toLocaleDateString('sv-SE'));
-  const [occMonth, setOccMonth] = useState<Date>(() => new Date()); // mes navegable del calendario de ocupación del modal
-  const [occupancyData, setOccupancyData] = useState<OccupancyResponse | null>(null);
-  const [occLoading, setOccLoading] = useState(false);
-  const [occError, setOccError] = useState(false);
 
   // CAL-FE FEATURE 2 — Slots libres por mesa (mapa tableId -> freeSlots[])
   const [tableSlots, setTableSlots] = useState<Record<number, string[]>>({});
@@ -267,27 +244,6 @@ export default function HostApp() {
     }
   }, []);
 
-  // CAL-FE FEATURE 1 — cargar ocupación por bloque de un día
-  const loadOccupancy = useCallback(async (date: string) => {
-    if (!date) return;
-    setOccLoading(true);
-    setOccError(false);
-    try {
-      const res = await api.get(`/api/tablereservation/availability/occupancy?date=${date}`);
-      const data = res.data as OccupancyResponse;
-      setOccupancyData({
-        date: data?.date ?? date,
-        slotMinutes: data?.slotMinutes ?? 0,
-        serviceWindows: Array.isArray(data?.serviceWindows) ? data.serviceWindows : [],
-        blocks: Array.isArray(data?.blocks) ? data.blocks : [],
-      });
-    } catch {
-      setOccupancyData(null);
-      setOccError(true);
-    } finally {
-      setOccLoading(false);
-    }
-  }, []);
 
   // Cargar tablas disponibles para una reserva, opcionalmente filtrando por zona específica
   const loadAssignableTables = async (reservationId: number, zoneId: number | null) => {
@@ -456,7 +412,9 @@ export default function HostApp() {
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        // Leer el token FRESCO en cada negotiate/reconnect (no capturar el valor de montaje):
+        // tras un relogin/refresh, la próxima reconexión usa el token nuevo sin recargar la página.
+        accessTokenFactory: () => localStorage.getItem('host_token') ?? '',
         skipNegotiation: false,
         // El proxy same-origin de Next (/hubs/* → backend) no actualiza WebSockets,
         // por lo que el intento de WS fallaba siempre y ensuciaba la consola con
@@ -546,12 +504,6 @@ export default function HostApp() {
     return () => { clearInterval(interval); clearInterval(reservInterval); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // CAL-FE FEATURE 1 — al abrir el modal o cambiar la fecha, recargar ocupación
-  useEffect(() => {
-    if (!showOccupancyModal) return;
-    loadOccupancy(occupancyDate);
-  }, [showOccupancyModal, occupancyDate, loadOccupancy]);
 
   // CAL-FE FEATURE 2 — día efectivo para slots de mesa: deriva del filtro temporal activo (o "hoy")
   const slotsDay = useMemo<string>(() => {
@@ -831,6 +783,24 @@ export default function HostApp() {
   const totalPending = reservations.filter(r => !r.isConfirmed).length;
   const totalConfirmed = reservations.filter(r => r.isConfirmed).length;
 
+  // Ocupación por mesa: reservas confirmadas/sentadas que ocupan la mesa en un día (YYYY-MM-DD).
+  const occupancyForTableOnDate = (table: Table, ymd: string) =>
+    reservations
+      .filter(r => {
+        const occupies = r.tableId === table.id || (r.assignedTableIds || []).includes(table.id);
+        const st = r.status || (r.isConfirmed ? 'Confirmed' : (r.isCancelled ? 'Cancelled' : 'Pending'));
+        const active = st === 'Confirmed' || st === 'Seated';
+        const sameDay = (r.reservationDateTime || '').slice(0, 10) === ymd;
+        return occupies && active && sameDay;
+      })
+      .sort((a, b) => (a.reservationDateTime || '').localeCompare(b.reservationDateTime || ''));
+  const openTableOccupancy = (table: Table) => {
+    const t = new Date();
+    const ymd = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    setOccTableDate(ymd);
+    setOccTableMonth(new Date(t.getFullYear(), t.getMonth(), 1));
+    setTableReservasModal({ table });
+  };
   const to12h = (t?: string | null): string => {
     if (!t) return '';
     const [hs, m = '00'] = String(t).split(':');
@@ -1470,21 +1440,6 @@ export default function HostApp() {
                 </span>
               )}
 
-              {/* CAL-FE FEATURE 1 — abrir modal calendario + ocupación por bloque */}
-              <button
-                onClick={() => {
-                  // Sembrar la fecha del modal con el día efectivo del filtro actual
-                  setOccupancyDate(slotsDay);
-                  const [yy, mm] = slotsDay.split('-').map(Number);
-                  setOccMonth(new Date(yy, (mm || 1) - 1, 1));
-                  setShowOccupancyModal(true);
-                }}
-                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-600 text-white border border-blue-600 hover:bg-blue-700 shadow-sm transition-all"
-                title="Ver el día y su ocupación por bloque horario"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                Ver día / ocupación
-              </button>
             </div>
           </div>
 
@@ -1580,22 +1535,34 @@ export default function HostApp() {
               <div className={`h-1.5 w-full ${getStatusStrip(table.status)}`} />
 
               <div className="p-4 flex flex-col flex-1">
-                {/* Number + badge */}
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-4xl font-black text-slate-900 leading-none">
-                    {table.tableNumber}
-                  </span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${getStatusBadge(table.status)}`}>
-                    {getStatusLabel(table.status)}
-                  </span>
+                {/* Encabezado (no clickable) — "Ver reservas" se abre solo con el botón de abajo */}
+                <div className="mb-2">
+                  {/* Number + badge */}
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-4xl font-black text-slate-900 leading-none">
+                      {table.tableNumber}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${getStatusBadge(table.status)}`}>
+                      {getStatusLabel(table.status)}
+                    </span>
+                  </div>
+
+                  {/* Zone + Capacity */}
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest truncate">{table.zoneName}</p>
+                  <div className="flex items-center gap-1 mt-1 text-slate-500">
+                    <Users className="w-3 h-3" />
+                    <span className="text-xs">{table.capacity} personas</span>
+                  </div>
                 </div>
 
-                {/* Zone + Capacity */}
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest truncate">{table.zoneName}</p>
-                <div className="flex items-center gap-1 mt-1 text-slate-500">
-                  <Users className="w-3 h-3" />
-                  <span className="text-xs">{table.capacity} personas</span>
-                </div>
+                {/* Ver reservas — botón explícito siempre visible (táctil/tablet: el hover no aplica) */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); openTableOccupancy(table); }}
+                  className="mt-1 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200 text-xs font-bold transition-colors"
+                >
+                  <CalendarCheck className="w-4 h-4" /> Ver reservas
+                </button>
 
                 {/* CAL-FE FEATURE 2 — Horarios libres de la mesa para el día efectivo (badges + "+N más") */}
                 {(() => {
@@ -1796,7 +1763,7 @@ export default function HostApp() {
                         {/* +N más reservas */}
                         {extra > 0 && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); setTableReservasModal({ table, reservas: tableReservas }); }}
+                            onClick={(e) => { e.stopPropagation(); openTableOccupancy(table); }}
                             className="mt-1.5 w-full py-1.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 rounded transition-colors flex items-center justify-center gap-1"
                           >
                             <ChevronDown className="w-3 h-3" />
@@ -1850,252 +1817,32 @@ export default function HostApp() {
 
       </>}
 
-      {/* ════════ CAL-FE FEATURE 1 — Modal Calendario + Ocupación por bloque ════════ */}
-      {showOccupancyModal && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto"
-          onClick={() => setShowOccupancyModal(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-4 max-h-[90vh] flex flex-col overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-slate-900 px-5 py-4 flex items-center justify-between flex-shrink-0">
-              <div>
-                <p className="text-xs text-blue-300 uppercase tracking-wider font-semibold flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5" /> Ocupación del día
-                </p>
-                <h2 className="text-lg font-bold text-white capitalize">
-                  {(() => {
-                    const [y, m, d] = occupancyDate.split('-').map(Number);
-                    return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-                  })()}
-                </h2>
-              </div>
-              <button
-                onClick={() => setShowOccupancyModal(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-red-500/80 transition-colors"
-                aria-label="Cerrar"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Body — calendario + desglose */}
-            <div className="flex-1 overflow-y-auto p-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* (a) Calendario interactivo (patrón del mini-calendario, tema azul) */}
-                <div className="border border-gray-200 rounded-xl p-3 bg-white h-fit">
-                  <div className="flex items-center justify-between mb-2">
-                    <button
-                      type="button"
-                      onClick={() => setOccMonth(mo => new Date(mo.getFullYear(), mo.getMonth() - 1, 1))}
-                      className="p-1.5 rounded-lg hover:bg-gray-100"
-                      aria-label="Mes anterior"
-                    >
-                      <ChevronLeft className="w-4 h-4 text-slate-600" />
-                    </button>
-                    <p className="text-sm font-bold capitalize text-slate-700">
-                      {occMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' })}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setOccMonth(mo => new Date(mo.getFullYear(), mo.getMonth() + 1, 1))}
-                      className="p-1.5 rounded-lg hover:bg-gray-100"
-                      aria-label="Mes siguiente"
-                    >
-                      <ChevronRight className="w-4 h-4 text-slate-600" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-7 mb-1">
-                    {['D','L','M','M','J','V','S'].map((d, i) => (
-                      <span key={i} className="text-center text-[10px] font-bold text-slate-400 uppercase py-1">{d}</span>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-0.5">
-                    {(() => {
-                      const year = occMonth.getFullYear();
-                      const month = occMonth.getMonth();
-                      const firstDay = new Date(year, month, 1).getDay();
-                      const daysInMonth = new Date(year, month + 1, 0).getDate();
-                      const todayYMD = new Date().toLocaleDateString('sv-SE');
-                      const cells: React.ReactNode[] = [];
-                      for (let i = 0; i < firstDay; i++) cells.push(<div key={`b${i}`} />);
-                      for (let d = 1; d <= daysInMonth; d++) {
-                        const ymd = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                        const isPast = ymd < todayYMD;
-                        const isToday = ymd === todayYMD;
-                        const isSelected = ymd === occupancyDate;
-                        cells.push(
-                          <button
-                            key={ymd}
-                            type="button"
-                            disabled={isPast}
-                            onClick={() => setOccupancyDate(ymd)}
-                            className={[
-                              'h-9 w-full text-sm rounded-md transition-colors',
-                              isPast
-                                ? 'text-slate-300 cursor-not-allowed'
-                                : isSelected
-                                  ? 'bg-blue-600 text-white font-bold shadow-sm'
-                                  : isToday
-                                    ? 'bg-blue-50 text-blue-700 font-bold ring-1 ring-blue-300'
-                                    : 'text-slate-700 hover:bg-blue-50',
-                            ].join(' ')}
-                          >
-                            {d}
-                          </button>
-                        );
-                      }
-                      return cells;
-                    })()}
-                  </div>
-                  <div className="mt-3 pt-2 border-t border-gray-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const t = new Date();
-                        setOccupancyDate(t.toLocaleDateString('sv-SE'));
-                        setOccMonth(new Date(t.getFullYear(), t.getMonth(), 1));
-                      }}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                    >
-                      Ir a hoy
-                    </button>
-                  </div>
-                </div>
-
-                {/* (b) Desglose de ocupación por bloque, agrupado por turno */}
-                <div className="min-h-[200px]">
-                  {occLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full py-10 text-slate-400">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-3" />
-                      <p className="text-sm">Cargando ocupación…</p>
-                    </div>
-                  ) : occError ? (
-                    <div className="flex flex-col items-center justify-center h-full py-10 text-center">
-                      <XCircle className="w-10 h-10 text-red-300 mb-2" />
-                      <p className="text-sm font-semibold text-slate-600">No se pudo cargar la ocupación</p>
-                      <button
-                        onClick={() => loadOccupancy(occupancyDate)}
-                        className="mt-3 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 rounded-lg"
-                      >
-                        Reintentar
-                      </button>
-                    </div>
-                  ) : !occupancyData || occupancyData.blocks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full py-10 text-center">
-                      <Inbox className="w-10 h-10 text-gray-200 mb-2" />
-                      <p className="text-sm font-semibold text-slate-500">Sin bloques de servicio</p>
-                      <p className="text-xs text-slate-400 mt-1">No hay disponibilidad configurada para este día.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {(() => {
-                        const windows = occupancyData.serviceWindows.length > 0
-                          ? occupancyData.serviceWindows
-                          : [{ label: 'Servicio', start: '00:00', end: '23:59' }];
-                        // Agrupar bloques por ventana; los que no encajen → "Otros" (no se pierden)
-                        const used = new Set<string>();
-                        const groups = windows.map(w => {
-                          const blocks = occupancyData.blocks.filter(b => {
-                            const within = b.time >= w.start && b.time <= w.end;
-                            if (within) used.add(b.time);
-                            return within;
-                          });
-                          return { label: w.label, blocks };
-                        }).filter(g => g.blocks.length > 0);
-                        const leftover = occupancyData.blocks.filter(b => !used.has(b.time));
-                        if (leftover.length > 0) groups.push({ label: 'Otros', blocks: leftover });
-
-                        const statusStyle = (s: OccupancyBlock['status']) => {
-                          switch (s) {
-                            case 'available': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                            case 'limited':   return 'bg-amber-50 text-amber-700 border-amber-200';
-                            case 'full':      return 'bg-red-50 text-red-700 border-red-200';
-                            default:          return 'bg-slate-50 text-slate-600 border-slate-200';
-                          }
-                        };
-
-                        return groups.map(g => (
-                          <div key={g.label}>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{g.label}</p>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                              {g.blocks.map(b => (
-                                <div
-                                  key={b.time}
-                                  className={`rounded-lg border px-2 py-1.5 text-center ${statusStyle(b.status)}`}
-                                  title={`${b.reservations}/${b.maxReservations} reservas · ${b.covers}/${b.maxCovers} cubiertos`}
-                                >
-                                  <p className="text-sm font-bold tabular-nums leading-none">{to12h(b.time)}</p>
-                                  <p className="text-[11px] font-semibold tabular-nums mt-0.5">
-                                    {b.maxCovers > 0 ? `${b.covers}/${b.maxCovers}` : `${b.covers}`}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ));
-                      })()}
-
-                      {/* Leyenda de colores */}
-                      <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-slate-500 border-t border-gray-100">
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Disponible</span>
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Limitado</span>
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Lleno</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer — azul = acción principal, rojo = cancelar */}
-            <div className="bg-slate-50 px-5 py-3 border-t flex items-center justify-end gap-2 flex-shrink-0">
-              <button
-                onClick={() => setShowOccupancyModal(false)}
-                className="px-4 py-2 rounded-xl text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  // Aplicar el filtro de reservas del host a este día (modo 'custom' = rango de 1 día)
-                  setFilterTime('custom');
-                  setFilterTimeFrom(occupancyDate);
-                  setFilterTimeTo(occupancyDate);
-                  setShowOccupancyModal(false);
-                }}
-                className="px-4 py-2 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-colors flex items-center gap-1.5"
-              >
-                <CalendarCheck className="w-4 h-4" />
-                Ver este día
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* HOST-MESAS-RESERVAS.2 — Mini-modal: TODAS las reservas de una mesa con sus acciones */}
-      {tableReservasModal && (
+      {tableReservasModal && (() => {
+        const tbl = tableReservasModal.table;
+        const dayRes = occTableDate ? occupancyForTableOnDate(tbl, occTableDate) : [];
+        const dateLabel = occTableDate
+          ? new Date(occTableDate + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          : '';
+        return (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => setTableReservasModal(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden max-h-[85vh] flex flex-col"
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="bg-indigo-600 text-white px-5 py-3.5 flex items-center justify-between">
+            <div className="bg-indigo-600 text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-base font-bold flex items-center gap-2">
                   <CalendarCheck className="w-4 h-4" />
-                  Mesa #{tableReservasModal.table.tableNumber}
+                  Reservas · Mesa #{tbl.tableNumber}
                 </h3>
                 <p className="text-xs text-indigo-100 mt-0.5">
-                  {tableReservasModal.table.zoneName} · {tableReservasModal.reservas.length} reservas
+                  {tbl.zoneName} · hasta {tbl.capacity} personas
                 </p>
               </div>
               <button onClick={() => setTableReservasModal(null)} className="p-1.5 hover:bg-white/10 rounded">
@@ -2103,82 +1850,112 @@ export default function HostApp() {
               </button>
             </div>
 
-            {/* Lista de reservas con todas sus acciones (tamaño normal aquí, hay espacio) */}
-            <div className="overflow-y-auto px-4 py-3 space-y-2.5 flex-1">
-              {tableReservasModal.reservas.map(r => {
-                const isPending = !r.isConfirmed;
-                const dt = new Date(r.reservationDateTime);
-                const dayLabel = dt.toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric', month: 'short' });
-                const timeLabel = dt.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
-                return (
-                  <div
-                    key={r.id}
-                    className={`rounded-lg p-3 border-l-4 ${
-                      isPending ? 'bg-amber-50 border-amber-400' : 'bg-emerald-50 border-emerald-400'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="font-bold text-sm text-slate-900 truncate">{r.customerName}</p>
-                      <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                        isPending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {isPending ? 'Pendiente' : 'Confirmada'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-600 space-y-1 mb-2.5">
-                      <p className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {dayLabel} · {timeLabel} · {r.numberOfGuests} pers
-                      </p>
-                      {r.customerPhone && (
-                        <a
-                          href={`tel:${r.customerPhone}`}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 font-semibold transition-colors"
-                        >
-                          <Phone className="w-3 h-3" />
-                          Contactar
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex gap-1.5">
-                      {isPending ? (
-                        <button
-                          onClick={() => { openReservationAssignModal(r); setTableReservasModal(null); }}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-xs font-semibold"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          Aceptar
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => { openReservationAssignModal(r); setTableReservasModal(null); }}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-xs font-semibold"
-                        >
-                          <CalendarCheck className="w-3.5 h-3.5" />
-                          Reasignar
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { requestCancelReservation(r); setTableReservasModal(null); }}
-                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-md text-xs font-semibold"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        {isPending ? 'Rechazar' : 'Cancelar'}
-                      </button>
-                      <button
-                        onClick={() => { openRescheduleModal(r); setTableReservasModal(null); }}
-                        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-white border-2 border-blue-300 text-blue-600 hover:bg-blue-50 rounded-md text-xs font-semibold"
-                        title="Mover a otra fecha"
-                      >
-                        <Calendar className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+            <div className="overflow-y-auto flex-1">
+              {/* Calendario — día seleccionable (reservas confirmadas/sentadas de la mesa) */}
+              <div className="px-4 pt-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label="Mes anterior">
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <p className="text-sm font-bold capitalize text-slate-700">{occTableMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' })}</p>
+                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label="Mes siguiente">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
                   </div>
-                );
-              })}
+                  <div className="mb-1 grid grid-cols-7">
+                    {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => (
+                      <span key={i} className="py-1 text-center text-[10px] font-bold uppercase text-slate-400">{d}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {(() => {
+                      const year = occTableMonth.getFullYear();
+                      const month = occTableMonth.getMonth();
+                      const firstDay = new Date(year, month, 1).getDay();
+                      const daysInMonth = new Date(year, month + 1, 0).getDate();
+                      const cells: any[] = [];
+                      for (let i = 0; i < firstDay; i++) cells.push(<div key={`b${i}`} />);
+                      for (let d = 1; d <= daysInMonth; d++) {
+                        const ymd = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        const isSel = ymd === occTableDate;
+                        const count = occupancyForTableOnDate(tbl, ymd).length;
+                        cells.push(
+                          <button
+                            key={ymd}
+                            type="button"
+                            onClick={() => setOccTableDate(ymd)}
+                            className={[
+                              'relative flex h-9 w-full items-center justify-center rounded-lg text-sm transition-colors',
+                              isSel ? 'bg-indigo-600 font-bold text-white' : 'text-slate-700 hover:bg-slate-200',
+                            ].join(' ')}
+                          >
+                            {d}
+                            {count > 0 && <span className={`absolute bottom-1 h-1 w-1 rounded-full ${isSel ? 'bg-white' : 'bg-indigo-500'}`} />}
+                          </button>
+                        );
+                      }
+                      return cells;
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Reservas confirmadas / sentadas del día seleccionado */}
+              <div className="px-4 py-3">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400 capitalize">{dateLabel}</p>
+                {dayRes.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-slate-400">
+                    <CalendarCheck className="mx-auto mb-2 h-7 w-7 opacity-40" />
+                    Sin reservas confirmadas para este día
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {dayRes.map(r => {
+                      const seated = r.status === 'Seated';
+                      return (
+                        <div key={r.id} className={`rounded-lg p-3 border-l-4 ${seated ? 'bg-blue-50 border-blue-400' : 'bg-emerald-50 border-emerald-400'}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className={`font-bold text-sm truncate ${r.customerName ? 'text-slate-900' : 'italic text-slate-400'}`}>{r.customerName || (r.confirmationCode ? `Reserva ${r.confirmationCode}` : 'Sin nombre')}</p>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${seated ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {seated ? 'Sentada' : 'Confirmada'}
+                            </span>
+                          </div>
+                          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-600">
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{to12h((r.reservationDateTime || '').slice(11, 16))}</span>
+                            <span className="flex items-center gap-1"><Users className="w-3 h-3" />{r.numberOfGuests} {r.numberOfGuests === 1 ? 'persona' : 'personas'}</span>
+                            {r.occasionType && r.occasionType !== 0 && OCCASION_LABELS[r.occasionType] ? (
+                              <span>{OCCASION_LABELS[r.occasionType].icon} {OCCASION_LABELS[r.occasionType].label}</span>
+                            ) : null}
+                          </p>
+                          {r.specialRequests && <p className="mt-1 text-[11px] italic text-amber-600 truncate" title={r.specialRequests}>“{r.specialRequests}”</p>}
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {r.customerPhone && (
+                              <a href={`tel:${r.customerPhone}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-semibold transition-colors">
+                                <Phone className="w-3 h-3" /> Contactar
+                              </a>
+                            )}
+                            {!seated && (
+                              <>
+                                <button onClick={() => { openReservationAssignModal(r); setTableReservasModal(null); }} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-semibold">
+                                  <CalendarCheck className="w-3 h-3" /> Reasignar
+                                </button>
+                                <button onClick={() => { openRescheduleModal(r); setTableReservasModal(null); }} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 text-[11px] font-semibold">
+                                  <Calendar className="w-3 h-3" /> Mover
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="bg-gray-50 px-4 py-2.5 border-t flex justify-end">
+            <div className="bg-gray-50 px-4 py-2.5 border-t flex items-center justify-between flex-shrink-0">
+              <span className="text-xs text-slate-500">{dayRes.length} reserva{dayRes.length !== 1 ? 's' : ''} este día</span>
               <button
                 onClick={() => setTableReservasModal(null)}
                 className="px-4 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
@@ -2188,7 +1965,8 @@ export default function HostApp() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Assign Modal */}
       {showAssignModal && selectedTable && (
