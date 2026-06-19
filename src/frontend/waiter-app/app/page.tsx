@@ -158,8 +158,13 @@ export default function WaiterPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const [view, setView] = useState<'general' | 'my-tables' | 'plano'>('general');
-  const { data: floorPlanData, palette: floorPlanPalette } = useWaiterFloorPlan();
+  const { data: floorPlanData, palette: floorPlanPalette, enabled: floorPlanEnabled } = useWaiterFloorPlan();
   const [planoSel, setPlanoSel] = useState<string | number | null>(null);
+
+  // Si el admin oculta el plano para meseros (switch en Gestión de Salón), salir de la pestaña Plano.
+  useEffect(() => {
+    if (!floorPlanEnabled && view === 'plano') setView('general');
+  }, [floorPlanEnabled, view]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   // Estados del modal de cobro expandido
@@ -1974,14 +1979,16 @@ export default function WaiterPage() {
           >
             Mis Mesas ({myOrders.length})
           </button>
-          <button
-            onClick={() => setView('plano')}
-            className={`px-6 py-2 rounded-md font-medium transition-colors ${
-              view === 'plano' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            Plano
-          </button>
+          {floorPlanEnabled && (
+            <button
+              onClick={() => setView('plano')}
+              className={`px-6 py-2 rounded-md font-medium transition-colors ${
+                view === 'plano' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Plano
+            </button>
+          )}
         </div>
         {/* QR-MESA-DIRECT.1: botón "Identificar mesa por QR" eliminado.
             La identificación se hace tap directo en la card de la mesa (vista Mesas General). */}

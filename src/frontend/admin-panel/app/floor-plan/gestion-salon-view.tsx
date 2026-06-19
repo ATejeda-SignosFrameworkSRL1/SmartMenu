@@ -11,7 +11,7 @@ import { useFloorPlanLive } from "@/lib/useFloorPlanLive";
  * (ssr:false) porque react-konva necesita el DOM.
  */
 export default function GestionSalonView() {
-  const { data, reservations, palette, onLayoutChange, onPaletteChange } = useFloorPlanLive();
+  const { data, reservations, palette, hostEnabled, waiterEnabled, onLayoutChange, onPaletteChange, onToggleVisibility } = useFloorPlanLive();
 
   // El dashboard ocupa el alto disponible (resta header + barra publicación + KPIs + paddings).
   const [dashboardHeight, setDashboardHeight] = useState(620);
@@ -30,6 +30,9 @@ export default function GestionSalonView() {
       dashboardHeight={dashboardHeight}
       palette={palette}
       onPaletteChange={onPaletteChange}
+      hostEnabled={hostEnabled}
+      waiterEnabled={waiterEnabled}
+      onToggleChannel={onToggleVisibility}
     />
   );
 }

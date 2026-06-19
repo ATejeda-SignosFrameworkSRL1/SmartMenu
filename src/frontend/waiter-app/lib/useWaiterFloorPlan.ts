@@ -58,14 +58,16 @@ function normalize(raw: FloorPlanData): FloorPlanData {
 export function useWaiterFloorPlan() {
   const [data, setData] = useState<FloorPlanData>({ zones: [] });
   const [palette, setPalette] = useState<StatusPaletteOverride | undefined>(undefined);
+  const [enabled, setEnabled] = useState(true);
 
   const load = useCallback(async () => {
     try {
       const res = await api.get('/api/floorplan');
       const raw = (res.data ?? { zones: [] }) as FloorPlanData;
       setData(normalize(raw));
-      const pal = (res.data as { palette?: StatusPaletteOverride | null })?.palette;
-      setPalette(pal ?? undefined);
+      const cfg = res.data as { palette?: StatusPaletteOverride | null; waiterEnabled?: boolean };
+      setPalette(cfg?.palette ?? undefined);
+      setEnabled(cfg?.waiterEnabled ?? true);
     } catch {
       /* silencioso */
     }
@@ -121,6 +123,10 @@ export function useWaiterFloorPlan() {
       const id = Number(d?.tableId ?? d?.TableId);
       if (id) applyWaiter(id, d?.waiter ?? d?.Waiter ?? null, d?.waiterName ?? d?.WaiterName ?? null);
     });
+    conn.on('FloorPlanVisibilityChanged', (d: any) => {
+      const w = d?.waiterEnabled ?? d?.WaiterEnabled;
+      if (typeof w === 'boolean') setEnabled(w);
+    });
     conn.start().catch(() => {});
 
     return () => {
@@ -128,5 +134,5 @@ export function useWaiterFloorPlan() {
     };
   }, [applyStatus, applyWaiter]);
 
-  return { data, palette, reload: load };
+  return { data, palette, enabled, reload: load };
 }

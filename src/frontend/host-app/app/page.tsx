@@ -131,7 +131,7 @@ export default function HostApp() {
 
   // View tabs: 'tables' or 'reservations'
   const [activeView, setActiveView] = useState<'tables' | 'reservations' | 'calendar'>('tables');
-  const { data: floorPlanData, palette: floorPlanPalette } = useHostFloorPlan();
+  const { data: floorPlanData, palette: floorPlanPalette, enabled: floorPlanEnabled } = useHostFloorPlan();
   const [showPlan, setShowPlan] = useState(false);
   const [planoSel, setPlanoSel] = useState<string | number | null>(null);
   const [planoTable, setPlanoTable] = useState<Table | null>(null);
@@ -1397,13 +1397,15 @@ export default function HostApp() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Zona</p>
-              <button
-                onClick={() => setShowPlan((v) => !v)}
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-                style={{ backgroundColor: '#16a34a' }}
-              >
-                {showPlan ? 'Ver lista' : 'Ver plano'}
-              </button>
+              {floorPlanEnabled && (
+                <button
+                  onClick={() => setShowPlan((v) => !v)}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                  style={{ backgroundColor: '#16a34a' }}
+                >
+                  {showPlan ? 'Ver lista' : 'Ver plano'}
+                </button>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -1596,7 +1598,7 @@ export default function HostApp() {
       </div>
 
       {/* Tables Grid / Plano del salón */}
-      {showPlan ? (
+      {showPlan && floorPlanEnabled ? (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-center justify-between px-4 py-2 text-xs text-slate-500">

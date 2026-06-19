@@ -103,6 +103,8 @@ export function useFloorPlanLive() {
   const [data, setData] = useState<FloorPlanData>({ zones: [] });
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [palette, setPalette] = useState<StatusPaletteOverride | undefined>(undefined);
+  const [hostEnabled, setHostEnabled] = useState(true);
+  const [waiterEnabled, setWaiterEnabled] = useState(true);
   const zoneNameToId = useRef<Map<string, string>>(new Map());
 
   const loadFloorPlan = useCallback(async () => {
@@ -113,8 +115,10 @@ export function useFloorPlanLive() {
       (raw.zones ?? []).forEach((z) => map.set(z.zoneName, z.zoneId));
       zoneNameToId.current = map;
       setData(normalizeFloorPlan(raw));
-      const pal = (res.data as { palette?: StatusPaletteOverride | null })?.palette;
-      setPalette(pal ?? undefined);
+      const cfg = res.data as { palette?: StatusPaletteOverride | null; hostEnabled?: boolean; waiterEnabled?: boolean };
+      setPalette(cfg?.palette ?? undefined);
+      setHostEnabled(cfg?.hostEnabled ?? true);
+      setWaiterEnabled(cfg?.waiterEnabled ?? true);
     } catch {
       /* silencioso */
     }
@@ -214,6 +218,12 @@ export function useFloorPlanLive() {
       const id = Number(d?.tableId ?? d?.TableId);
       if (id) applyTableWaiter(id, d?.waiter ?? d?.Waiter ?? null, d?.waiterName ?? d?.WaiterName ?? null);
     });
+    tablesConn.on('FloorPlanVisibilityChanged', (d: any) => {
+      const h = d?.hostEnabled ?? d?.HostEnabled;
+      const w = d?.waiterEnabled ?? d?.WaiterEnabled;
+      if (typeof h === 'boolean') setHostEnabled(h);
+      if (typeof w === 'boolean') setWaiterEnabled(w);
+    });
     tablesConn.start().catch(() => {});
 
     const resConn = mkConn('/hubs/reservations');
@@ -249,5 +259,14 @@ export function useFloorPlanLive() {
     }, 500);
   }, []);
 
-  return { data, reservations, palette, onLayoutChange, onPaletteChange };
+  // Switch de visibilidad del plano por app (Host/Mesero) → PUT /api/floorplan/visibility.
+  // El backend difunde FloorPlanVisibilityChanged para que host/waiter reaccionen en vivo.
+  const onToggleVisibility = useCallback((target: 'host' | 'waiter', enabled: boolean) => {
+    if (target === 'host') setHostEnabled(enabled);
+    else setWaiterEnabled(enabled);
+    const body = target === 'host' ? { host: enabled } : { waiter: enabled };
+    api.put('/api/floorplan/visibility', body, { headers: authHeader() }).catch(() => {});
+  }, []);
+
+  return { data, reservations, palette, hostEnabled, waiterEnabled, onLayoutChange, onPaletteChange, onToggleVisibility };
 }
