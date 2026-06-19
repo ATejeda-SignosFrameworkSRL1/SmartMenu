@@ -40,6 +40,7 @@ public class TableClaimController : ControllerBase
     /// Mesero solicita quedarse con una mesa. El admin recibirá notificación por SignalR.
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> RequestClaim([FromBody] RequestClaimDto dto)
     {
         try
@@ -239,6 +240,7 @@ public class TableClaimController : ControllerBase
     /// Admin lista todas las solicitudes pendientes.
     /// </summary>
     [HttpGet("pending")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetPending()
     {
         var requests = await _context.TableClaimRequests
@@ -265,6 +267,7 @@ public class TableClaimController : ControllerBase
     /// Historial de solicitudes (todas, para admin).
     /// </summary>
     [HttpGet("history")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetHistory([FromQuery] int? waiterId)
     {
         var q = _context.TableClaimRequests

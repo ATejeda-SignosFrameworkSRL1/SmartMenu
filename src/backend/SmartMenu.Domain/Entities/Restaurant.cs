@@ -19,6 +19,9 @@ public class Restaurant : BaseEntity
     /// </summary>
     public WaiterAuthMode WaiterAuthMode { get; set; } = WaiterAuthMode.PrivateOnly;
 
+    /// <summary>Paleta de colores de estado del plano (JSON, ej. {"occupied":"#..","reserved":"#.."}). Null = defaults del front.</summary>
+    public string? FloorPlanPaletteJson { get; set; }
+
     // Navigation properties
     public ICollection<User> Staff { get; set; } = new List<User>();
     public ICollection<Table> Tables { get; set; } = new List<Table>();

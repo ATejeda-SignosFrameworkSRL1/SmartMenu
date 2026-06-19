@@ -97,12 +97,12 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["Secret"];
 
-// Reject default placeholder in any non-Development environment
-if (!builder.Environment.IsDevelopment() &&
-    (string.IsNullOrWhiteSpace(secretKey) || secretKey.StartsWith("your-super-secret")))
+// Rechazar el placeholder conocido o un secreto vacío en TODOS los entornos (QA corre como
+// Development). Un secreto real debe venir de env var / user-secrets / appsettings.Development.json.
+if (string.IsNullOrWhiteSpace(secretKey) || secretKey.StartsWith("your-super-secret"))
 {
     throw new InvalidOperationException(
-        "JWT secret is missing or is the default placeholder. Set JwtSettings:Secret via environment variable or user-secrets before running outside Development.");
+        "JWT secret is missing or is the default placeholder. Set JwtSettings:Secret via environment variable, user-secrets, or appsettings.Development.json.");
 }
 
 builder.Services.AddAuthentication(options =>
@@ -201,6 +201,7 @@ builder.Services.Configure<SmartMenu.Application.Settings.ReservationSettings>(
 builder.Services.AddScoped<SmartMenu.Application.Services.IAuthService, SmartMenu.Infrastructure.Services.AuthService>();
 // Sprint 4.2 — Audit log de acciones sensibles (DGII trazabilidad)
 builder.Services.AddScoped<SmartMenu.Application.Services.IAuditService, SmartMenu.Infrastructure.Services.AuditService>();
+builder.Services.AddSingleton<SmartMenu.Application.Services.ITableRealtimeNotifier, SmartMenu.API.Hubs.TableRealtimeNotifier>();
 builder.Services.AddScoped<SmartMenu.Application.Services.IOrderService, SmartMenu.Infrastructure.Services.OrderService>();
 // Reservas — capacidad dinámica por intervalo: seams de comunicaciones y depósitos (stubs en MVP).
 builder.Services.AddScoped<SmartMenu.Application.Services.INotificationService, SmartMenu.Infrastructure.Services.LoggingNotificationService>();
@@ -434,6 +435,12 @@ if (app.Environment.IsDevelopment())
     //    en SmartMenu.Infrastructure/Data/Migrations/.
     await context.Database.MigrateAsync();
 
+    // 1b. Audit DB (DbNewMenuAudit) — contexto separado con su propio historial
+    //     (__AuditMigrationsHistory). Sin este migrate la tabla AuditLogs nunca se crea
+    //     y AuditInterceptor falla en silencio en cada cambio. Idempotente.
+    var auditContext = scope.ServiceProvider.GetRequiredService<SmartMenu.Infrastructure.Data.AuditDbContext>();
+    await auditContext.Database.MigrateAsync();
+
     // 2. Seed inicial.
     await SmartMenu.Infrastructure.Data.DbInitializer.SeedAsync(context);
 
@@ -456,6 +463,18 @@ if (app.Environment.IsDevelopment())
 
     // 7. Reservas — turnos (ServicePeriods) por defecto para la capacidad dinámica por intervalo.
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDefaultServicePeriodsAsync(context);
+
+    // 8. ZONA-EXCL — columnas IsZoneExclusive/HostResponseMessage para reservas de zona completa.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureZoneExclusiveColumnsAsync(context);
+
+    // 9. SHARED-TABLE-ORDER — columna CustomerName en OrderItems (varios comensales del mismo QR, una sola orden por mesa).
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureOrderItemCustomerNameColumnAsync(context);
+
+    // 10. PLANO (Gestión de Salón) — columnas de layout en Tables (PositionX/Y, Shape, Width/Height, Server)
+    //     + tabla FloorStructures. Idempotentes/transitorios hasta una migration EF formal.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorPlanColumnsAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureRestaurantPaletteColumnAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorStructureTableAsync(context);
 }
 
 app.Run();

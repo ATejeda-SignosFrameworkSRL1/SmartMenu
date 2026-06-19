@@ -39,4 +39,13 @@ public interface IReservationService
 
     /// <summary>Staff: reprograma a una nueva fecha/hora re-validando la ventana (mismo lock+check que create).</summary>
     Task<ReservationActionResult> RescheduleAsync(int id, RescheduleReservationDto dto, CancellationToken ct = default);
+
+    /// <summary>Portal público: solicita reservar una ZONA completa (uso exclusivo). Queda Pending para aprobación del host.</summary>
+    Task<ReservationActionResult> CreateZoneRequestAsync(ZoneRequestDto dto, CancellationToken ct = default);
+
+    /// <summary>Staff: responde una reserva de zona exclusiva — aceptar (bloquea toda la zona) o rechazar, con mensaje al cliente.</summary>
+    Task<ReservationActionResult> RespondZoneAsync(int id, ZoneDecisionDto dto, CancellationToken ct = default);
+
+    /// <summary>Público: estado de una reserva por confirmationCode (seguimiento).</summary>
+    Task<ReservationTrackDto?> GetTrackAsync(string code, CancellationToken ct = default);
 }

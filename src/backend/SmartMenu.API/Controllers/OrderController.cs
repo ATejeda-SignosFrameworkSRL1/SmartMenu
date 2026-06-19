@@ -24,6 +24,11 @@ public class OrderController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly SmartMenu.Application.Services.IAuditService _audit;
 
+    // Serializa la creación/agregación de órdenes POR MESA: varios comensales del mismo QR
+    // que ordenan casi a la vez no deben crear dos órdenes. Hay una sola instancia de backend,
+    // así que un lock en proceso por tableId basta.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim> _tableOrderLocks = new();
+
     public OrderController(IOrderService orderService, ILogger<OrderController> logger, IHubContext<KitchenHub> kitchenHub, IHubContext<OrderHub> orderHub, ApplicationDbContext context, SmartMenu.Application.Services.IAuditService audit)
     {
         _orderService = orderService;
@@ -41,13 +46,6 @@ public class OrderController : ControllerBase
         int.TryParse(sub, out var uid);
         var method = User.FindFirst("auth_method")?.Value ?? "password";
         return (uid, method);
-    }
-
-    private static string GetInnermostMessage(Exception ex)
-    {
-        while (ex.InnerException != null)
-            ex = ex.InnerException;
-        return ex.Message;
     }
 
     private async Task NotifyWaiterAsync(OrderDto order, string eventName, object payload)
@@ -85,13 +83,39 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
-    /// Crear nueva orden. Cliente final (QR + sessionId, sin JWT) o staff autenticado.
-    /// La identidad del cliente está atada a la mesa via sessionId; staff identity vía JWT.
+    /// Crear orden. Cliente final (QR + sessionId, sin JWT) o staff autenticado.
+    /// PEDIDO COMPARTIDO POR MESA: varios comensales del MISMO QR (misma mesa) comparten UNA
+    /// sola orden. Si la mesa ya tiene una orden viva, los ítems se agregan a ella (cada uno
+    /// sellado con el nombre del comensal) para que a cocina/bar/mesero les llegue como una
+    /// sola comanda; si no, se crea una nueva. Se serializa por mesa para que dos escaneos
+    /// casi simultáneos no creen dos órdenes. Pedidos sin mesa (POS/para llevar) crean siempre.
     /// </summary>
     [HttpPost]
     [AllowAnonymous]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status201Created)]
     public async Task<ActionResult<OrderDto>> CreateOrder([FromBody] CreateOrderDto request)
+    {
+        // Sin mesa (mostrador/para llevar): no aplica agregación por mesa.
+        if (!request.TableId.HasValue)
+            return await CreateFreshOrderAsync(request);
+
+        var gate = _tableOrderLocks.GetOrAdd(request.TableId.Value, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+        try
+        {
+            var activeOrderId = await _orderService.GetActiveOrderIdForTableAsync(request.TableId.Value);
+            return activeOrderId.HasValue
+                ? await AppendToTableOrderAsync(activeOrderId.Value, request)
+                : await CreateFreshOrderAsync(request);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>Crea una orden nueva (no existe orden viva en la mesa, o es pedido sin mesa).</summary>
+    private async Task<ActionResult<OrderDto>> CreateFreshOrderAsync(CreateOrderDto request)
     {
         try
         {
@@ -119,8 +143,7 @@ public class OrderController : ControllerBase
         catch (DbUpdateException ex)
         {
             _logger.LogError(ex, "Error creating order (DB)");
-            var msg = GetInnermostMessage(ex);
-            return BadRequest(new { error = msg });
+            return BadRequest(new { error = "No se pudo crear la orden. Intenta de nuevo." });
         }
         catch (ArgumentException ex)
         {
@@ -129,8 +152,95 @@ public class OrderController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating order");
-            var msg = GetInnermostMessage(ex);
-            return BadRequest(new { error = msg });
+            return BadRequest(new { error = "No se pudo crear la orden. Intenta de nuevo." });
+        }
+    }
+
+    /// <summary>
+    /// Agrega los ítems de un comensal a la orden viva de su mesa (mismo QR = misma comanda).
+    /// Cada ítem queda sellado con el nombre del comensal. Avisa al mesero siempre; a cocina
+    /// solo si la orden ya estaba en el KDS (confirmada), para no adelantarla antes de tiempo.
+    /// </summary>
+    private async Task<ActionResult<OrderDto>> AppendToTableOrderAsync(int orderId, CreateOrderDto request)
+    {
+        try
+        {
+            var order = await _orderService.AddItemsToOrderAsync(orderId, request.Items, request.CustomerName);
+            var who = string.IsNullOrWhiteSpace(request.CustomerName) ? "Un comensal" : request.CustomerName!.Trim();
+
+            // Mesero: la mesa sumó ítems a la comanda compartida.
+            await NotifyWaiterAsync(order, "ItemsAddedToOrder", new
+            {
+                orderId      = order.Id,
+                orderNumber  = order.OrderNumber,
+                tableNumber  = order.TableNumber,
+                customerName = request.CustomerName,
+                itemCount    = request.Items.Count,
+                message      = $"➕ {who} agregó {request.Items.Count} ítem(s) a la mesa {order.TableNumber}",
+                timestamp    = DateTime.UtcNow
+            });
+
+            // Cocina/KDS: solo si la orden ya está en el KDS (no Pendiente). Si sigue Pendiente,
+            // la comanda completa entrará cuando el mesero la confirme (igual que al crear).
+            if (!string.Equals(order.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+            {
+                var newItemsPayload = request.Items.Select(i => new
+                {
+                    dishId       = i.DishId,
+                    dishName     = order.Items?.FirstOrDefault(oi => oi.DishId == i.DishId)?.DishName ?? "Plato",
+                    quantity     = i.Quantity,
+                    notes        = i.Notes,
+                    customerName = request.CustomerName,
+                }).ToList<object>();
+
+                try
+                {
+                    await _kitchenHub.Clients.Group("kitchen").SendAsync("NewKitchenOrder", new
+                    {
+                        orderId     = order.Id,
+                        orderNumber = order.OrderNumber,
+                        tableNumber = order.TableNumber,
+                        items       = newItemsPayload,
+                        isAddition  = true,
+                        timestamp   = DateTime.UtcNow
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "No se pudo notificar a cocina por adición a la orden {OrderId}", order.Id);
+                }
+            }
+
+            var (userId, authMethod) = GetActorFromJwt();
+            await _audit.LogAsync(
+                userId: userId,
+                action: "Order.ItemsAppended",
+                entityType: "Order",
+                entityId: order.Id,
+                ip: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                authMethod: authMethod,
+                metadata: new {
+                    tableId      = order.TableId,
+                    customerName = request.CustomerName,
+                    addedCount   = request.Items.Count,
+                    total        = order.Total
+                });
+
+            return Ok(order);
+        }
+        catch (KeyNotFoundException)
+        {
+            // La orden viva desapareció entre el lookup y el append (raro): crear una nueva.
+            return await CreateFreshOrderAsync(request);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error appending items to table order {OrderId}", orderId);
+            return BadRequest(new { error = "No se pudieron agregar los ítems. Intenta de nuevo." });
         }
     }
 
@@ -175,6 +285,7 @@ public class OrderController : ControllerBase
     [HttpGet("all")]
     [ProducesResponseType(typeof(List<OrderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PagedResult<OrderDto>), StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,Manager,Waiter,Cashier,Host,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> GetAllOrders([FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
         if (page is null)
@@ -193,6 +304,7 @@ public class OrderController : ControllerBase
     [HttpGet("active")]
     [ProducesResponseType(typeof(List<OrderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PagedResult<OrderDto>), StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,Manager,Waiter,Cashier,Host,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> GetActiveOrders([FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
         if (page is null)
@@ -242,6 +354,7 @@ public class OrderController : ControllerBase
     [HttpPut("{id}/status")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusDto request)
     {
         try
@@ -282,6 +395,7 @@ public class OrderController : ControllerBase
     /// </summary>
     [HttpPut("{id}/kitchen-preparing")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> SetKitchenPreparing(int id)
     {
         try
@@ -298,6 +412,7 @@ public class OrderController : ControllerBase
     /// </summary>
     [HttpPut("{id}/kitchen-ready")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> SetKitchenReady(int id)
     {
         try
@@ -323,6 +438,7 @@ public class OrderController : ControllerBase
     /// </summary>
     [HttpPut("{id}/bar-preparing")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> SetBarPreparing(int id)
     {
         try
@@ -339,6 +455,7 @@ public class OrderController : ControllerBase
     /// </summary>
     [HttpPut("{id}/bar-ready")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> SetBarReady(int id)
     {
         try
@@ -363,6 +480,7 @@ public class OrderController : ControllerBase
     /// Mesero sirvió los platos de cocina (independiente del bar)
     /// </summary>
     [HttpPut("{id}/kitchen-served")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> SetKitchenServed(int id)
     {
         try
@@ -378,6 +496,7 @@ public class OrderController : ControllerBase
     /// Mesero sirvió las bebidas del bar (independiente de la cocina)
     /// </summary>
     [HttpPut("{id}/bar-served")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> SetBarServed(int id)
     {
         try
@@ -424,6 +543,7 @@ public class OrderController : ControllerBase
     /// Asignar mesero a orden
     /// </summary>
     [HttpPut("{id}/assign-waiter/{waiterId}")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> AssignWaiterToOrder(int id, int waiterId)
     {
         try
@@ -445,6 +565,7 @@ public class OrderController : ControllerBase
     /// Mesero abandona una mesa (desasigna la orden)
     /// </summary>
     [HttpPut("{id}/unassign-waiter")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> UnassignWaiterFromOrder(int id)
     {
         try
@@ -460,6 +581,7 @@ public class OrderController : ControllerBase
     /// Obtener órdenes no asignadas (para vista "Mesas General")
     /// </summary>
     [HttpGet("unassigned")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetUnassignedOrders([FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
         try
@@ -479,6 +601,7 @@ public class OrderController : ControllerBase
     /// Obtener órdenes por mesero (para vista "Mis Mesas")
     /// </summary>
     [HttpGet("my-orders/{waiterId}")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetWaiterOrders(int waiterId, [FromQuery] int? page, [FromQuery] int pageSize = 50)
     {
         try
@@ -559,10 +682,17 @@ public class OrderController : ControllerBase
     /// No requiere mesa. El cajero cobra, la orden va a cocina, el cliente espera en mostrador.
     /// </summary>
     [HttpPost("pos")]
+    [Authorize(Roles = "Admin,Manager,Cashier")]
     public async Task<IActionResult> CreatePosOrder([FromBody] CreatePosOrderDto dto)
     {
         try
         {
+            // IDOR: el cajero que procesa el cobro se toma del JWT. Admin/Manager pueden
+            // atribuirlo a otro vía dto.CashierId; un cajero normal siempre es él mismo.
+            var (posActorId, _) = GetActorFromJwt();
+            if (!(User.IsInRole("Admin") || User.IsInRole("Manager")))
+                dto.CashierId = posActorId;
+
             // 1. Crear la orden (sin mesa, IsPickup = true)
             var createDto = new CreateOrderDto
             {
@@ -699,6 +829,7 @@ public class OrderController : ControllerBase
     /// Cross-zone permitido (cliente puede pedir cambio a otra zona).
     /// </summary>
     [HttpPut("{orderId}/move-to-table/{newTableId}")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> MoveOrderToTable(int orderId, int newTableId)
     {
         try

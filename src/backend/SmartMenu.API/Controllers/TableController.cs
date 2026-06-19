@@ -51,36 +51,13 @@ public class TableController : ControllerBase
                 .Distinct()
                 .ToListAsync();
 
-            // S2.2 — Read sin tracking; si hay correcciones de status, hacer un UPDATE
-            // dirigido (segunda query) con tracking solo para las mesas que cambian.
+            // S2.2 (QA-fix) — read-only: un GET NO debe escribir Status. Se calcula el estado
+            // EFECTIVO en memoria (Reserved↔Available según la ventana de reserva), igual que
+            // FloorPlanController; la persistencia de Reserved la maneja el flujo de reservas.
             var tables = await _context.Tables
                 .AsNoTracking()
                 .Include(t => t.Zone)
                 .ToListAsync();
-
-            var corrections = new List<(int Id, TableStatus NewStatus)>();
-            foreach (var t in tables)
-            {
-                if (reservedTableIds.Contains(t.Id) && t.Status == TableStatus.Available)
-                    corrections.Add((t.Id, TableStatus.Reserved));
-                else if (!reservedTableIds.Contains(t.Id) && t.Status == TableStatus.Reserved)
-                    corrections.Add((t.Id, TableStatus.Available));
-            }
-
-            if (corrections.Count > 0)
-            {
-                var ids = corrections.Select(c => c.Id).ToList();
-                var tracked = await _context.Tables.Where(t => ids.Contains(t.Id)).ToListAsync();
-                foreach (var trackedT in tracked)
-                    trackedT.Status = corrections.First(c => c.Id == trackedT.Id).NewStatus;
-                await _context.SaveChangesAsync();
-                // Sincronizar el snapshot in-memory para el response.
-                foreach (var (id, newStatus) in corrections)
-                {
-                    var t = tables.First(x => x.Id == id);
-                    t.Status = newStatus;
-                }
-            }
 
             var result = tables.Select(t => new
             {
@@ -88,8 +65,13 @@ public class TableController : ControllerBase
                 tableNumber = t.TableNumber,
                 capacity = t.Capacity,
                 zoneName = t.Zone?.Name,
-                status = t.Status.ToString(),
-                qrCode = t.QRCode
+                status = (t.Status == TableStatus.Available && reservedTableIds.Contains(t.Id)) ? nameof(TableStatus.Reserved)
+                       : (t.Status == TableStatus.Reserved && !reservedTableIds.Contains(t.Id)) ? nameof(TableStatus.Available)
+                       : t.Status.ToString(),
+                qrCode = t.QRCode,
+                name = t.Name,
+                color = t.Color,
+                shape = t.Shape
             });
 
             return Ok(result);
@@ -181,6 +163,7 @@ public class TableController : ControllerBase
     /// Crear mesa (genera QR automáticamente)
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateTable([FromBody] CreateTableDto dto)
@@ -198,7 +181,10 @@ public class TableController : ControllerBase
                 ZoneId = dto.ZoneId,
                 RestaurantId = zone.RestaurantId,
                 Status = TableStatus.Available,
-                QRCode = Guid.NewGuid().ToString("N")
+                QRCode = Guid.NewGuid().ToString("N"),
+                Name = string.IsNullOrWhiteSpace(dto.Name) ? null : dto.Name!.Trim(),
+                Color = string.IsNullOrWhiteSpace(dto.Color) ? null : dto.Color!.Trim(),
+                Shape = string.IsNullOrWhiteSpace(dto.Shape) ? null : dto.Shape
             };
 
             _context.Tables.Add(table);
@@ -243,6 +229,7 @@ public class TableController : ControllerBase
     /// Editar mesa
     /// </summary>
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateTable(int id, [FromBody] UpdateTableDto dto)
@@ -255,6 +242,9 @@ public class TableController : ControllerBase
 
             if (dto.TableNumber.HasValue) table.TableNumber = dto.TableNumber.Value;
             if (dto.Capacity.HasValue) table.Capacity = dto.Capacity.Value;
+            if (dto.Name != null) table.Name = string.IsNullOrWhiteSpace(dto.Name) ? null : dto.Name.Trim();
+            if (dto.Color != null) table.Color = string.IsNullOrWhiteSpace(dto.Color) ? null : dto.Color.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Shape)) table.Shape = dto.Shape;
             if (dto.ZoneId.HasValue)
             {
                 var zone = await _context.Zones.FindAsync(dto.ZoneId.Value);
@@ -272,6 +262,9 @@ public class TableController : ControllerBase
                 zoneName = table.Zone.Name,
                 status = table.Status.ToString(),
                 qrCode = table.QRCode,
+                name = table.Name,
+                color = table.Color,
+                shape = table.Shape,
                 message = "Mesa actualizada correctamente"
             });
         }
@@ -286,6 +279,7 @@ public class TableController : ControllerBase
     /// Eliminar mesa
     /// </summary>
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteTable(int id)
@@ -317,6 +311,7 @@ public class TableController : ControllerBase
     /// Regenerar QR de una mesa
     /// </summary>
     [HttpPut("{id}/regenerate-qr")]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RegenerateQR(int id)
@@ -343,6 +338,7 @@ public class TableController : ControllerBase
     /// Actualizar estado de mesa
     /// </summary>
     [HttpPut("{id}/status")]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateTableStatus(int id, [FromBody] UpdateTableStatusDto dto)
@@ -464,6 +460,9 @@ public class CreateTableDto
     public int TableNumber { get; set; }
     public int Capacity { get; set; }
     public int ZoneId { get; set; }
+    public string? Name { get; set; }
+    public string? Color { get; set; }
+    public string? Shape { get; set; }
 }
 
 public class UpdateTableDto
@@ -471,4 +470,7 @@ public class UpdateTableDto
     public int? TableNumber { get; set; }
     public int? Capacity { get; set; }
     public int? ZoneId { get; set; }
+    public string? Name { get; set; }
+    public string? Color { get; set; }
+    public string? Shape { get; set; }
 }

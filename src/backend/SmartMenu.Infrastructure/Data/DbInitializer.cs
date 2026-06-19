@@ -367,14 +367,7 @@ public static class DbInitializer
 
         Console.WriteLine("🎉 Database seed completed successfully!");
         Console.WriteLine("");
-        Console.WriteLine("📝 Default users created:");
-        Console.WriteLine("   Admin:     admin@smartmenu.com / Admin123!");
-        Console.WriteLine("   Chef:      chef@smartmenu.com / Chef123!");
-        Console.WriteLine("   Waiter:    waiter@smartmenu.com / Waiter123!");
-        Console.WriteLine("   Waiter 2:  waiter2@smartmenu.com / Waiter2!");
-        Console.WriteLine("   Bartender: bartender@smartmenu.com / Bar123!");
-        Console.WriteLine("   Cashier:   cashier@smartmenu.com / Cash123!");
-        Console.WriteLine("   Host:      host@smartmenu.com / Host123!");
+        Console.WriteLine("📝 Default staff accounts seeded (7). Credentials are not logged.");
         Console.WriteLine("");
     }
 
@@ -403,7 +396,7 @@ public static class DbInitializer
         };
         context.Users.Add(waiter2);
         await context.SaveChangesAsync();
-        Console.WriteLine("✅ Segundo mesero creado: waiter2@smartmenu.com / Waiter2!");
+        Console.WriteLine("✅ Segundo mesero creado: waiter2@smartmenu.com");
     }
 
     /// <summary>
@@ -431,7 +424,7 @@ public static class DbInitializer
         };
         context.Users.Add(cashier);
         await context.SaveChangesAsync();
-        Console.WriteLine("✅ Cajero creado: cashier@smartmenu.com / Cash123!");
+        Console.WriteLine("✅ Cajero creado: cashier@smartmenu.com");
     }
 
     /// <summary>
@@ -822,6 +815,42 @@ public static class DbInitializer
         }
     }
 
+    /// <summary>ZONA-EXCL: columnas IsZoneExclusive + HostResponseMessage en TableReservations (idempotente).</summary>
+    public static async Task EnsureZoneExclusiveColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columnas IsZoneExclusive/HostResponseMessage en TableReservations...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'IsZoneExclusive')
+                    ALTER TABLE TableReservations ADD IsZoneExclusive bit NOT NULL DEFAULT 0;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'HostResponseMessage')
+                    ALTER TABLE TableReservations ADD HostResponseMessage nvarchar(500) NULL;");
+            Console.WriteLine("✅ Columnas IsZoneExclusive/HostResponseMessage listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureZoneExclusiveColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    /// <summary>SHARED-TABLE-ORDER: columna CustomerName en OrderItems (quién pidió cada ítem, varios comensales por mesa) — idempotente.</summary>
+    public static async Task EnsureOrderItemCustomerNameColumnAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columna CustomerName en OrderItems...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'CustomerName')
+                    ALTER TABLE OrderItems ADD CustomerName nvarchar(120) NULL;");
+            Console.WriteLine("✅ Columna CustomerName en OrderItems lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureOrderItemCustomerNameColumn: " + ex.Message); } catch { }
+        }
+    }
+
     public static async Task EnsureFiscalReceiptColumnsAsync(ApplicationDbContext context)
     {
         try
@@ -841,6 +870,86 @@ public static class DbInitializer
         catch (Exception ex)
         {
             try { Console.WriteLine("⚠️ EnsureFiscalReceiptColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureFloorPlanColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columnas de layout del plano en Tables...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'PositionX')
+                    ALTER TABLE Tables ADD PositionX float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'PositionY')
+                    ALTER TABLE Tables ADD PositionY float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Shape')
+                    ALTER TABLE Tables ADD Shape nvarchar(20) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Width')
+                    ALTER TABLE Tables ADD Width float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Height')
+                    ALTER TABLE Tables ADD Height float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Server')
+                    ALTER TABLE Tables ADD [Server] nvarchar(20) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Name')
+                    ALTER TABLE Tables ADD [Name] nvarchar(80) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Color')
+                    ALTER TABLE Tables ADD Color nvarchar(20) NULL;");
+
+            Console.WriteLine("✅ Columnas de layout del plano listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureFloorPlanColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureRestaurantPaletteColumnAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columna FloorPlanPaletteJson en Restaurants...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'FloorPlanPaletteJson')
+                    ALTER TABLE Restaurants ADD FloorPlanPaletteJson nvarchar(max) NULL;");
+            Console.WriteLine("✅ Columna FloorPlanPaletteJson lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureRestaurantPaletteColumn: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureFloorStructureTableAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Creando tabla FloorStructures...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'FloorStructures')
+                BEGIN
+                    CREATE TABLE FloorStructures (
+                        Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        ZoneId int NOT NULL,
+                        Type nvarchar(20) NOT NULL DEFAULT 'wall',
+                        X float NOT NULL DEFAULT 0,
+                        Y float NOT NULL DEFAULT 0,
+                        Width float NULL,
+                        Height float NULL,
+                        Label nvarchar(64) NULL,
+                        CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        UpdatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        CONSTRAINT FK_FloorStructures_Zones FOREIGN KEY (ZoneId) REFERENCES Zones(Id) ON DELETE CASCADE
+                    );
+                END");
+
+            Console.WriteLine("✅ Tabla FloorStructures lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureFloorStructureTable: " + ex.Message); } catch { }
         }
     }
 

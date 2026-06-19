@@ -29,6 +29,10 @@ public class TableReservation : BaseEntity
     public bool IsCancelled { get; set; } = false;
     /// <summary>Origin: "Internal" (host), "Portal" (public site)</summary>
     public string Source { get; set; } = "Internal";
+    /// <summary>Reserva de ZONA completa (uso exclusivo de toda la zona); el host aprueba/rechaza.</summary>
+    public bool IsZoneExclusive { get; set; } = false;
+    /// <summary>Mensaje del host al cliente al aprobar/rechazar (visible en el seguimiento por código).</summary>
+    public string? HostResponseMessage { get; set; }
     /// <summary>Si la mesa no se usa antes de este momento, queda liberada (evitar roces con reserva).</summary>
     public DateTime? ReservedUntil { get; set; }
     /// <summary>Minutos antes de la reserva en que la mesa pasa a estado Reserved (default 60).</summary>

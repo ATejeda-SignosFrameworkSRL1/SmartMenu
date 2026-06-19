@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartMenu.Infrastructure.Data;
 using SmartMenu.Domain.Entities;
+using SmartMenu.Application.Services;
 
 namespace SmartMenu.API.Controllers;
 
@@ -13,17 +14,36 @@ public class VirtualTableController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<VirtualTableController> _logger;
+    private readonly ITableRealtimeNotifier _tableNotifier;
 
-    public VirtualTableController(ApplicationDbContext context, ILogger<VirtualTableController> logger)
+    public VirtualTableController(ApplicationDbContext context, ILogger<VirtualTableController> logger, ITableRealtimeNotifier tableNotifier)
     {
         _context = context;
         _logger = logger;
+        _tableNotifier = tableNotifier;
+    }
+
+    // Difunde el estado de una mesa al plano en vivo. Aditivo y a prueba de fallos:
+    // un error de SignalR nunca debe romper la operación (ya commiteada).
+    private async Task NotifyTableAsync(int tableId, string status, bool clearWaiter)
+    {
+        try
+        {
+            await _tableNotifier.TableStatusChangedAsync(tableId, status);
+            if (clearWaiter)
+                await _tableNotifier.TableWaiterChangedAsync(tableId, null, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo difundir el estado de la mesa {TableId}", tableId);
+        }
     }
 
     /// <summary>
     /// Crear mesa virtual: el mesero escanea los QR de las mesas unidas.
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Create([FromBody] CreateVirtualTableDto dto)
     {
         _logger.LogInformation($"🟢 CREATE VirtualTable - Name: {dto.Name}, CreatedByWaiterId: {dto.CreatedByWaiterId}, TableIds: [{string.Join(", ", dto.TableIds)}]");
@@ -88,6 +108,9 @@ public class VirtualTableController : ControllerBase
         await _context.SaveChangesAsync();
         _logger.LogInformation($"🟢 {dto.TableIds.Count} mesas asociadas a VirtualTable ID: {vt.Id} y marcadas como Occupied");
 
+        foreach (var table in tables)
+            await NotifyTableAsync(table.Id, nameof(Domain.Enums.TableStatus.Occupied), false);
+
         return CreatedAtAction(nameof(Get), new { id = vt.Id }, new
         {
             vt.Id,
@@ -103,6 +126,7 @@ public class VirtualTableController : ControllerBase
     /// Obtener mesa virtual por ID
     /// </summary>
     [HttpGet("{id}")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Get(int id)
     {
         var vt = await _context.VirtualTables
@@ -132,6 +156,7 @@ public class VirtualTableController : ControllerBase
     /// Listar mesas virtuales activas del mesero
     /// </summary>
     [HttpGet("waiter/{waiterId}")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetByWaiter(int waiterId)
     {
         _logger.LogInformation($"🔵 GetByWaiter llamado con waiterId: {waiterId}");
@@ -144,12 +169,12 @@ public class VirtualTableController : ControllerBase
             _logger.LogInformation($"  - VT ID:{vt.Id}, Name:{vt.Name}, CreatedBy:{vt.CreatedByWaiterId}, IsActive:{vt.IsActive}");
         }
         
-        // TEMPORAL: Devolver TODAS las mesas virtuales activas (sin filtrar por waiter) para debug
+        // Mesas virtuales ACTIVAS creadas por este mesero.
         var list = await _context.VirtualTables
             .Include(v => v.Tables)
             .ThenInclude(t => t.Table)
             .ThenInclude(t => t.Zone)
-            .Where(v => v.IsActive) // SOLO filtro IsActive, no por waiter
+            .Where(v => v.IsActive && v.CreatedByWaiterId == waiterId)
             .Select(v => new
             {
                 v.Id,
@@ -179,6 +204,7 @@ public class VirtualTableController : ControllerBase
     /// Órdenes de todas las mesas que pertenecen a la mesa virtual (para vista unificada)
     /// </summary>
     [HttpGet("{id}/orders")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetOrders(int id)
     {
         var vt = await _context.VirtualTables
@@ -214,6 +240,7 @@ public class VirtualTableController : ControllerBase
     /// Desactivar mesa virtual
     /// </summary>
     [HttpPut("{id}/deactivate")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Deactivate(int id)
     {
         var vt = await _context.VirtualTables
@@ -238,6 +265,7 @@ public class VirtualTableController : ControllerBase
             .ToListAsync();
         var tables = await _context.Tables.Where(t => tableIds.Contains(t.Id)).ToListAsync();
         int released = 0;
+        var releasedIds = new List<int>();
         foreach (var table in tables)
         {
             if (tablesWithActiveOrders.Contains(table.Id))
@@ -247,10 +275,14 @@ public class VirtualTableController : ControllerBase
             }
             table.Status = Domain.Enums.TableStatus.Available;
             released++;
+            releasedIds.Add(table.Id);
             _logger.LogInformation($"🗑️ Mesa #{table.TableNumber} (ID: {table.Id}) liberada (Available)");
         }
 
         await _context.SaveChangesAsync();
+
+        foreach (var tid in releasedIds)
+            await NotifyTableAsync(tid, nameof(Domain.Enums.TableStatus.Available), true);
 
         _logger.LogInformation($"🗑️ Mesa virtual ID {id} desactivada y {released} mesas liberadas");
         return Ok(new { message = "Mesa virtual desactivada", id = vt.Id, tablesReleased = released });
@@ -262,6 +294,7 @@ public class VirtualTableController : ControllerBase
     /// pasa las mesas a Cleaning y cierra la mesa virtual.
     /// </summary>
     [HttpPost("{id}/pay")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> PayUnified(int id, [FromBody] PayVirtualTableDto dto)
     {
         await using var tx = await _context.Database.BeginTransactionAsync();
@@ -337,6 +370,9 @@ public class VirtualTableController : ControllerBase
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
 
+            foreach (var t in tables)
+                await NotifyTableAsync(t.Id, nameof(Domain.Enums.TableStatus.Cleaning), true);
+
             var payerNumber = tables.FirstOrDefault(t => t.Id == payerTableId)?.TableNumber;
             _logger.LogInformation($"💰 Cobro unificado VT {vt.Id}: {orders.Count} órdenes, total {groupTotal:0.00}, pagadora mesa #{payerNumber}");
             return Ok(new
@@ -367,6 +403,7 @@ public class VirtualTableController : ControllerBase
     /// TEMPORAL: Desactivar TODAS las mesas virtuales activas (para testing)
     /// </summary>
     [HttpPost("deactivate-all")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeactivateAll()
     {
         var activeVTs = await _context.VirtualTables
@@ -375,11 +412,12 @@ public class VirtualTableController : ControllerBase
             .ToListAsync();
         
         int totalTablesReleased = 0;
+        var releasedAll = new List<int>();
         foreach (var vt in activeVTs)
         {
             vt.IsActive = false;
             vt.DeactivatedAt = DateTime.UtcNow;
-            
+
             // Liberar las mesas de cada mesa virtual
             var tableIds = vt.Tables.Select(t => t.TableId).ToList();
             var tables = await _context.Tables.Where(t => tableIds.Contains(t.Id)).ToListAsync();
@@ -387,9 +425,13 @@ public class VirtualTableController : ControllerBase
             {
                 table.Status = Domain.Enums.TableStatus.Available;
                 totalTablesReleased++;
+                releasedAll.Add(table.Id);
             }
         }
         await _context.SaveChangesAsync();
+
+        foreach (var tid in releasedAll)
+            await NotifyTableAsync(tid, nameof(Domain.Enums.TableStatus.Available), true);
         
         _logger.LogInformation($"🗑️ Desactivadas {activeVTs.Count} mesas virtuales y liberadas {totalTablesReleased} mesas");
         return Ok(new { 

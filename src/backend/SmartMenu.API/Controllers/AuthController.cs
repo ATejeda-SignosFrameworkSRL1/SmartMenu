@@ -37,12 +37,13 @@ public class AuthController : ControllerBase
         if (user == null)
             return Unauthorized(new { error = "Usuario no encontrado. Inicia sesión de nuevo." });
 
-        Console.WriteLine($"🔐 /api/auth/me devolviendo: Id={user.Id}, Email={user.Email}, Role={user.Role}");
         return Ok(user);
     }
 
+    // Antes [AllowAnonymous]: cualquiera podía auto-registrarse y obtener token.
+    // Ahora solo Admin/Manager crean cuentas (el staff se provisiona; el cliente QR es anónimo, no se registra).
     [HttpPost("register")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<ActionResult<AuthResultDto>> Register([FromBody] RegisterDto dto)
     {
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();

@@ -29,6 +29,7 @@ public class ReservationService : IReservationService
     private readonly INotificationService _notify;
     private readonly IDepositService _deposit;
     private readonly ILogger<ReservationService> _logger;
+    private readonly ITableRealtimeNotifier _tableNotifier;
 
     public ReservationService(
         ApplicationDbContext context,
@@ -36,7 +37,8 @@ public class ReservationService : IReservationService
         IOptions<ReservationSettings> settings,
         INotificationService notify,
         IDepositService deposit,
-        ILogger<ReservationService> logger)
+        ILogger<ReservationService> logger,
+        ITableRealtimeNotifier tableNotifier)
     {
         _context = context;
         _availability = availability;
@@ -44,6 +46,7 @@ public class ReservationService : IReservationService
         _notify = notify;
         _deposit = deposit;
         _logger = logger;
+        _tableNotifier = tableNotifier;
     }
 
     // ─────────────────────────── Booking público (hold) ───────────────────────────
@@ -405,6 +408,26 @@ public class ReservationService : IReservationService
         await _context.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
+        // Plano en vivo: al sentar la reserva la mesa queda ocupada (aditivo; no afecta el seat).
+        try
+        {
+            await _tableNotifier.TableStatusChangedAsync(tableId.Value, nameof(TableStatus.Occupied));
+            if (session.AssignedWaiterId != null)
+            {
+                var w = await _context.Users.AsNoTracking()
+                    .Where(u => u.Id == session.AssignedWaiterId.Value)
+                    .Select(u => new { u.FirstName, u.LastName })
+                    .FirstOrDefaultAsync(ct);
+                await _tableNotifier.TableWaiterChangedAsync(tableId.Value,
+                    NameFormatting.Initials(w?.FirstName, w?.LastName),
+                    NameFormatting.FullName(w?.FirstName, w?.LastName));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo difundir el estado al sentar la reserva {ReservationId}", res.Id);
+        }
+
         var result = Ok(res);
         result.TableSessionId = session.Id;
         result.AssignedTableIds = new List<int> { tableId.Value };
@@ -494,6 +517,128 @@ public class ReservationService : IReservationService
         var result = Ok(res);
         result.ReservationDateTime = startLocal.ToString("yyyy-MM-ddTHH:mm:ss");
         return result;
+    }
+
+    // ─────────────────────────── Reserva de ZONA completa (exclusiva) ───────────────────────────
+
+    public async Task<ReservationActionResult> CreateZoneRequestAsync(ZoneRequestDto dto, CancellationToken ct = default)
+    {
+        if (!DateOnly.TryParse(dto.Date, out var date) || !TimeOnly.TryParse(dto.Time, out var time))
+            return ReservationActionResult.Fail("Fecha u hora inválida", "BAD_INPUT");
+        if (dto.Guests < 1)
+            return ReservationActionResult.Fail("Número de comensales inválido", "BAD_INPUT");
+        if (dto.ZoneId <= 0)
+            return ReservationActionResult.Fail("Debe elegir una zona", "BAD_INPUT");
+        if (string.IsNullOrWhiteSpace(dto.CustomerName) || string.IsNullOrWhiteSpace(dto.CustomerPhone))
+            return ReservationActionResult.Fail("Nombre y teléfono son obligatorios", "BAD_INPUT");
+
+        var zone = await _context.Zones.FirstOrDefaultAsync(z => z.Id == dto.ZoneId && z.Type == "Dining" && z.IsActive, ct);
+        if (zone == null)
+            return ReservationActionResult.Fail("Zona no válida", "BAD_INPUT");
+
+        var startLocal = date.ToDateTime(time);
+        // Para una solicitud de zona NO bloqueamos por pacing: el host decide si es posible.
+        // Igual resolvemos el turno (si existe) para la duración/ventana usadas al chequear solape.
+        var period = await ResolvePeriodAsync(date, time, ct);
+        int duration = period != null ? ReservationMath.ResolveDuration(period, dto.Guests) : 120;
+        int buffer = period?.TurnoverBufferMinutes ?? 0;
+        var endLocal = startLocal.AddMinutes(duration + buffer);
+
+        var res = new TableReservation
+        {
+            Status = ReservationStatus.Pending,
+            Source = "Portal",
+            IsZoneExclusive = true,
+            NumberOfGuests = dto.Guests,
+            RequestedZoneId = dto.ZoneId,
+            ReservationDateTime = startLocal,
+            DurationMinutes = duration,
+            EndDateTime = endLocal,
+            ReservedUntil = endLocal,
+            ServicePeriodId = period?.Id,
+            ConfirmationCode = GenerateCode(),
+            CustomerName = dto.CustomerName.Trim(),
+            CustomerPhone = dto.CustomerPhone.Trim(),
+            CustomerEmail = dto.CustomerEmail?.Trim(),
+            OccasionType = (OccasionType)dto.OccasionType,
+            SpecialRequests = dto.SpecialRequests,
+            DepositStatus = "None",
+        };
+        SyncLegacyFlags(res);
+        _context.TableReservations.Add(res);
+        await _context.SaveChangesAsync(ct);
+
+        return new ReservationActionResult
+        {
+            Success = true,
+            ReservationId = res.Id,
+            ConfirmationCode = res.ConfirmationCode,
+            Status = res.Status.ToString(),
+            ReservationDateTime = startLocal.ToString("yyyy-MM-ddTHH:mm:ss"),
+        };
+    }
+
+    public async Task<ReservationActionResult> RespondZoneAsync(int id, ZoneDecisionDto dto, CancellationToken ct = default)
+    {
+        var res = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (res == null) return ReservationActionResult.Fail("Reserva no encontrada", "NOT_FOUND");
+        if (res.Status is ReservationStatus.Cancelled or ReservationStatus.Completed)
+            return ReservationActionResult.Fail("La reserva no está activa", "BAD_STATE");
+
+        if (dto.Accept)
+        {
+            if (res.RequestedZoneId == null)
+                return ReservationActionResult.Fail("La reserva no tiene zona solicitada", "BAD_INPUT");
+            // Aceptar = bloquear TODA la zona: asignar todas sus mesas Dining a esta reserva.
+            // AssignTableAsync revalida solapes → si la zona no está libre devuelve CONFLICT (= "no es posible").
+            var zoneTableIds = await _context.Tables
+                .Where(t => t.ZoneId == res.RequestedZoneId && t.Zone.Type == "Dining")
+                .Select(t => t.Id).ToListAsync(ct);
+            if (zoneTableIds.Count == 0)
+                return ReservationActionResult.Fail("La zona no tiene mesas", "BAD_INPUT");
+
+            var result = await AssignTableAsync(id, new AssignTableDto { TableIds = zoneTableIds }, ct);
+            if (result.Success)
+            {
+                res.HostResponseMessage = dto.Message;   // mismo objeto trackeado → persiste el mensaje
+                await _context.SaveChangesAsync(ct);
+            }
+            return result;
+        }
+        else
+        {
+            var result = await CancelAsync(id, new CancelReservationDto { Reason = dto.Message ?? "Zona no disponible" }, ct);
+            if (result.Success)
+            {
+                res.HostResponseMessage = dto.Message;
+                await _context.SaveChangesAsync(ct);
+            }
+            return result;
+        }
+    }
+
+    public async Task<ReservationTrackDto?> GetTrackAsync(string code, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var res = await _context.TableReservations
+            .Include(r => r.RequestedZone)
+            .Include(r => r.Table).ThenInclude(t => t!.Zone)
+            .Include(r => r.AssignedTables)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.ConfirmationCode == code, ct);
+        if (res == null) return null;
+        return new ReservationTrackDto
+        {
+            Status = res.Status.ToString(),
+            IsZoneExclusive = res.IsZoneExclusive,
+            ZoneName = res.RequestedZone?.Name ?? res.Table?.Zone?.Name,
+            ReservationDateTime = res.ReservationDateTime.ToString("yyyy-MM-ddTHH:mm:ss"),
+            NumberOfGuests = res.NumberOfGuests,
+            OccasionType = (int)res.OccasionType,
+            HostResponseMessage = res.HostResponseMessage,
+            AssignedTableCount = res.AssignedTables.Count,
+            CustomerName = res.CustomerName,
+        };
     }
 
     // ─────────────────────────── Helpers ───────────────────────────

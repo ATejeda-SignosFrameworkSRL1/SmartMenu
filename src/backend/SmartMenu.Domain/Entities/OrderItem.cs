@@ -10,6 +10,9 @@ public class OrderItem : BaseEntity
     public decimal UnitPrice { get; set; }
     public decimal Subtotal { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Nombre del comensal que pidió ESTE ítem. Varios comensales de una misma mesa
+    /// (mismo QR) comparten una sola Order; cada ítem lleva el nombre de quién lo pidió.</summary>
+    public string? CustomerName { get; set; }
     public string? Destination { get; set; } // "Kitchen" or "Bar"
     public bool IsReady { get; set; } = false;
     

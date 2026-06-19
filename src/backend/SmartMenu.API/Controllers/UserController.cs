@@ -371,12 +371,10 @@ public class UserController : ControllerBase
         catch (DbUpdateException ex)
         {
             _logger.LogError(ex, "DbUpdateException deleting user {UserId}", id);
-            var inner = ex.InnerException?.Message ?? ex.Message;
             return BadRequest(new
             {
                 error = "No se pudo eliminar el usuario por restricción de base de datos. " +
-                        "Intenta de nuevo o contacta a soporte.",
-                detail = inner
+                        "Intenta de nuevo o contacta a soporte."
             });
         }
         catch (Exception ex)

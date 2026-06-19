@@ -39,6 +39,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<ServicePeriod> ServicePeriods => Set<ServicePeriod>();
     public DbSet<ReservationTable> ReservationTables => Set<ReservationTable>();
+    public DbSet<FloorStructure> FloorStructures => Set<FloorStructure>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

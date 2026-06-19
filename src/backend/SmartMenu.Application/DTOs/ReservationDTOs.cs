@@ -127,6 +127,43 @@ public class RescheduleReservationDto
     public string? RowVersion { get; set; }
 }
 
+// ─────────────── Reserva de ZONA completa (exclusiva) + seguimiento ───────────────
+
+/// <summary>Solicitud pública de reservar una ZONA completa (uso exclusivo). Queda Pending para que el host apruebe/rechace.</summary>
+public class ZoneRequestDto
+{
+    public string Date { get; set; } = string.Empty;   // yyyy-MM-dd
+    public string Time { get; set; } = string.Empty;   // HH:mm
+    public int Guests { get; set; }
+    public int ZoneId { get; set; }                     // zona objetivo (obligatoria)
+    public string CustomerName { get; set; } = string.Empty;
+    public string CustomerPhone { get; set; } = string.Empty;
+    public string? CustomerEmail { get; set; }
+    public int OccasionType { get; set; }
+    public string? SpecialRequests { get; set; }
+}
+
+/// <summary>Decisión del host sobre una reserva de zona exclusiva: aceptar (bloquea la zona) o rechazar, con mensaje al cliente.</summary>
+public class ZoneDecisionDto
+{
+    public bool Accept { get; set; }
+    public string? Message { get; set; }   // mensaje al cliente (visible en seguimiento)
+}
+
+/// <summary>Estado público de una reserva por confirmationCode (página de seguimiento).</summary>
+public class ReservationTrackDto
+{
+    public string Status { get; set; } = string.Empty;
+    public bool IsZoneExclusive { get; set; }
+    public string? ZoneName { get; set; }
+    public string ReservationDateTime { get; set; } = string.Empty; // yyyy-MM-ddTHH:mm:ss
+    public int NumberOfGuests { get; set; }
+    public int OccasionType { get; set; }
+    public string? HostResponseMessage { get; set; }
+    public int AssignedTableCount { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+}
+
 /// <summary>Resultado uniforme de las operaciones de reserva. El controller mapea Code→HTTP.</summary>
 public class ReservationActionResult
 {

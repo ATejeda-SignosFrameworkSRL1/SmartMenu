@@ -39,6 +39,7 @@ public class TableReservationController : ControllerBase
     // ─────────────────────────── Lectura ───────────────────────────
 
     [HttpGet]
+    [Authorize(Roles = "Admin,Manager,Host,Waiter")]
     public async Task<IActionResult> GetReservations([FromQuery] string? date)
     {
         try
@@ -75,6 +76,8 @@ public class TableReservationController : ControllerBase
                     zoneName = r.Table != null ? r.Table.Zone.Name : (r.RequestedZone != null ? r.RequestedZone.Name : null),
                     requestedZoneId = r.RequestedZoneId,
                     requestedZoneName = r.RequestedZone != null ? r.RequestedZone.Name : null,
+                    isZoneExclusive = r.IsZoneExclusive,
+                    hostResponseMessage = r.HostResponseMessage,
                     specialRequests = r.SpecialRequests,
                     occasionType = (int)r.OccasionType,
                     advanceBlockMinutes = r.AdvanceBlockMinutes,
@@ -319,6 +322,46 @@ public class TableReservationController : ControllerBase
         return Map(r);
     }
 
+    // ─────────────────────────── Reserva de ZONA completa (exclusiva) + seguimiento ───────────────────────────
+
+    /// <summary>Portal público: solicita reservar una zona completa (uso exclusivo). Queda Pending para aprobación del host.</summary>
+    [HttpPost("zone-request")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ZoneRequest([FromBody] ZoneRequestDto dto, CancellationToken ct)
+    {
+        var r = await _svc.CreateZoneRequestAsync(dto, ct);
+        if (r.Success)
+        {
+            await FireNewReservationAsync(r.ReservationId!.Value, ct);
+            await FireAvailabilityChangedAsync(r.ReservationDateTime, ct);
+        }
+        return Map(r);
+    }
+
+    /// <summary>Staff: responde una reserva de zona exclusiva — aceptar (bloquea la zona) o rechazar, con mensaje al cliente.</summary>
+    [HttpPost("{id}/zone-decision")]
+    public async Task<IActionResult> ZoneDecision(int id, [FromBody] ZoneDecisionDto dto, CancellationToken ct)
+    {
+        var r = await _svc.RespondZoneAsync(id, dto, ct);
+        if (r.Success)
+        {
+            await _reservationHub.Clients.All.SendAsync(dto.Accept ? "ReservationConfirmed" : "ReservationCancelled",
+                new { reservationId = id, timestamp = DateTime.UtcNow }, ct);
+            await FireAvailabilityChangedAsync(r.ReservationDateTime, ct);
+        }
+        return Map(r);
+    }
+
+    /// <summary>Público: estado de una reserva por confirmationCode (página de seguimiento).</summary>
+    [HttpGet("track/{code}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Track(string code, CancellationToken ct)
+    {
+        var t = await _svc.GetTrackAsync(code, ct);
+        if (t == null) return NotFound(new { error = "Reserva no encontrada", code = "NOT_FOUND" });
+        return Ok(t);
+    }
+
     // ─────────────────────────── Mesas disponibles (window-overlap, reemplaza day-wide) ───────────────────────────
 
     /// <summary>Mesas físicas libres para asignar a una reserva (solape de ventana, no día completo).</summary>
@@ -491,7 +534,9 @@ public class TableReservationController : ControllerBase
 
     private async Task FireNewReservationAsync(int id, CancellationToken ct)
     {
-        var r = await _context.TableReservations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        var r = await _context.TableReservations.AsNoTracking()
+            .Include(x => x.RequestedZone)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return;
         await _reservationHub.Clients.All.SendAsync("NewReservation", new
         {
@@ -503,6 +548,8 @@ public class TableReservationController : ControllerBase
             reservationDateTime = r.ReservationDateTime,
             tableId = r.TableId,
             requestedZoneId = r.RequestedZoneId,
+            requestedZoneName = r.RequestedZone != null ? r.RequestedZone.Name : null,
+            isZoneExclusive = r.IsZoneExclusive,
             specialRequests = r.SpecialRequests,
             source = r.Source,
             status = r.Status.ToString(),
