@@ -249,7 +249,7 @@ function MenuPageInner() {
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`px-4 py-2 rounded-full whitespace-nowrap transition-colors ${
+                className={`px-4 py-2 rounded-full whitespace-nowrap font-medium transition-colors ${
                   selectedCategory === category.id
                     ? 'bg-primary-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -292,7 +292,7 @@ function MenuPageInner() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3 }}
-                        className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow"
+                        className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow h-full flex flex-col"
                       >
                         {dish.imageUrl && (
                           <div className="h-48 bg-gray-200 overflow-hidden">
@@ -308,7 +308,7 @@ function MenuPageInner() {
                           </div>
                         )}
 
-                        <div className="p-4">
+                        <div className="p-4 flex flex-col flex-1">
                           {/* Tag badges */}
                           {(() => {
                             const tagList = dish.tags && dish.tags.length > 0
@@ -335,9 +335,9 @@ function MenuPageInner() {
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">{dish.name}</h3>
                           <p className="text-sm text-gray-600 mb-3 line-clamp-2">{dish.description}</p>
 
-                          <div className="flex items-center justify-between mt-4">
-                            <div>
-                              <p className="text-2xl font-bold text-primary-600">
+                          <div className="flex items-end justify-between gap-3 mt-auto pt-4">
+                            <div className="flex flex-col items-start">
+                              <p className="text-2xl font-bold text-primary-600 leading-tight">
                                 RD${dish.price.toFixed(2)}
                               </p>
                               <p className="text-xs text-gray-500 flex items-center gap-1">
@@ -348,7 +348,7 @@ function MenuPageInner() {
                             <button
                               onClick={() => handleAddToCart(dish, category.name)}
                               disabled={!dish.isAvailable}
-                              className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+                              className="shrink-0 bg-primary-600 text-white px-4 py-2 rounded-full hover:bg-primary-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
                             >
                               {dish.isAvailable ? 'Agregar' : 'No disponible'}
                             </button>
