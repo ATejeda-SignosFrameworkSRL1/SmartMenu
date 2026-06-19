@@ -5,3 +5,4 @@
 *.sh text eol=lf
 docker/qa/sqlserver/init.sql text eol=lf
 docker/qa/sqlserver/entrypoint.sh text eol=lf
+docker/qa/caddy/Caddyfile text eol=lf
