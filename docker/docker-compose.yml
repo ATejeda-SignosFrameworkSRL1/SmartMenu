@@ -1,3 +1,5 @@
+# DEPRECATED — stack legado. El stack activo de QA es docker/qa/docker-compose.qa.yml.
+# Secretos parametrizados vía variables de entorno (.env), sin valores commiteados.
 version: '3.8'
 
 services:
@@ -7,7 +9,7 @@ services:
     container_name: smartmenu-sqlserver
     environment:
       ACCEPT_EULA: Y
-      SA_PASSWORD: YourPassword123!
+      SA_PASSWORD: ${SA_PASSWORD}
       MSSQL_PID: Developer
     ports:
       - "1433:1433"
@@ -16,7 +18,7 @@ services:
     networks:
       - smartmenu-network
     healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourPassword123! -Q "SELECT 1"
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD} -Q "SELECT 1"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,9 +48,9 @@ services:
     container_name: smartmenu-backend
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=SmartMenuDB;User Id=sa;Password=YourPassword123!;TrustServerCertificate=True;
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=SmartMenuDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;
       - ConnectionStrings__Redis=redis:6379
-      - JwtSettings__Secret=your-super-secret-key-minimum-32-characters-long-for-jwt-token-generation
+      - JwtSettings__Secret=${JWT_SECRET}
       - JwtSettings__Issuer=SmartMenuAPI
       - JwtSettings__Audience=SmartMenuClient
       - JwtSettings__ExpirationMinutes=60

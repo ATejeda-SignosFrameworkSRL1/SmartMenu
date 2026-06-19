@@ -142,8 +142,9 @@ services:
   admin-panel:
     <<: *frontend-base
     build:
-      context: ../../src/frontend/admin-panel
-      dockerfile: ../../../docker/qa/Dockerfile.frontend
+      # Monorepo: contexto = raíz del workspace (incluye packages/ui = @smartmenu/ui).
+      context: ../../src/frontend
+      dockerfile: ../../docker/qa/Dockerfile.admin
       args:
         APP_PORT: "3001"
         # QR-FIX.2 — URL del client-app PWA usada al generar QRs físicos de mesas.
@@ -160,13 +161,23 @@ services:
 
   waiter-app:
     <<: *frontend-base
-    build: { context: ../../src/frontend/waiter-app, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3003" } }
+    build:
+      # Monorepo: contexto = raíz del workspace (incluye packages/ui = @smartmenu/ui).
+      context: ../../src/frontend
+      dockerfile: ../../docker/qa/Dockerfile.waiter
+      args:
+        APP_PORT: "3003"
     image: smartmenu-qa/waiter-app:latest
     container_name: smartmenu-qa-waiter
 
   host-app:
     <<: *frontend-base
-    build: { context: ../../src/frontend/host-app, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3004" } }
+    build:
+      # Monorepo: contexto = raíz del workspace (incluye packages/ui = @smartmenu/ui).
+      context: ../../src/frontend
+      dockerfile: ../../docker/qa/Dockerfile.host
+      args:
+        APP_PORT: "3004"
     image: smartmenu-qa/host-app:latest
     container_name: smartmenu-qa-host
 

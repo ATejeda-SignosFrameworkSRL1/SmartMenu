@@ -1,0 +1,64 @@
+# SmartMenu admin-panel — QA image (monorepo / npm workspaces)
+# A diferencia de Dockerfile.frontend (contexto por-app), el admin consume el
+# design system compartido @smartmenu/ui, que vive FUERA de admin-panel
+# (src/frontend/packages/ui). Por eso el build context es la RAÍZ del workspace
+# (src/frontend) y se instala/buildea vía npm workspaces.
+#
+# Build context: src/frontend
+# Build args:
+#   APP_PORT               — puerto interno del Next start (3001)
+#   NEXT_PUBLIC_CLIENT_URL — URL del client-app PWA (inyectada en build-time)
+
+# ===== deps + build =====
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Manifiestos del workspace primero (cachea la capa de deps). Para el admin solo
+# importan los workspaces packages/ui y admin-panel.
+COPY package.json package-lock.json ./
+COPY packages/ui/package.json packages/ui/
+COPY admin-panel/package.json admin-panel/
+COPY waiter-app/package.json waiter-app/
+COPY host-app/package.json host-app/
+
+# Alpine (musl) requiere @next/swc-linux-x64-musl (optionalDependency de next);
+# npm ci no siempre la trae → la forzamos como fallback.
+RUN npm ci --no-audit --no-fund --include=optional && \
+    npm install --no-save --no-audit --no-fund @next/swc-linux-x64-musl@$(node -p "require('./node_modules/next/package.json').version") || true
+
+# Código fuente: el DS compartido + la app. El .dockerignore de src/frontend
+# excluye node_modules/.next/storybook-static.
+COPY packages ./packages
+COPY admin-panel ./admin-panel
+RUN mkdir -p admin-panel/public
+ENV NEXT_TELEMETRY_DISABLED=1
+
+ARG NEXT_PUBLIC_CLIENT_URL=""
+ENV NEXT_PUBLIC_CLIENT_URL=${NEXT_PUBLIC_CLIENT_URL}
+
+# Build del admin vía workspace (transpila @smartmenu/ui dentro de Next).
+RUN npm run build -w admin-panel
+
+# ===== runtime =====
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ARG APP_PORT=3001
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=${APP_PORT} \
+    HOSTNAME=0.0.0.0
+
+# Copiamos el workspace ya construido: node_modules hoisteado (con el symlink
+# @smartmenu/ui → packages/ui), packages/ y admin-panel/.next. No usamos
+# output:standalone para no tocar la config del app (igual que Dockerfile.frontend).
+COPY --from=builder /app ./
+
+WORKDIR /app/admin-panel
+EXPOSE ${APP_PORT}
+
+# Healthcheck: 127.0.0.1 explícito (evita bug IPv4/IPv6 de busybox-wget en alpine).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+    CMD wget --spider -q "http://127.0.0.1:${PORT}/" || exit 1
+
+CMD ["sh", "-c", "npx next start -p $PORT -H 0.0.0.0"]

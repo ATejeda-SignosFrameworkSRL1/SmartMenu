@@ -22,6 +22,19 @@
 	admin off
 }
 
+# QA-fix: emisor interno con certs de 90 dias (2160h) firmados directo por el root CA.
+# Evita el ERR_CERT_DATE_INVALID que causaban los leaf de ~12h al quedar el stack inactivo.
+# Se IMPORTA en TODOS los sitios; debe ser identico en todos para no crear politicas de
+# certificado ambiguas para los hostnames compartidos (localhost / 172.31.98.60).
+(tls-long) {
+	tls {
+		issuer internal {
+			lifetime 2160h
+			sign_with_root
+		}
+	}
+}
+
 # â”€â”€â”€ Security headers â€” aplica a TODOS los hosts vÃ­a snippet importado â”€â”€â”€â”€
 (security-headers) {
 	header {
@@ -68,7 +81,7 @@ http://172.31.98.60 {
 # forwarding 80/443 â†’ 8080/8443.
 
 dev.172-31-98-60.nip.io, client.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -77,14 +90,14 @@ dev.172-31-98-60.nip.io, client.172-31-98-60.nip.io {
 }
 
 api.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	reverse_proxy backend:8080
 }
 
 admin.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -93,7 +106,7 @@ admin.172-31-98-60.nip.io {
 }
 
 kds.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -102,7 +115,7 @@ kds.172-31-98-60.nip.io {
 }
 
 waiter.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -111,7 +124,7 @@ waiter.172-31-98-60.nip.io {
 }
 
 host.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -120,7 +133,7 @@ host.172-31-98-60.nip.io {
 }
 
 cashier.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -129,7 +142,7 @@ cashier.172-31-98-60.nip.io {
 }
 
 reservation.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -141,7 +154,7 @@ reservation.172-31-98-60.nip.io {
 # Si no agregaste las entradas al hosts file todavÃ­a y abres directo localhost,
 # te mostramos un Ã­ndice con todas las URLs del stack QA.
 localhost {
-	tls internal
+	import tls-long
 	import security-headers
 	header Content-Type "text/html; charset=utf-8"
 	respond <<HTML
@@ -202,7 +215,7 @@ HTML 200
 #   - localhost:8451            (acceso local sin hosts file / MCP)
 #   - 172.31.98.60:8443         (LAN IP â€” QR scannable desde el cell)
 qa.smartmenu.local, localhost:8451, 172.31.98.60:8443 {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	# /api, /uploads, /hubs deben ir al backend (no a Next.js) porque sus
@@ -218,7 +231,7 @@ qa.smartmenu.local, localhost:8451, 172.31.98.60:8443 {
 # Caddy enruta /api/*, /uploads/*, /hubs/* al backend directo porque las
 # rewrites de Next.js no toman process.env en runtime con `next start`.
 (app-with-backend) {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	@apipath path /api/* /uploads/* /hubs/*
@@ -256,7 +269,7 @@ localhost:8449, 172.31.98.60:8449 {
 }
 
 localhost:8450 {
-	tls internal
+	import tls-long
 	import security-headers
 	reverse_proxy backend:8080
 	encode gzip zstd
@@ -271,7 +284,7 @@ localhost:8455, 172.31.98.60:8455 {
 
 # â”€â”€â”€ Backend API + SignalR hubs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 api.qa.smartmenu.local {
-	tls internal
+	import tls-long
 	import security-headers
 	# WebSockets / SSE para /hubs/*
 	@hubs path /hubs/*
@@ -290,42 +303,42 @@ api.qa.smartmenu.local {
 
 # â”€â”€â”€ Staff apps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 admin.qa.smartmenu.local {
-	tls internal
+	import tls-long
 	import security-headers
 	reverse_proxy admin-panel:3001
 	encode gzip zstd
 }
 
 kds.qa.smartmenu.local {
-	tls internal
+	import tls-long
 	import security-headers
 	reverse_proxy kds-app:3002
 	encode gzip zstd
 }
 
 waiter.qa.smartmenu.local {
-	tls internal
+	import tls-long
 	import security-headers
 	reverse_proxy waiter-app:3003
 	encode gzip zstd
 }
 
 host.qa.smartmenu.local {
-	tls internal
+	import tls-long
 	import security-headers
 	reverse_proxy host-app:3004
 	encode gzip zstd
 }
 
 cashier.qa.smartmenu.local {
-	tls internal
+	import tls-long
 	import security-headers
 	reverse_proxy cashier-app:3005
 	encode gzip zstd
 }
 
 reservation.qa.smartmenu.local {
-	tls internal
+	import tls-long
 	import security-headers
 	reverse_proxy reservation-app:3007
 	encode gzip zstd
@@ -336,7 +349,7 @@ reservation.qa.smartmenu.local {
 # Lista todos los paneles de rol con su URL nip.io + QR + credenciales seed.
 # Accesible desde cualquier device de la LAN: https://hub.172-31-98-60.nip.io:8443
 hub.172-31-98-60.nip.io {
-	tls internal
+	import tls-long
 	import security-headers
 	encode gzip zstd
 	root * /srv/hub
