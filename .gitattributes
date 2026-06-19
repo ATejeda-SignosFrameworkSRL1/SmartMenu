@@ -1,0 +1,7 @@
+# Normalización de fin de línea.
+# Los scripts que se ejecutan DENTRO de contenedores Linux deben mantenerse en LF
+# aunque se haga checkout en Windows. Con core.autocrlf=true se convertían a CRLF y
+# bash fallaba con $'\r' (rompía el arranque de sqlserver en el stack QA de Docker).
+*.sh text eol=lf
+docker/qa/sqlserver/init.sql text eol=lf
+docker/qa/sqlserver/entrypoint.sh text eol=lf
