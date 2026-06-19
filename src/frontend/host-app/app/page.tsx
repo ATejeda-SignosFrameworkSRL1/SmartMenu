@@ -505,6 +505,9 @@ export default function HostApp() {
 
     connection.on('ReservationConfirmed', () => loadReservations());
     connection.on('ReservationCancelled', () => loadReservations());
+    // El servidor emite AvailabilityChanged al crear/cancelar/no-show (cambia la disponibilidad).
+    // Registrar el handler evita el warning "No client method ... 'availabilitychanged'" y refresca.
+    connection.on('AvailabilityChanged', () => loadReservations());
 
     connection.start().then(() => {
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -759,8 +762,15 @@ export default function HostApp() {
   const availableSeats = tables.filter(t => t.status === 'Available').reduce((sum, t) => sum + t.capacity, 0);
   const occupiedSeats = totalCapacity - availableSeats;
 
+  // Panel operativo: ocultar reservas TERMINALES (cancelada/completada/no-show/expirada);
+  // solo se gestionan las activas. Así al cancelar una reserva desaparece de la lista.
+  const TERMINAL_RESERVATION_STATUS = new Set(['Cancelled', 'Completed', 'NoShow', 'Expired']);
+  const activeReservations = reservations.filter(
+    (r) => !r.isCancelled && !TERMINAL_RESERVATION_STATUS.has(r.status || '')
+  );
+
   const today = new Date().toLocaleDateString('sv-SE');
-  const todayReservations = reservations.filter(r => {
+  const todayReservations = activeReservations.filter(r => {
     const dt = r.reservationDateTime;
     if (!dt) return false;
     return new Date(dt).toLocaleDateString('sv-SE') === today;
@@ -770,10 +780,10 @@ export default function HostApp() {
 
   // All reservations filtered by status (for the grouped-by-date view)
   const statusFiltered = reservationFilter === 'pending'
-    ? reservations.filter(r => !r.isConfirmed)
+    ? activeReservations.filter(r => !r.isConfirmed)
     : reservationFilter === 'confirmed'
-    ? reservations.filter(r => r.isConfirmed)
-    : reservations;
+    ? activeReservations.filter(r => r.isConfirmed)
+    : activeReservations;
 
   // Filtro DESDE→HASTA (YYYY-MM-DD) combinable con el status
   const dateFiltered = (!dateFrom && !dateTo)
@@ -825,8 +835,8 @@ export default function HostApp() {
     return ra === 2 ? b.localeCompare(a) : a.localeCompare(b);
   });
 
-  const totalPending = reservations.filter(r => !r.isConfirmed).length;
-  const totalConfirmed = reservations.filter(r => r.isConfirmed).length;
+  const totalPending = activeReservations.filter(r => !r.isConfirmed).length;
+  const totalConfirmed = activeReservations.filter(r => r.isConfirmed).length;
 
   // Ocupación por mesa: reservas confirmadas/sentadas que ocupan la mesa en un día (YYYY-MM-DD).
   const occupancyForTableOnDate = (table: Table, ymd: string) =>
