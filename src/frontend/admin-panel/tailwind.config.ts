@@ -1,12 +1,17 @@
 import type { Config } from "tailwindcss";
+import preset from "@smartmenu/ui/preset";
 
 export default {
   darkMode: ["class"],
+  // Estructura de tokens, radios y animaciones base vienen del design system.
+  presets: [preset],
   content: [
     "./pages/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
     "./app/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
+    // Escanear los primitivos compartidos para que Tailwind genere sus clases.
+    "../packages/ui/src/**/*.{ts,tsx}",
   ],
   prefix: "",
   theme: {
@@ -19,63 +24,11 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        display: ["Space Grotesk", "system-ui", "sans-serif"],
       },
+      // Tokens específicos de admin que NO están en el preset compartido.
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-        danger: {
-          DEFAULT: "hsl(var(--danger))",
-          foreground: "hsl(var(--danger-foreground))",
-        },
-        billing: {
-          DEFAULT: "hsl(var(--billing))",
-          foreground: "hsl(var(--billing-foreground))",
-        },
-        success: {
-          DEFAULT: "hsl(var(--success))",
-          foreground: "hsl(var(--success-foreground))",
-        },
-        warning: {
-          DEFAULT: "hsl(var(--warning))",
-          foreground: "hsl(var(--warning-foreground))",
-        },
-        info: {
-          DEFAULT: "hsl(var(--info))",
-          foreground: "hsl(var(--info-foreground))",
-        },
         table: {
           available: "hsl(var(--table-available))",
           occupied: "hsl(var(--table-occupied))",
@@ -93,20 +46,7 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-      },
       keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
         "pulse-slow": {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.7" },
@@ -115,19 +55,11 @@ export default {
           from: { transform: "translateX(-100%)", opacity: "0" },
           to: { transform: "translateX(0)", opacity: "1" },
         },
-        "fade-up": {
-          from: { transform: "translateY(10px)", opacity: "0" },
-          to: { transform: "translateY(0)", opacity: "1" },
-        },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
         "pulse-slow": "pulse-slow 2s ease-in-out infinite",
         "slide-in": "slide-in 0.3s ease-out",
-        "fade-up": "fade-up 0.4s ease-out",
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
 } satisfies Config;

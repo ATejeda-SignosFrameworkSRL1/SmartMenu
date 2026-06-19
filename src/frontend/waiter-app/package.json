@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@microsoft/signalr": "^8.0.7",
+    "@smartmenu/ui": "*",
     "@tanstack/react-query": "^5.28.4",
     "axios": "^1.6.8",
     "clsx": "^2.1.0",

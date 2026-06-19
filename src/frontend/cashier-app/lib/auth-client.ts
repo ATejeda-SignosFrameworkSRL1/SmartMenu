@@ -53,6 +53,58 @@ export interface AuthApi {
   getToken: () => string | null;
 }
 
+// ── Refresh compartido a nivel de módulo ──────────────────────────────────
+// Un solo refresh en vuelo por appKey, compartido por el interceptor de axios Y por
+// el accessTokenFactory de SignalR. Evita refrescos en paralelo que, con rotación de
+// refresh token, se invalidarían entre sí.
+const _refreshLocks: Record<string, Promise<string | null> | null> = {};
+
+function _tokenExpiringSoon(token: string, withinMs = 60_000): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return ((payload.exp ?? 0) * 1000) - Date.now() < withinMs;
+  } catch {
+    return true; // token ilegible → tratarlo como vencido
+  }
+}
+
+async function _refreshAccessToken(appKey: string, baseURL: string, refreshPath: string): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  if (_refreshLocks[appKey]) return _refreshLocks[appKey];
+  const refreshToken = localStorage.getItem(`${appKey}_refresh`);
+  if (!refreshToken) return null;
+
+  _refreshLocks[appKey] = (async () => {
+    try {
+      const res = await axios.post(baseURL + refreshPath, { refreshToken });
+      const { accessToken, refreshToken: newRefresh, user } = res.data ?? {};
+      if (!accessToken) return null;
+      localStorage.setItem(`${appKey}_token`, accessToken);
+      if (newRefresh) localStorage.setItem(`${appKey}_refresh`, newRefresh);
+      if (user) localStorage.setItem(`${appKey}_user`, JSON.stringify(user));
+      return accessToken as string;
+    } catch {
+      return null;
+    } finally {
+      _refreshLocks[appKey] = null;
+    }
+  })();
+  return _refreshLocks[appKey];
+}
+
+/**
+ * Devuelve un access token VÁLIDO para `appKey`, refrescándolo si está vencido o por
+ * vencer (<60s). Pensado para el `accessTokenFactory` de SignalR: la reconexión del hub
+ * nunca negocia con un token expirado → se acaban los 401 de reconexión en consola.
+ */
+export async function ensureFreshToken(appKey: string, refreshPath = '/api/auth/refresh'): Promise<string> {
+  if (typeof window === 'undefined') return '';
+  const token = localStorage.getItem(`${appKey}_token`);
+  if (token && !_tokenExpiringSoon(token)) return token;
+  const refreshed = await _refreshAccessToken(appKey, '', refreshPath);
+  return refreshed ?? token ?? '';
+}
+
 export function createAuthApi(appKey: string, options: AuthApiOptions = {}): AuthApi {
   const {
     baseURL = '',
@@ -67,30 +119,10 @@ export function createAuthApi(appKey: string, options: AuthApiOptions = {}): Aut
 
   const api = axios.create({ baseURL, timeout, headers: { 'Content-Type': 'application/json' } });
 
-  // Singleton lock — evita refresh paralelo si llegan múltiples 401s simultáneos.
-  let refreshPromise: Promise<string | null> | null = null;
-
+  // Refresh con lock compartido a nivel de módulo (el mismo que usa ensureFreshToken para
+  // SignalR), evitando refrescos en paralelo entre axios y el hub.
   async function tryRefresh(): Promise<string | null> {
-    if (refreshPromise) return refreshPromise;
-    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem(REFRESH_KEY) : null;
-    if (!refreshToken) return null;
-
-    refreshPromise = (async () => {
-      try {
-        const res = await axios.post(baseURL + refreshPath, { refreshToken });
-        const { accessToken, refreshToken: newRefresh, user } = res.data ?? {};
-        if (!accessToken) return null;
-        localStorage.setItem(TOKEN_KEY, accessToken);
-        if (newRefresh) localStorage.setItem(REFRESH_KEY, newRefresh);
-        if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-        return accessToken as string;
-      } catch {
-        return null;
-      } finally {
-        refreshPromise = null;
-      }
-    })();
-    return refreshPromise;
+    return _refreshAccessToken(appKey, baseURL, refreshPath);
   }
 
   // Request: inyecta Authorization si hay token.

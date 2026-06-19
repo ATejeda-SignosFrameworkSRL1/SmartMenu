@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { ensureFreshToken } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -85,7 +86,7 @@ export default function ReservationsPage() {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/hubs/reservations', {
         // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
-        accessTokenFactory: () => localStorage.getItem('admin_token') ?? '',
+        accessTokenFactory: () => ensureFreshToken(),
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })

@@ -84,6 +84,51 @@ export async function getZones(): Promise<ZoneOption[]> {
   }
 }
 
+// ─────────────── Reserva de ÁREA/ZONA completa (exclusiva) + seguimiento ───────────────
+
+export interface ZoneRequestBody {
+  date: string;        // yyyy-MM-dd
+  time: string;        // HH:mm
+  guests: number;
+  zoneId: number;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  occasionType: number;
+  specialRequests?: string;
+}
+
+export async function createZoneRequest(body: ZoneRequestBody): Promise<BookingResult> {
+  try {
+    const { data } = await api.post<BookingResult>('/api/tablereservation/zone-request', body);
+    return data;
+  } catch (e) {
+    const { message, code } = extractError(e, 'No se pudo enviar la solicitud de zona');
+    throw Object.assign(new Error(message), { code });
+  }
+}
+
+export interface ReservationTrack {
+  status: string;
+  isZoneExclusive: boolean;
+  zoneName?: string | null;
+  reservationDateTime: string;   // yyyy-MM-ddTHH:mm:ss
+  numberOfGuests: number;
+  occasionType: number;
+  hostResponseMessage?: string | null;
+  assignedTableCount: number;
+  customerName: string;
+}
+
+export async function getTrack(code: string): Promise<ReservationTrack | null> {
+  try {
+    const { data } = await api.get<ReservationTrack>(`/api/tablereservation/track/${encodeURIComponent(code)}`);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export const OCCASIONS: { value: number; label: string }[] = [
   { value: 0, label: 'Sin ocasión especial' },
   { value: 1, label: '🎂 Cumpleaños' },

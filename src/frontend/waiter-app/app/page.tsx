@@ -10,12 +10,19 @@ const AlertExclamation = () => (
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import { useWaiterNotifications, WaiterNotification } from '@/lib/useWaiterNotifications';
+import { useWaiterFloorPlan } from '@/lib/useWaiterFloorPlan';
 
 // Carga dinámica del QrScanner para evitar chunk errors en HTTPS
 const QrScanner = dynamic(() => import('./components/QrScanner').then(mod => ({ default: mod.QrScanner })), {
   ssr: false,
   loading: () => <p className="text-sm text-gray-600 animate-pulse">Cargando cámara...</p>
 });
+
+// Plano de salón (react-konva) en SOLO LECTURA — ssr:false porque Konva necesita el DOM.
+const MultiZoneFloorPlanViewer = dynamic(
+  () => import('@smartmenu/ui').then((m) => ({ default: m.MultiZoneFloorPlanViewer })),
+  { ssr: false, loading: () => <p className="p-6 text-sm text-gray-500 animate-pulse">Cargando plano...</p> }
+);
 
 interface Order {
   id: number;
@@ -33,6 +40,7 @@ interface Order {
     dishName: string;
     quantity: number;
     notes?: string;
+    customerName?: string; // comensal que pidió este ítem (varios comensales por mesa)
   }>;
 }
 
@@ -149,7 +157,9 @@ export default function WaiterPage() {
   // loader hasta montar en el cliente para evitar el mismatch (#418) que la dejaba en blanco al recargar.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-  const [view, setView] = useState<'general' | 'my-tables'>('general');
+  const [view, setView] = useState<'general' | 'my-tables' | 'plano'>('general');
+  const { data: floorPlanData, palette: floorPlanPalette } = useWaiterFloorPlan();
+  const [planoSel, setPlanoSel] = useState<string | number | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   // Estados del modal de cobro expandido
@@ -1964,6 +1974,14 @@ export default function WaiterPage() {
           >
             Mis Mesas ({myOrders.length})
           </button>
+          <button
+            onClick={() => setView('plano')}
+            className={`px-6 py-2 rounded-md font-medium transition-colors ${
+              view === 'plano' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Plano
+          </button>
         </div>
         {/* QR-MESA-DIRECT.1: botón "Identificar mesa por QR" eliminado.
             La identificación se hace tap directo en la card de la mesa (vista Mesas General). */}
@@ -2203,7 +2221,36 @@ export default function WaiterPage() {
 
       {/* Orders */}
       <div className="max-w-7xl mx-auto px-4 pb-8">
-        {view === 'general' ? (
+        {view === 'plano' ? (
+          // Vista Plano del salón (solo lectura) — click en mesa → ver el pedido
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Plano del salón</h2>
+              <span className="text-xs text-gray-500">Toca una mesa para ver su pedido</span>
+            </div>
+            <div style={{ height: 560 }} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <MultiZoneFloorPlanViewer
+                data={floorPlanData}
+                palette={floorPlanPalette}
+                fill
+                fitToContent
+                selectedTableId={planoSel ?? undefined}
+                onTableClick={(id: string | number) => {
+                  setPlanoSel(id);
+                  const tid = Number(id);
+                  const order = [...generalOrders, ...myOrders].find((o: any) => Number(o.tableId ?? o.TableId) === tid);
+                  if (order) { setOrderModalOrder(order); setShowOrderModal(true); return; }
+                  const t = tables.find((x: any) => Number(x.id) === tid);
+                  if (t) {
+                    if (t.status === 'Reserved') { openReservedTableInfo(t.id); return; }
+                    if (t.status === 'Available') { setConfirmIdentifyTable({ id: t.id, tableNumber: t.tableNumber, zoneName: t.zoneName }); return; }
+                  }
+                  toast('Mesa ocupada — sin pedido asignado a ti', { icon: 'ℹ️' });
+                }}
+              />
+            </div>
+          </div>
+        ) : view === 'general' ? (
           // Vista Mesas General
           <div className="space-y-6">
             {/* Todas las Mesas: solo mesas sin orden asignada a mí (las mías aparecen en "Mis Mesas") */}
@@ -2659,7 +2706,12 @@ export default function WaiterPage() {
                   <div className="mb-4 space-y-2">
                     {items.map((item: any, idx: number) => (
                       <div key={idx} className="text-sm rounded-lg bg-gray-50 p-2 border border-gray-100">
-                        <div className="font-medium text-gray-800">{item.quantity}x {item.dishName ?? item.DishName}</div>
+                        <div className="font-medium text-gray-800">
+                          {item.quantity}x {item.dishName ?? item.DishName}
+                          {(item.customerName ?? item.CustomerName) ? (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary-50 text-primary-700 border border-primary-200 align-middle">👤 {item.customerName ?? item.CustomerName}</span>
+                          ) : null}
+                        </div>
                         {(item.notes ?? item.Notes ?? item.customizations ?? item.Customizations ?? item.allergies ?? item.Allergies ?? item.sideDish ?? item.SideDish ?? item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) && (
                           <div className="mt-1 text-xs text-gray-600 space-y-0.5 pl-1 border-l-2 border-amber-200">
                             {(item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) ? <div>🔥 Preferencia / Término: {item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking}</div> : null}
@@ -3485,7 +3537,7 @@ export default function WaiterPage() {
                   return items.map((item: any, idx: number) => (
                     <div key={idx} className="rounded-lg bg-gray-50 border p-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="font-medium"><span className="text-primary-600">{item.quantity}x</span> {item.dishName ?? item.DishName}</span>
+                        <span className="font-medium"><span className="text-primary-600">{item.quantity}x</span> {item.dishName ?? item.DishName}{(item.customerName ?? item.CustomerName) ? <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary-50 text-primary-700 border border-primary-200 align-middle">👤 {item.customerName ?? item.CustomerName}</span> : null}</span>
                       </div>
                       {(item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) && (
                         <div className="text-xs text-orange-600 mt-0.5">🔥 {item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking}</div>
@@ -3883,7 +3935,7 @@ export default function WaiterPage() {
                                 {order.items?.map((item: any, idx: number) => (
                                   <div key={idx} className="text-sm rounded-lg bg-amber-50/50 border border-amber-200/60 p-2">
                                     <div className="flex justify-between">
-                                      <span className="text-gray-800 font-medium"><span className="font-semibold text-purple-900">{item.quantity}x</span> {item.dishName ?? item.DishName}</span>
+                                      <span className="text-gray-800 font-medium"><span className="font-semibold text-purple-900">{item.quantity}x</span> {item.dishName ?? item.DishName}{(item.customerName ?? item.CustomerName) ? <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-800 border border-purple-200 align-middle">👤 {item.customerName ?? item.CustomerName}</span> : null}</span>
                                     </div>
                                     {(item.notes ?? item.Notes ?? item.customizations ?? item.Customizations ?? item.allergies ?? item.Allergies ?? item.sideDish ?? item.SideDish ?? item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) && (
                                       <div className="mt-1.5 text-xs text-gray-600 space-y-0.5 pl-1 border-l-2 border-amber-300">

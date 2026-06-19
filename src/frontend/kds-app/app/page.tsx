@@ -5,7 +5,7 @@ import { Clock, Check, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
-import { createAuthApi } from '@/lib/auth-client';
+import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 
 // F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('kds');
@@ -65,6 +65,7 @@ interface OrderItem {
   dishName: string;
   quantity: number;
   notes?: string;
+  customerName?: string; // comensal que pidió este ítem (varios comensales por mesa)
   customizations?: string;
   allergies?: string;
   sideDish?: string;
@@ -148,7 +149,7 @@ export default function KDSPage() {
 
     // SignalR: escuchar nuevas órdenes para cocina (cuando el mesero confirma la orden)
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${wsBaseUrl}/hubs/kitchen`, { accessTokenFactory: () => Promise.resolve(token) })
+      .withUrl(`${wsBaseUrl}/hubs/kitchen`, { accessTokenFactory: () => ensureFreshToken('kds') })
       .withAutomaticReconnect()
       .build();
 
@@ -499,6 +500,11 @@ export default function KDSPage() {
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badgeMeta.badge}`}>
                               {badgeMeta.icon} {badgeMeta.label}
                             </span>
+                            {(item.customerName ?? item.CustomerName) ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-500/25 text-sky-200 border border-sky-400/50">
+                                👤 {item.customerName ?? item.CustomerName}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         {(() => {

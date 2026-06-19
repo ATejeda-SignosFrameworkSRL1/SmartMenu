@@ -1,0 +1,11 @@
+# Contexto de build del workspace (usado por docker/qa/Dockerfile.admin, context=src/frontend).
+# Excluye lo pesado/innecesario para que el contexto sea liviano y el build reproducible.
+**/node_modules
+**/.next
+**/storybook-static
+**/dist
+**/coverage
+**/*.log
+.git
+**/.DS_Store
+**/.env*.local

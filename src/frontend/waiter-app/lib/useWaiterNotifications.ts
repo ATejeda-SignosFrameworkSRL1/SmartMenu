@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as signalR from '@microsoft/signalr';
+import { ensureFreshToken } from '@/lib/api';
 
 export type NotificationType = 'kitchen_ready' | 'bar_ready' | 'customer_finished' | 'items_added' | 'billing_requested' | 'claim_approved' | 'claim_rejected';
 
@@ -100,7 +101,7 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
         // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
-        accessTokenFactory: () => localStorage.getItem('waiter_token') ?? token ?? '',
+        accessTokenFactory: () => ensureFreshToken(),
         // Intenta WebSocket primero; si el proxy no soporta upgrade, cae a LongPolling.
         // Ambos van a través del proxy Next.js (mismo origen → sin problema de cert SSL).
         skipNegotiation: false,

@@ -8,7 +8,7 @@ import {
   ShoppingBag, BarChart3, Search, User, Radio
 } from 'lucide-react';
 import * as signalR from '@microsoft/signalr';
-import { createAuthApi } from '@/lib/auth-client';
+import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 
 // F3 — auth-client centralizado reemplaza el interceptor JWT inline
 // (refresh transparente con singleton lock, mismo prefijo cashier_*).
@@ -101,7 +101,7 @@ function CajaTab({ user }: { user: any }) {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
         // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
-        accessTokenFactory: () => localStorage.getItem('cashier_token') ?? '',
+        accessTokenFactory: () => ensureFreshToken('cashier'),
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])

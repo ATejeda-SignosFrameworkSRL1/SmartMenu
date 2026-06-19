@@ -80,6 +80,8 @@ interface Table {
   zoneName: string;
   zoneId: number;
   qrCode: string;
+  name?: string;
+  color?: string;
 }
 
 interface Zone {
@@ -98,8 +100,14 @@ export default function TablesPage() {
   const [filterCapacity, setFilterCapacity] = useState<string>('all');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ tableNumber: 0, capacity: 4, zoneId: 0 });
+  const [createForm, setCreateForm] = useState({ tableNumber: 0, capacity: 4, zoneId: 0, name: '', color: '' });
   const [createdTable, setCreatedTable] = useState<Table | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('');
+  useEffect(() => {
+    setEditName(selectedTable?.name ?? '');
+    setEditColor(selectedTable?.color ?? '');
+  }, [selectedTable]);
   // Lee propiedad en camelCase o PascalCase
   const nv = (obj: any, key: string) =>
     obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
@@ -145,6 +153,8 @@ export default function TablesPage() {
           zoneName: String(nv(t, 'zoneName') ?? ''),
           zoneId: 0, // no viene del API, no se usa
           qrCode: String(nv(t, 'qrCode') ?? ''),
+          name: (nv(t, 'name') ?? undefined) as string | undefined,
+          color: (nv(t, 'color') ?? undefined) as string | undefined,
         }))
         .filter(t => diningZoneNames.has(t.zoneName));
       setTables(normalizedTables);
@@ -266,6 +276,18 @@ export default function TablesPage() {
     }
   };
 
+  const saveTableAppearance = async () => {
+    if (!selectedTable) return;
+    try {
+      await api.put(`/api/table/${selectedTable.id}`, { name: editName.trim() || null, color: editColor || null });
+      toast.success('Mesa actualizada');
+      setSelectedTable(null);
+      loadData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Error al actualizar mesa');
+    }
+  };
+
   const getQrUrl = (table: Table) => `${CLIENT_URL}/table/${table.qrCode}`;
 
   const downloadQR = (table: Table) => {
@@ -297,7 +319,7 @@ export default function TablesPage() {
             <p className="text-muted-foreground">Administra el estado y configuración de las mesas</p>
           </div>
           <div className="flex gap-2 items-center">
-            <Button onClick={() => { setShowCreateModal(true); setCreateForm({ tableNumber: tables.length + 1, capacity: 4, zoneId: zones[0] ? getZoneId(zones[0]) : 0 }); }} variant="default">
+            <Button onClick={() => { setShowCreateModal(true); setCreateForm({ tableNumber: tables.length + 1, capacity: 4, zoneId: zones[0] ? getZoneId(zones[0]) : 0, name: '', color: '' }); }} variant="default">
               <Plus className="h-4 w-4 mr-2" />
               Nueva Mesa
             </Button>
@@ -484,6 +506,7 @@ export default function TablesPage() {
                     )}
                   >
                     <div className="text-3xl font-bold mb-2">#{table.tableNumber}</div>
+                    {table.name && <div className="text-xs font-semibold mb-1 truncate">{table.name}</div>}
                     <div className="text-xs uppercase mb-2">{table.zoneName}</div>
                     <div className="flex items-center justify-center gap-1 text-sm mb-2">
                       <Users className="h-4 w-4" />
@@ -540,6 +563,38 @@ export default function TablesPage() {
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 col-span-2">
                 <span className="text-muted-foreground">Estado actual</span>
                 <p className="font-semibold">{getStatusLabel(selectedTable.status)}</p>
+              </div>
+            </div>
+
+            {/* Apariencia: nombre + color */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Apariencia</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-muted-foreground">Nombre / etiqueta</label>
+                  <input
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    placeholder={`#${selectedTable.tableNumber}`}
+                    maxLength={80}
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
+                  />
+                </div>
+                <div className="flex items-end gap-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-muted-foreground">Color</label>
+                    <input
+                      type="color"
+                      value={editColor || '#2F9E78'}
+                      onChange={e => setEditColor(e.target.value)}
+                      className="h-9 w-12 cursor-pointer rounded border dark:border-gray-700 bg-white p-0.5"
+                    />
+                  </div>
+                  {editColor && (
+                    <button onClick={() => setEditColor('')} className="mb-1.5 text-xs text-muted-foreground underline">Quitar color</button>
+                  )}
+                  <Button size="sm" className="ml-auto" onClick={saveTableAppearance}>Guardar</Button>
+                </div>
               </div>
             </div>
 
@@ -621,6 +676,30 @@ export default function TablesPage() {
                     <option key={z.id} value={z.id}>{z.name}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Nombre / etiqueta (opcional)</label>
+                <input
+                  value={createForm.name}
+                  onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
+                  placeholder={`#${createForm.tableNumber}`}
+                  maxLength={80}
+                  className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
+                />
+              </div>
+              <div className="flex items-end gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Color (opcional)</label>
+                  <input
+                    type="color"
+                    value={createForm.color || '#2F9E78'}
+                    onChange={e => setCreateForm({ ...createForm, color: e.target.value })}
+                    className="h-9 w-12 cursor-pointer rounded border dark:border-gray-700 bg-white p-0.5"
+                  />
+                </div>
+                {createForm.color && (
+                  <button onClick={() => setCreateForm({ ...createForm, color: '' })} className="mb-1.5 text-xs text-muted-foreground underline">Quitar</button>
+                )}
               </div>
               <Button className="w-full" onClick={createTable}>
                 <Plus className="h-4 w-4 mr-2" />

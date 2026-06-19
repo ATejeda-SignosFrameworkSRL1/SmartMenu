@@ -4,11 +4,19 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Users, Calendar, LogOut, X, Clock, Phone, Mail, User, CreditCard, CheckCircle, XCircle, CalendarCheck, Globe, UtensilsCrossed, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as signalR from '@microsoft/signalr';
-import { createAuthApi } from '@/lib/auth-client';
+import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 import HostReservationWizard from '@/components/HostReservationWizard';
+import dynamic from 'next/dynamic';
+import { useHostFloorPlan } from '@/lib/useHostFloorPlan';
 
 // F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('host');
+
+// Plano de salón (react-konva) en SOLO LECTURA — ssr:false porque Konva necesita el DOM.
+const MultiZoneFloorPlanViewer = dynamic(
+  () => import('@smartmenu/ui').then((m) => ({ default: m.MultiZoneFloorPlanViewer })),
+  { ssr: false, loading: () => <p className="p-6 text-sm text-gray-500 animate-pulse">Cargando plano...</p> }
+);
 
 interface Zone {
   id: number;
@@ -59,6 +67,7 @@ interface Reservation {
   zoneName: string | null;
   requestedZoneId?: number | null;
   requestedZoneName?: string | null;
+  isZoneExclusive?: boolean;  // reserva de ZONA completa (uso exclusivo)
   specialRequests?: string;
   occasionType?: number; // 0=Casual, 1=Birthday, 2=Anniversary, 3=Business, 4=Romantic, 5=FamilyCelebration, 99=Other
   source?: string;
@@ -122,6 +131,10 @@ export default function HostApp() {
 
   // View tabs: 'tables' or 'reservations'
   const [activeView, setActiveView] = useState<'tables' | 'reservations' | 'calendar'>('tables');
+  const { data: floorPlanData, palette: floorPlanPalette } = useHostFloorPlan();
+  const [showPlan, setShowPlan] = useState(false);
+  const [planoSel, setPlanoSel] = useState<string | number | null>(null);
+  const [planoTable, setPlanoTable] = useState<Table | null>(null);
 
   // Reservations state
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -381,6 +394,10 @@ export default function HostApp() {
   // Modal de confirmación al cancelar/rechazar una reserva
   const [cancelConfirmReservation, setCancelConfirmReservation] = useState<Reservation | null>(null);
   const [cancellingReservation, setCancellingReservation] = useState(false);
+  // ZONA-EXCL — decisión del host sobre reservas de zona completa (aceptar bloquea la zona / rechazar)
+  const [zoneDecisionModal, setZoneDecisionModal] = useState<{ r: Reservation; accept: boolean } | null>(null);
+  const [zoneDecisionMsg, setZoneDecisionMsg] = useState('');
+  const [zoneDeciding, setZoneDeciding] = useState(false);
 
   const requestCancelReservation = (r: Reservation) => {
     setCancelConfirmReservation(r);
@@ -402,6 +419,34 @@ export default function HostApp() {
     }
   };
 
+  // ZONA-EXCL — abrir el modal de decisión (aceptar/rechazar) para una reserva de zona completa
+  const openZoneDecision = (r: Reservation, accept: boolean) => {
+    setZoneDecisionMsg(accept ? '¡Confirmado! Reservamos toda la zona para tu evento. ¡Los esperamos!' : '');
+    setZoneDecisionModal({ r, accept });
+  };
+
+  const submitZoneDecision = async () => {
+    if (!zoneDecisionModal) return;
+    const { r, accept } = zoneDecisionModal;
+    setZoneDeciding(true);
+    try {
+      await api.post(`/api/tablereservation/${r.id}/zone-decision`, { accept, message: zoneDecisionMsg });
+      toast.success(accept ? 'Zona reservada y confirmada al cliente' : 'Reserva de zona rechazada');
+      setZoneDecisionModal(null);
+      setZoneDecisionMsg('');
+      loadReservations();
+      loadData();
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        toast.error('No se puede: la zona ya tiene reservas en esa fecha/horario. Podés rechazar con un mensaje.');
+      } else {
+        toast.error('Error al responder la reserva de zona');
+      }
+    } finally {
+      setZoneDeciding(false);
+    }
+  };
+
   // SignalR for real-time reservation notifications
   useEffect(() => {
     const token = localStorage.getItem('host_token');
@@ -414,7 +459,7 @@ export default function HostApp() {
       .withUrl(hubUrl, {
         // Leer el token FRESCO en cada negotiate/reconnect (no capturar el valor de montaje):
         // tras un relogin/refresh, la próxima reconexión usa el token nuevo sin recargar la página.
-        accessTokenFactory: () => localStorage.getItem('host_token') ?? '',
+        accessTokenFactory: () => ensureFreshToken('host'),
         skipNegotiation: false,
         // El proxy same-origin de Next (/hubs/* → backend) no actualiza WebSockets,
         // por lo que el intento de WS fallaba siempre y ensuciaba la consola con
@@ -1161,6 +1206,14 @@ export default function HostApp() {
                                       Próxima
                                     </span>
                                   )}
+                                  {r.isZoneExclusive && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200"
+                                      title="Reserva de zona completa (uso exclusivo)"
+                                    >
+                                      🏛 Zona completa{r.requestedZoneName ? `: ${r.requestedZoneName}` : ''}
+                                    </span>
+                                  )}
                                   {/* Badge de tipo de ocasión (si != Casual) */}
                                   {r.occasionType !== undefined && r.occasionType !== 0 && OCCASION_LABELS[r.occasionType] ? (
                                     <span
@@ -1222,14 +1275,14 @@ export default function HostApp() {
                                   // Pendiente: Aceptar y Rechazar JUNTOS en la misma línea
                                   <div className="flex gap-2">
                                     <button
-                                      onClick={() => openReservationAssignModal(r)}
+                                      onClick={() => r.isZoneExclusive ? openZoneDecision(r, true) : openReservationAssignModal(r)}
                                       className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                                     >
                                       <CheckCircle className="w-4 h-4" />
                                       Aceptar
                                     </button>
                                     <button
-                                      onClick={() => requestCancelReservation(r)}
+                                      onClick={() => r.isZoneExclusive ? openZoneDecision(r, false) : requestCancelReservation(r)}
                                       className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                                     >
                                       <XCircle className="w-4 h-4" />
@@ -1332,7 +1385,16 @@ export default function HostApp() {
 
           {/* Zone tabs */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Zona</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Zona</p>
+              <button
+                onClick={() => setShowPlan((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                style={{ backgroundColor: '#16a34a' }}
+              >
+                {showPlan ? 'Ver lista' : 'Ver plano'}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedZone(null)}
@@ -1523,7 +1585,31 @@ export default function HostApp() {
         </div>
       </div>
 
-      {/* Tables Grid — responsive: 1col cell portrait → 2col cell landscape → 3col tablet → 5col desktop */}
+      {/* Tables Grid / Plano del salón */}
+      {showPlan ? (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between px-4 py-2 text-xs text-slate-500">
+            <span>Toca una mesa para gestionarla</span>
+            <span className="hidden sm:inline">Plano en vivo · estado por color</span>
+          </div>
+          <div style={{ height: 560 }}>
+            <MultiZoneFloorPlanViewer
+              data={floorPlanData}
+              palette={floorPlanPalette}
+              fill
+              fitToContent
+              selectedTableId={planoSel ?? undefined}
+              onTableClick={(id) => {
+                setPlanoSel(id);
+                const t = tables.find((x) => Number(x.id) === Number(id));
+                if (t) setPlanoTable(t);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      ) : (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
           {filteredTables.map((table) => (
@@ -1814,6 +1900,44 @@ export default function HostApp() {
           ))}
         </div>
       </div>
+      )}
+
+      {/* Hoja de acciones del host al tocar una mesa en el plano */}
+      {planoTable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(15,23,42,0.55)' }} onClick={() => setPlanoTable(null)}>
+          <div style={{ width: '100%', maxWidth: 380 }} onClick={(e) => e.stopPropagation()} className="overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Mesa {planoTable.tableNumber}</h3>
+                <p className="text-xs text-slate-500">{planoTable.zoneName} · {planoTable.capacity} pers.</p>
+              </div>
+              <button type="button" onClick={() => setPlanoTable(null)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-2 p-5">
+              {planoTable.status === 'Available' ? (
+                <>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openAssignModal(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
+                    <Users className="h-4 w-4" /> Sentar comensales
+                  </button>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openReservationModal(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <CalendarCheck className="h-4 w-4" /> Reservar
+                  </button>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openTableOccupancy(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <Calendar className="h-4 w-4" /> Ver reservas
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="mb-1 text-xs text-slate-500">Mesa {planoTable.status === 'Reserved' ? 'reservada' : planoTable.status === 'Occupied' ? 'ocupada' : planoTable.status === 'Billing' ? 'por cobrar' : 'en limpieza'} — gestiona sus reservas:</p>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openTableOccupancy(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
+                    <Calendar className="h-4 w-4" /> Ver reservas
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       </>}
 
@@ -2034,6 +2158,56 @@ export default function HostApp() {
       )}
 
       {/* Modal de confirmación al cancelar/rechazar reserva */}
+      {/* ZONA-EXCL — Modal de decisión del host (aceptar bloquea la zona / rechazar) con mensaje al cliente */}
+      {zoneDecisionModal && (() => {
+        const r = zoneDecisionModal.r;
+        const accept = zoneDecisionModal.accept;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => !zoneDeciding && setZoneDecisionModal(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className={`px-6 py-4 flex items-center gap-3 border-b ${accept ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                <div className={`rounded-full w-10 h-10 flex items-center justify-center flex-shrink-0 ${accept ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                  <span className="text-lg">🏛</span>
+                </div>
+                <div className="min-w-0">
+                  <h3 className={`text-lg font-bold ${accept ? 'text-emerald-900' : 'text-red-900'}`}>
+                    {accept ? 'Aceptar zona completa' : 'Rechazar zona completa'}
+                  </h3>
+                  <p className="text-xs text-slate-500 truncate">{r.customerName} · {r.requestedZoneName || r.zoneName || 'zona'} · {r.numberOfGuests} pers</p>
+                </div>
+              </div>
+              <div className="px-6 py-5">
+                <p className="text-sm text-slate-600 mb-3">
+                  {accept
+                    ? <>Se bloqueará <b>toda la zona {r.requestedZoneName || ''}</b> (todas sus mesas) para este cliente. Si la zona ya tiene reservas en esa ventana, no se podrá.</>
+                    : <>La solicitud se marcará como rechazada. El cliente verá tu mensaje en su seguimiento.</>}
+                </p>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Mensaje al cliente</label>
+                <textarea
+                  value={zoneDecisionMsg}
+                  onChange={(e) => setZoneDecisionMsg(e.target.value)}
+                  rows={3}
+                  placeholder={accept ? '¡Confirmado! Los esperamos…' : 'Lo sentimos, esa zona ya está comprometida ese día…'}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+              </div>
+              <div className="bg-slate-50 px-6 py-3 flex items-center justify-end gap-2 border-t">
+                <button onClick={() => setZoneDecisionModal(null)} disabled={zoneDeciding} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+                  Cerrar
+                </button>
+                <button
+                  onClick={submitZoneDecision}
+                  disabled={zoneDeciding || (!accept && !zoneDecisionMsg.trim())}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold text-white shadow-sm disabled:opacity-50 ${accept ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}
+                >
+                  {zoneDeciding ? 'Enviando…' : (accept ? 'Aceptar y bloquear zona' : 'Rechazar')}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {cancelConfirmReservation && (
         <div
           className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"

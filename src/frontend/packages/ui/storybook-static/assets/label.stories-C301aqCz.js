@@ -1,0 +1,6 @@
+import{j as o}from"./jsx-runtime-DFAAy_2V.js";import{L as p}from"./label-DvPQGGet.js";import{I as l}from"./input-IPxWAZrp.js";import"./index-Bc2G9s8g.js";import"./index-DwAF0atC.js";import"./index-DElvVMUg.js";import"./index-DYLXRpC5.js";import"./index-ses-1Ffn.js";import"./index-BZgcsEBY.js";import"./index-EXTQMK5R.js";import"./cn-BLSKlp9E.js";const b={title:"Primitivos/Label",component:p,tags:["autodocs"],args:{children:"Correo electrónico"}},r={},e={render:()=>o.jsxs("div",{className:"grid w-72 gap-1.5",children:[o.jsx(p,{htmlFor:"email",children:"Correo electrónico"}),o.jsx(l,{id:"email",type:"email",placeholder:"tu@email.com"})]})};var a,t,i;r.parameters={...r.parameters,docs:{...(a=r.parameters)==null?void 0:a.docs,source:{originalSource:"{}",...(i=(t=r.parameters)==null?void 0:t.docs)==null?void 0:i.source}}};var m,s,c;e.parameters={...e.parameters,docs:{...(m=e.parameters)==null?void 0:m.docs,source:{originalSource:`{
+  render: () => <div className="grid w-72 gap-1.5">\r
+      <Label htmlFor="email">Correo electrónico</Label>\r
+      <Input id="email" type="email" placeholder="tu@email.com" />\r
+    </div>
+}`,...(c=(s=e.parameters)==null?void 0:s.docs)==null?void 0:c.source}}};const v=["Default","ConInput"];export{e as ConInput,r as Default,v as __namedExportsOrder,b as default};

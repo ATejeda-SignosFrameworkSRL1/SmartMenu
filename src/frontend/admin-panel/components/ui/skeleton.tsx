@@ -1,7 +1,2 @@
-import { cn } from "@/lib/utils";
-
-function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("animate-pulse rounded-md bg-muted", className)} {...props} />;
-}
-
-export { Skeleton };
+// Re-export del design system compartido (@smartmenu/ui).
+export { Skeleton } from "@smartmenu/ui";

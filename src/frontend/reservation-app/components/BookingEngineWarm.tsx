@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
+import Link from 'next/link';
 import {
   CalendarDays, Users, Clock, ChevronLeft, ChevronRight, CheckCircle2, Loader2,
-  Phone, Mail, User as UserIcon, PartyPopper, ArrowRight, MapPin,
+  Phone, Mail, User as UserIcon, PartyPopper, ArrowRight, MapPin, Building2,
 } from 'lucide-react';
 import {
-  getSlots, holdSlot, confirmPublic, getZones, OCCASIONS,
+  getSlots, holdSlot, confirmPublic, createZoneRequest, getZones, OCCASIONS,
   type Availability, type Slot, type BookingResult, type ZoneOption,
 } from '@/lib/booking-api';
 
@@ -36,8 +37,17 @@ function to12h(t?: string | null): string {
   return `${h}:${m.padStart(2, '0')} ${ap}`;
 }
 
+// Horas para el modo "Área completa" (no hay grid de slots; el host aprueba). 12:00–22:00 cada 30 min.
+const AREA_TIMES: string[] = (() => {
+  const out: string[] = [];
+  for (let h = 12; h <= 22; h++) { out.push(`${String(h).padStart(2, '0')}:00`); if (h < 22) out.push(`${String(h).padStart(2, '0')}:30`); }
+  return out;
+})();
+
 export default function BookingEngineWarm() {
   const [step, setStep] = useState<Step>(1);
+  const [mode, setMode] = useState<'mesa' | 'area'>('mesa');   // 'area' = reservar zona completa (exclusiva)
+  const [areaTime, setAreaTime] = useState('19:00');           // hora elegida en modo área (no hay grid de slots)
   const [date, setDate] = useState(tomorrowStr());
   const [calMonth, setCalMonth] = useState<Date>(() => { const t = new Date(); t.setDate(t.getDate() + 1); return new Date(t.getFullYear(), t.getMonth(), 1); });
   const [guests, setGuests] = useState(2);
@@ -131,10 +141,21 @@ export default function BookingEngineWarm() {
   }
 
   async function submit() {
-    if (!hold) return;
     if (!name.trim() || !phone.trim()) { toast.error('Nombre y teléfono son obligatorios'); return; }
     setSubmitting(true);
     try {
+      if (mode === 'area') {
+        if (!zoneId) { toast.error('Elegí la zona a reservar'); return; }
+        const r = await createZoneRequest({
+          date, time: areaTime, guests, zoneId,
+          customerName: name.trim(), customerPhone: phone.trim(),
+          customerEmail: email.trim() || undefined,
+          occasionType: occasion, specialRequests: notes.trim() || undefined,
+        });
+        setResult(r); setStep(4);
+        return;
+      }
+      if (!hold) return;
       const r = await confirmPublic(hold.reservationId, {
         confirmationCode: hold.confirmationCode,
         customerName: name.trim(),
@@ -150,7 +171,7 @@ export default function BookingEngineWarm() {
         toast.error('El tiempo de reserva expiró, elige otro horario');
         setHold(null); setSelectedTime(null); setStep(2);
       } else {
-        toast.error(err.message || 'No se pudo confirmar la reserva');
+        toast.error(err.message || (mode === 'area' ? 'No se pudo enviar la solicitud' : 'No se pudo confirmar la reserva'));
       }
     } finally { setSubmitting(false); }
   }
@@ -167,6 +188,27 @@ export default function BookingEngineWarm() {
 
   // ─── Confirmación ───
   if (step === 4 && result) {
+    if (mode === 'area') {
+      return (
+        <div className="mx-auto max-w-lg rounded-3xl border border-primary/20 bg-warm-900/50 p-10 text-center shadow-2xl sm:p-12">
+          <CheckCircle2 className="mx-auto h-20 w-20 text-primary-light" />
+          <h2 className="mt-6 font-display text-3xl font-bold text-white">¡Solicitud enviada!</h2>
+          <p className="mt-3 text-warm-400">
+            Pediste <b className="text-white">toda la zona{zones.find((z) => z.id === zoneId) ? ` ${zones.find((z) => z.id === zoneId)!.name}` : ''}</b> para el{' '}
+            {new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })} a las {to12h(areaTime)}.
+            {' '}El restaurante confirmará si es posible.
+          </p>
+          <div className="mt-6 inline-block rounded-xl border border-primary/30 bg-warm-900 px-6 py-4">
+            <p className="text-xs text-warm-500 uppercase tracking-wide">Código de seguimiento</p>
+            <p className="text-2xl font-mono font-bold text-primary-light">{result.confirmationCode}</p>
+          </div>
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <Link href={`/seguimiento/${result.confirmationCode}`} className="btn-primary-lg w-full justify-center">Ver estado de mi solicitud</Link>
+            <button onClick={reset} className="text-sm font-medium text-warm-400 transition-colors hover:text-primary-light">Hacer otra reserva</button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-primary/20 bg-warm-900/50 p-12 text-center shadow-2xl">
         <CheckCircle2 className="mx-auto h-20 w-20 text-primary-light" />
@@ -193,12 +235,14 @@ export default function BookingEngineWarm() {
       {/* Header del wizard */}
       <div className="mb-6 flex items-center gap-3">
         {step > 1 && (
-          <button onClick={() => setStep((s) => (s - 1) as Step)} className="p-2 -ml-2 rounded-lg text-warm-300 hover:bg-warm-800/60" aria-label="Atrás">
+          <button onClick={() => setStep((s) => (mode === 'area' && s === 3 ? 1 : (s - 1)) as Step)} className="p-2 -ml-2 rounded-lg text-warm-300 hover:bg-warm-800/60" aria-label="Atrás">
             <ChevronLeft className="w-5 h-5" />
           </button>
         )}
         <div className="flex-1">
-          <p className="text-xs font-bold uppercase tracking-wider text-primary-light">Paso {step} de 3</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-primary-light">
+            Paso {mode === 'area' ? (step === 3 ? 2 : 1) : step} de {mode === 'area' ? 2 : 3}
+          </p>
           <h3 className="font-display text-2xl font-bold text-white">
             {step === 1 && '¿Cuándo y cuántos?'}
             {step === 2 && 'Elige tu horario'}
@@ -207,12 +251,28 @@ export default function BookingEngineWarm() {
         </div>
       </div>
       <div className="mb-8 h-1.5 rounded-full bg-warm-800 overflow-hidden">
-        <div className="h-full bg-primary transition-all" style={{ width: `${(step / 3) * 100}%` }} />
+        <div className="h-full bg-primary transition-all" style={{ width: `${mode === 'area' ? (step === 3 ? 100 : 50) : (step / 3) * 100}%` }} />
       </div>
 
       {/* Paso 1 — fecha + party */}
       {step === 1 && (
         <div className="space-y-5">
+          {/* Toggle de modo — el MISMO form sirve para reservar una mesa o una zona completa */}
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-warm-700 bg-warm-800/40 p-1">
+            <button type="button" onClick={() => setMode('mesa')}
+              className={['flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-semibold transition min-h-[44px]', mode === 'mesa' ? 'bg-primary text-warm-950 shadow' : 'text-warm-300 hover:text-white'].join(' ')}>
+              🍽 Reservar mesa
+            </button>
+            <button type="button" onClick={() => setMode('area')}
+              className={['flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-semibold transition min-h-[44px]', mode === 'area' ? 'bg-primary text-warm-950 shadow' : 'text-warm-300 hover:text-white'].join(' ')}>
+              🏛 Área completa
+            </button>
+          </div>
+          {mode === 'area' && (
+            <p className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-warm-300">
+              Reservás <b className="text-warm-100">toda una zona</b> en exclusiva para tu evento. El restaurante confirma si es posible para tu fecha y horario.
+            </p>
+          )}
           {/* Fecha — calendario SIEMPRE abierto (mobile-first: un toque para elegir el día) */}
           <div className="block">
             <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
@@ -306,33 +366,64 @@ export default function BookingEngineWarm() {
             </div>
           </div>
 
-          {/* Selector de zona — filtra los slots por área del restaurante. Opcional. */}
+          {/* Selector de zona — preferencia (mesa) u obligatoria + completa (área). */}
           {zones.length > 0 && (
             <div className="block">
               <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                <MapPin className="h-4 w-4 text-primary-light" /> Zona preferida
-                <span className="text-xs text-warm-500 font-normal">(opcional)</span>
+                <MapPin className="h-4 w-4 text-primary-light" />
+                {mode === 'area' ? 'Zona a reservar (completa)' : 'Zona preferida'}
+                {mode === 'area'
+                  ? <span className="text-rose-400">*</span>
+                  : <span className="text-xs text-warm-500 font-normal">(opcional)</span>}
               </span>
-              <div role="radiogroup" aria-label="Zona preferida" className="flex flex-wrap gap-2">
-                <ZoneChip
-                  selected={zoneId === null}
-                  onClick={() => setZoneId(null)}
-                  label="Sin preferencia"
-                />
+              <div role="radiogroup" aria-label="Zona" className="flex flex-wrap gap-2">
+                {mode !== 'area' && (
+                  <ZoneChip selected={zoneId === null} onClick={() => setZoneId(null)} label="Sin preferencia" />
+                )}
                 {zones.map((z) => (
-                  <ZoneChip
-                    key={z.id}
-                    selected={zoneId === z.id}
-                    onClick={() => setZoneId(z.id)}
-                    label={z.name}
-                  />
+                  <ZoneChip key={z.id} selected={zoneId === z.id} onClick={() => setZoneId(z.id)} label={z.name} />
                 ))}
               </div>
             </div>
           )}
 
-          <button onClick={() => setStep(2)} className="btn-primary-lg mt-2 w-full">
-            Ver horarios disponibles <ArrowRight className="h-5 w-5" />
+          {mode === 'area' && (
+            <div className="block">
+              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
+                <Clock className="h-4 w-4 text-primary-light" /> Hora <span className="text-rose-400">*</span>
+              </span>
+              <div role="radiogroup" className="grid grid-cols-4 gap-2">
+                {AREA_TIMES.map((t) => {
+                  const sel = areaTime === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      role="radio"
+                      aria-checked={sel}
+                      onClick={() => setAreaTime(t)}
+                      className={[
+                        'h-12 rounded-xl border text-sm font-semibold tabular-nums transition',
+                        sel
+                          ? 'border-primary bg-primary text-warm-950'
+                          : 'border-warm-700 bg-warm-800/50 text-warm-200 hover:border-primary-light hover:bg-warm-800',
+                      ].join(' ')}
+                    >
+                      {to12h(t)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => setStep(mode === 'area' ? 3 : 2)}
+            disabled={mode === 'area' && zoneId == null}
+            className="btn-primary-lg mt-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {mode === 'area'
+              ? <>Continuar <ArrowRight className="h-5 w-5" /></>
+              : <>Ver horarios disponibles <ArrowRight className="h-5 w-5" /></>}
           </button>
         </div>
       )}
@@ -400,6 +491,12 @@ export default function BookingEngineWarm() {
       {/* Paso 3 — contacto */}
       {step === 3 && (
         <div className="space-y-5">
+          {mode === 'area' && (
+            <div className="flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-warm-200">
+              <Building2 className="w-4 h-4 text-primary-light flex-shrink-0" />
+              <span>Zona <b className="text-white">{zones.find((z) => z.id === zoneId)?.name ?? ''}</b> (completa) · {new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })} · {to12h(areaTime)} · {guests} pers.</span>
+            </div>
+          )}
           {selectedTime && (
             <div className="flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-warm-200">
               <Clock className="w-4 h-4 text-primary-light" />
@@ -427,7 +524,9 @@ export default function BookingEngineWarm() {
             <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alergias, silla de bebé, mesa junto a la ventana…" className="warm-inp resize-none" />
           </WarmField>
           <button onClick={submit} disabled={submitting} className="btn-primary-lg mt-2 w-full disabled:cursor-not-allowed disabled:opacity-60">
-            {submitting ? <><Loader2 className="h-5 w-5 animate-spin" /> Confirmando…</> : <>Confirmar reserva <ArrowRight className="h-5 w-5" /></>}
+            {submitting
+              ? <><Loader2 className="h-5 w-5 animate-spin" /> {mode === 'area' ? 'Enviando…' : 'Confirmando…'}</>
+              : <>{mode === 'area' ? 'Enviar solicitud' : 'Confirmar reserva'} <ArrowRight className="h-5 w-5" /></>}
           </button>
         </div>
       )}
