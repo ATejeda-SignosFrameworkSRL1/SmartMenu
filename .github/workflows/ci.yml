@@ -1,0 +1,201 @@
+name: CI
+
+on:
+  push:
+    branches: [main, Developer]
+  pull_request:
+    branches: [main, Developer]
+  workflow_dispatch:
+
+# Cancela runs viejos cuando se pushea otro commit a la misma rama/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  DOTNET_VERSION: '10.0.x'
+  # S1.D4 — ratchet de coverage (sólo sube): 30 (S1) → 50 (S2) → 70 (S3).
+  COVERAGE_THRESHOLD: '30'
+
+jobs:
+  # ─── Stage 1+2: Backend build + Unit tests + coverage gate ────────────────
+  backend-unit:
+    name: Backend — build + unit + coverage ≥ ${{ env.COVERAGE_THRESHOLD }}%
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        working-directory: src/backend
+        run: dotnet restore SmartMenu.sln
+
+      - name: Build (Release)
+        working-directory: src/backend
+        run: dotnet build SmartMenu.sln --configuration Release --no-restore /p:TreatWarningsAsErrors=false
+
+      - name: Unit tests + coverage gate
+        run: |
+          dotnet test tests/SmartMenu.UnitTests/SmartMenu.UnitTests.csproj \
+            --configuration Release --no-build \
+            --logger "trx;LogFileName=unit-results.trx" \
+            --results-directory test-results \
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:CoverletOutput=coverage/unit/ \
+            /p:Exclude='[SmartMenu.API]*' \
+            /p:Threshold=${{ env.COVERAGE_THRESHOLD }} \
+            /p:ThresholdType=line \
+            /p:ThresholdStat=average
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: coverage/unit/
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-results
+          path: test-results/
+          retention-days: 7
+
+  # ─── Stage 3: Integration tests (Testcontainers SQL Server) ───────────────
+  backend-integration:
+    name: Backend — integration (Testcontainers SQL)
+    runs-on: ubuntu-latest
+    needs: backend-unit  # solo arranca si los unit tests pasaron
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Pull SQL Server image (cache warmup)
+        run: docker pull mcr.microsoft.com/mssql/server:2022-latest
+
+      - name: Integration tests
+        run: |
+          dotnet test tests/SmartMenu.IntegrationTests/SmartMenu.IntegrationTests.csproj \
+            --configuration Release \
+            --logger "trx;LogFileName=integration-results.trx" \
+            --results-directory test-results
+
+      - name: Upload integration results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-integration-results
+          path: test-results/
+          retention-days: 7
+
+  # ─── Stage 1 (paralelo a backend): Frontends — matrix sobre 7 apps ────────
+  frontend:
+    name: Frontend — ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - client-app
+          - admin-panel
+          - kds-app
+          - waiter-app
+          - host-app
+          - cashier-app
+          - reservation-app
+    defaults:
+      run:
+        working-directory: src/frontend/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/frontend/${{ matrix.app }}/package-lock.json
+
+      - name: Install (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      # S1.D5 — corre vitest si la app tiene script "test" (--if-present no falla si no existe).
+      # Hoy: solo admin-panel. Roadmap S2/S3: replicar a las otras 6 apps.
+      - name: Unit tests (vitest, si existen)
+        run: npm test --if-present
+
+      - name: Build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+  # ─── Stage 4: Container smoke (docker compose QA) ─────────────────────────
+  container-smoke:
+    name: Container smoke (docker compose QA)
+    runs-on: ubuntu-latest
+    needs: [backend-unit, backend-integration, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Usamos el compose dev (más simple, sin Caddy/HTTPS) para smoke. El QA stack
+      # completo se valida manualmente — aquí queremos confirmar que la imagen
+      # backend bootea y responde sano.
+      - name: Compose up
+        run: docker compose -f docker/docker-compose.yml up -d --build sqlserver backend
+
+      - name: Wait for backend /health/live
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf -m 5 http://localhost:5000/health/live > /dev/null; then
+              echo "✓ backend healthy"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "✗ backend nunca devolvió 200 en 90s"
+          docker compose -f docker/docker-compose.yml logs --tail=80 backend
+          exit 1
+
+      - name: Compose down
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down --volumes
+
+  # ─── Pre-deploy gate — todos los stages deben pasar para deployar ─────────
+  pre-deploy-gate:
+    name: ✅ Pre-deploy gate (regla #1)
+    runs-on: ubuntu-latest
+    needs: [backend-unit, backend-integration, frontend, container-smoke]
+    if: always()
+    steps:
+      - name: Verificar que todos los jobs anteriores pasaron
+        run: |
+          if [ "${{ needs.backend-unit.result }}" != "success" ] \
+            || [ "${{ needs.backend-integration.result }}" != "success" ] \
+            || [ "${{ needs.frontend.result }}" != "success" ] \
+            || [ "${{ needs.container-smoke.result }}" != "success" ]; then
+            echo "❌ Pre-deploy gate FAILED — algún stage no pasó."
+            echo "  backend-unit:        ${{ needs.backend-unit.result }}"
+            echo "  backend-integration: ${{ needs.backend-integration.result }}"
+            echo "  frontend:            ${{ needs.frontend.result }}"
+            echo "  container-smoke:     ${{ needs.container-smoke.result }}"
+            exit 1
+          fi
+          echo "✅ Todos los stages pasaron. Safe to deploy."

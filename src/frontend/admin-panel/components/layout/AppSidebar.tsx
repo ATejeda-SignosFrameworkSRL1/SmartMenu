@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  Armchair,
   LayoutDashboard,
   MapPin,
   ChefHat,
@@ -18,7 +19,6 @@ import {
   Wrench,
   LogOut,
   X,
-  User,
   KeyRound,
   Shield,
 } from 'lucide-react';
@@ -64,6 +64,7 @@ const mainNavConfig = [
   { title: 'Órdenes', url: '/orders', icon: ShoppingBag, badgeKey: 'orders' },
   { title: 'Menú', url: '/menu', icon: Menu, badgeKey: null },
   { title: 'Mesas', url: '/tables', icon: MapPin, badgeKey: null },
+  { title: 'Gestión de Salón', url: '/floor-plan', icon: Armchair, badgeKey: null },
   { title: 'Cocina (KDS)', url: '/kitchen', icon: ChefHat, badgeKey: 'kitchen' },
   { title: 'Bar', url: '/bar', icon: Wine, badgeKey: 'bar' },
   { title: 'Reservas', url: '/reservations', icon: CalendarCheck, badgeKey: 'reservations' },

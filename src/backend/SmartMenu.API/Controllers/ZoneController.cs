@@ -8,7 +8,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin,Manager")]
+[Authorize] // Default: cualquier staff autenticado. Mutaciones se restringen per-método.
 public class ZoneController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -18,6 +18,23 @@ public class ZoneController : ControllerBase
     {
         _context = context;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Endpoint público: lista zonas activas (Dining) para el portal de reservas.
+    /// Sólo expone id + name — no incluye info sensible como restaurantId.
+    /// </summary>
+    [HttpGet("public")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetPublicZones()
+    {
+        var zones = await _context.Zones
+            .AsNoTracking()
+            .Where(z => z.IsActive && z.Type == "Dining")
+            .OrderBy(z => z.Id)
+            .Select(z => new { id = z.Id, name = z.Name })
+            .ToListAsync();
+        return Ok(zones);
     }
 
     [HttpGet]
@@ -93,6 +110,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> CreateZone([FromBody] CreateZoneDto dto)
     {
         try
@@ -137,6 +155,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> UpdateZone(int id, [FromBody] UpdateZoneDto dto)
     {
         try
@@ -177,6 +196,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> DeleteZone(int id)
     {
         try
@@ -205,6 +225,7 @@ public class ZoneController : ControllerBase
     }
 
     [HttpPut("{id}/toggle")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> ToggleActive(int id)
     {
         try

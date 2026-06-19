@@ -1,0 +1,46 @@
+# SmartMenu API — QA image
+# Build context: src/backend
+# .NET 10 multi-stage; runtime escucha en HTTP :8080 — TLS lo termina Caddy.
+
+# ===== Restore + Build =====
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Copy csproj files first for layer caching
+COPY SmartMenu.sln ./
+COPY SmartMenu.API/SmartMenu.API.csproj                  SmartMenu.API/
+COPY SmartMenu.Application/SmartMenu.Application.csproj  SmartMenu.Application/
+COPY SmartMenu.Domain/SmartMenu.Domain.csproj            SmartMenu.Domain/
+COPY SmartMenu.Infrastructure/SmartMenu.Infrastructure.csproj SmartMenu.Infrastructure/
+
+RUN dotnet restore SmartMenu.API/SmartMenu.API.csproj
+
+# Copy the rest and publish
+COPY . .
+RUN dotnet publish SmartMenu.API/SmartMenu.API.csproj \
+    -c Release \
+    -o /app/publish \
+    /p:UseAppHost=false
+
+# ===== Runtime =====
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+# Solo HTTP — Caddy termina TLS
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_HTTP_PORTS=8080 \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+# Healthcheck depende de curl
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /app/publish ./
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsS http://localhost:8080/health/live || exit 1
+
+ENTRYPOINT ["dotnet", "SmartMenu.API.dll"]

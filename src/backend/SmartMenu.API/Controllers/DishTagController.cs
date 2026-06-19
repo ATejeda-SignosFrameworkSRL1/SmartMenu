@@ -31,6 +31,7 @@ public class DishTagController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Create([FromBody] CreateDishTagDto dto)
     {
         if (string.IsNullOrWhiteSpace(dto.Label))
@@ -58,6 +59,7 @@ public class DishTagController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Update(int id, [FromBody] CreateDishTagDto dto)
     {
         var tag = await _context.DishTags.FindAsync(id);
@@ -73,6 +75,7 @@ public class DishTagController : ControllerBase
     }
 
     [HttpPut("{id}/toggle")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Toggle(int id)
     {
         var tag = await _context.DishTags.FindAsync(id);
@@ -83,6 +86,7 @@ public class DishTagController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Delete(int id)
     {
         var tag = await _context.DishTags.FindAsync(id);

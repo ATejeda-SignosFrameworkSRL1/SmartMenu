@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartMenu.Infrastructure.Data;
 using SmartMenu.Domain.Entities;
+using SmartMenu.Application.Services;
+using SmartMenu.Application.Common;
+using System.Security.Claims;
 
 namespace SmartMenu.API.Controllers;
 
@@ -14,21 +17,34 @@ public class TableTransferController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<TableTransferController> _logger;
+    private readonly ITableRealtimeNotifier _tableNotifier;
 
-    public TableTransferController(ApplicationDbContext context, ILogger<TableTransferController> logger)
+    public TableTransferController(ApplicationDbContext context, ILogger<TableTransferController> logger, ITableRealtimeNotifier tableNotifier)
     {
         _context = context;
         _logger = logger;
+        _tableNotifier = tableNotifier;
     }
+
+    private int CurrentUserId()
+    {
+        int.TryParse(User.FindFirst("sub")?.Value ?? User.FindFirstValue(ClaimTypes.NameIdentifier), out var id);
+        return id;
+    }
+    private bool IsManagerOrAdmin() => User.IsInRole("Admin") || User.IsInRole("Manager");
 
     /// <summary>
     /// Crear solicitud de transferencia de mesas (de un mesero a otro)
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Create([FromBody] CreateTransferDto dto)
     {
         if (dto.TableIds == null || dto.TableIds.Count == 0)
             return BadRequest(new { error = "Debe incluir al menos una mesa" });
+
+        // IDOR: el origen de la transferencia se toma del JWT (Admin/Manager pueden override).
+        if (!IsManagerOrAdmin()) dto.FromWaiterId = CurrentUserId();
 
         var fromUser = await _context.Users.FindAsync(dto.FromWaiterId);
         var toUser = await _context.Users.FindAsync(dto.ToWaiterId);
@@ -63,6 +79,7 @@ public class TableTransferController : ControllerBase
     /// Obtener solicitud por ID
     /// </summary>
     [HttpGet("{id}")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Get(int id)
     {
         var req = await _context.TableTransferRequests
@@ -91,6 +108,7 @@ public class TableTransferController : ControllerBase
     /// Solicitudes pendientes para el mesero que debe aceptar o rechazar
     /// </summary>
     [HttpGet("pending-for/{waiterId}")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> PendingFor(int waiterId)
     {
         var list = await _context.TableTransferRequests
@@ -125,6 +143,7 @@ public class TableTransferController : ControllerBase
     /// Aceptar transferencia: las órdenes de esas mesas pasan a asignarse al mesero que acepta (ToWaiterId)
     /// </summary>
     [HttpPut("{id}/accept")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Accept(int id, [FromQuery] int waiterId)
     {
         var req = await _context.TableTransferRequests.FindAsync(id);
@@ -148,6 +167,20 @@ public class TableTransferController : ControllerBase
         req.RespondedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
+        // Plano en vivo: las mesas transferidas ahora muestran al mesero destino (aditivo).
+        try
+        {
+            var toWaiter = await _context.Users.AsNoTracking()
+                .Where(u => u.Id == req.ToWaiterId)
+                .Select(u => new { u.FirstName, u.LastName })
+                .FirstOrDefaultAsync();
+            var initials = NameFormatting.Initials(toWaiter?.FirstName, toWaiter?.LastName);
+            var fullName = NameFormatting.FullName(toWaiter?.FirstName, toWaiter?.LastName);
+            foreach (var tid in ordersToUpdate.Where(o => o.TableId.HasValue).Select(o => o.TableId!.Value).Distinct())
+                await _tableNotifier.TableWaiterChangedAsync(tid, initials, fullName);
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "No se pudo difundir el cambio de mesero tras transferencia {Id}", id); }
+
         return Ok(new { message = "Transferencia aceptada", ordersUpdated = ordersToUpdate.Count });
     }
 
@@ -155,6 +188,7 @@ public class TableTransferController : ControllerBase
     /// Rechazar transferencia
     /// </summary>
     [HttpPut("{id}/reject")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Reject(int id, [FromQuery] int waiterId)
     {
         var req = await _context.TableTransferRequests.FindAsync(id);

@@ -183,7 +183,7 @@ export default function PaymentPage() {
           <div className="bg-gray-50 rounded-xl p-5 mb-4 space-y-2 text-sm">
             <div className="flex justify-between text-gray-700"><span>Comprobante</span><span className="font-bold">#{orderNum}</span></div>
             {tableNum && <div className="flex justify-between text-gray-700"><span>Mesa</span><span>{tableNum}</span></div>}
-            <div className="flex justify-between text-gray-700"><span>Fecha</span><span>{paidAt.toLocaleString('es-DO')}</span></div>
+            <div className="flex justify-between text-gray-700"><span>Fecha</span><span>{paidAt.toLocaleString('es-DO', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span></div>
             <div className="flex justify-between text-gray-700"><span>Método</span><span>{methods.join(', ')}</span></div>
           </div>
 

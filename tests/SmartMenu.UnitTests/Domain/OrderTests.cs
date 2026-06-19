@@ -1,62 +1,102 @@
-using Xunit;
 using FluentAssertions;
 using SmartMenu.Domain.Entities;
 using SmartMenu.Domain.Enums;
 
 namespace SmartMenu.UnitTests.Domain;
 
+/// <summary>
+/// S1.D1 — Order entity invariants: defaults, state, kitchen/bar flags,
+/// fiscal client fields, navigation collections init, RowVersion presence.
+/// </summary>
 public class OrderTests
 {
     [Fact]
-    public void Order_ShouldCalculateTotalCorrectly()
+    public void Defaults_status_is_Pending()
     {
-        // Arrange
-        var order = new Order
-        {
-            Subtotal = 1000m,
-            Tax = 180m,
-            Tip = 100m,
-            Discount = 50m
-        };
-
-        // Act
-        order.Total = order.Subtotal + order.Tax + order.Tip - order.Discount;
-
-        // Assert
-        order.Total.Should().Be(1230m);
+        new Order().Status.Should().Be(OrderStatus.Pending);
     }
 
     [Fact]
-    public void Order_ShouldHaveCorrectInitialStatus()
+    public void Defaults_IsPickup_false()
     {
-        // Arrange & Act
-        var order = new Order
-        {
-            OrderNumber = "ORD-001",
-            TableId = 1,
-            SessionId = "session-1",
-            Status = OrderStatus.Pending
-        };
-
-        // Assert
-        order.Status.Should().Be(OrderStatus.Pending);
+        new Order().IsPickup.Should().BeFalse();
     }
 
     [Fact]
-    public void Order_ShouldAddOrderItemsCorrectly()
+    public void Defaults_all_kitchen_bar_flags_false()
     {
-        // Arrange
-        var order = new Order();
-        var item1 = new OrderItem { DishId = 1, Quantity = 2, UnitPrice = 500m };
-        var item2 = new OrderItem { DishId = 2, Quantity = 1, UnitPrice = 300m };
+        var o = new Order();
+        o.KitchenPreparing.Should().BeFalse();
+        o.BarPreparing.Should().BeFalse();
+        o.KitchenReady.Should().BeFalse();
+        o.BarReady.Should().BeFalse();
+        o.KitchenServed.Should().BeFalse();
+        o.BarServed.Should().BeFalse();
+        o.CustomerFinishedEating.Should().BeFalse();
+    }
 
-        // Act
-        order.Items.Add(item1);
-        order.Items.Add(item2);
+    [Fact]
+    public void Defaults_client_fiscal_fields_off()
+    {
+        var o = new Order();
+        o.ClientRequiresFiscalReceipt.Should().BeFalse();
+        o.ClientRNC.Should().BeNull();
+        o.ClientBusinessName.Should().BeNull();
+        o.ClientTipPercentage.Should().Be(0);
+        o.ClientTipAmount.Should().Be(0);
+        o.ClientRequestedPaymentMethod.Should().BeNull();
+    }
 
-        // Assert
-        order.Items.Should().HaveCount(2);
-        order.Items.Should().Contain(item1);
-        order.Items.Should().Contain(item2);
+    [Fact]
+    public void Defaults_collections_initialized_not_null()
+    {
+        var o = new Order();
+        o.Items.Should().NotBeNull().And.BeEmpty();
+        o.Payments.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
+    public void Defaults_OrderNumber_and_SessionId_are_empty_string()
+    {
+        var o = new Order();
+        o.OrderNumber.Should().Be(string.Empty);
+        o.SessionId.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public void Items_collection_supports_add()
+    {
+        var o = new Order();
+        o.Items.Add(new OrderItem { DishId = 1, Quantity = 2, UnitPrice = 500m });
+        o.Items.Add(new OrderItem { DishId = 2, Quantity = 1, UnitPrice = 300m });
+        o.Items.Should().HaveCount(2);
+    }
+
+    [Theory]
+    [InlineData(OrderStatus.Pending)]
+    [InlineData(OrderStatus.Confirmed)]
+    [InlineData(OrderStatus.Preparing)]
+    [InlineData(OrderStatus.Ready)]
+    [InlineData(OrderStatus.Served)]
+    [InlineData(OrderStatus.Completed)]
+    [InlineData(OrderStatus.Cancelled)]
+    public void Status_accepts_all_defined_enum_values(OrderStatus s)
+    {
+        var o = new Order { Status = s };
+        o.Status.Should().Be(s);
+    }
+
+    [Fact]
+    public void RowVersion_property_exists_and_starts_null()
+    {
+        new Order().RowVersion.Should().BeNull();
+    }
+
+    [Fact]
+    public void TableId_is_nullable_for_pickup_orders()
+    {
+        var pickup = new Order { IsPickup = true, TableId = null };
+        pickup.TableId.Should().BeNull();
+        pickup.IsPickup.Should().BeTrue();
     }
 }

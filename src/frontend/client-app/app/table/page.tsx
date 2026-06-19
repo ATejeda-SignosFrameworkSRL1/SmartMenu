@@ -1,11 +1,40 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { QRCodeSVG } from 'qrcode.react';
 import { Loader2, Grid3X3 } from 'lucide-react';
 
+/**
+ * URL base usada al codificar los QR físicos.
+ * Debe ser alcanzable desde el CELULAR del cliente — NUNCA localhost.
+ * Prioridad:
+ *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://client.172-31-98-60.nip.io:8443)
+ *   2. Fallback runtime: derivar del hostname actual
+ *      - Si hostname=localhost → usar hardcoded LAN nip.io
+ *      - Si hostname=client.X.nip.io → mismo origin (ya es accesible)
+ *      - Si IP directa → mismo origin
+ */
+function deriveQrBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_CLIENT_URL;
+  if (envUrl) return envUrl;
+  if (typeof window === 'undefined') return '';
+
+  const { hostname, origin } = window.location;
+
+  // Localhost: el QR sería inalcanzable desde celular → usar nip.io hardcoded
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'https://client.172-31-98-60.nip.io:8443';
+  }
+
+  // Cualquier otro host (nip.io, IP LAN, dominio real) → mismo origin
+  return origin;
+}
+
 export default function TableListPage() {
+  const router = useRouter();
+
   const { data: tablesRes, isLoading, error } = useQuery({
     queryKey: ['tables'],
     queryFn: () => apiClient.getTables(),
@@ -34,46 +63,44 @@ export default function TableListPage() {
     );
   }
 
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  // baseUrl para los QRs físicos — debe ser alcanzable desde el celular del cliente.
+  // Si estamos en localhost, usa nip.io; si no, mismo origin.
+  const baseUrl = deriveQrBaseUrl();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <Grid3X3 className="w-8 h-8 text-primary-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Mesas</h1>
-            <p className="text-gray-600 text-sm">Escanea el QR de una mesa para ver el menú y pedir</p>
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <Grid3X3 className="w-7 h-7 sm:w-8 sm:h-8 text-primary-600" />
+          <div className="flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Mesas</h1>
+            <p className="text-gray-600 text-sm">Toca una mesa para ver el menú y pedir</p>
           </div>
         </div>
-        {isLocalhost && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-            <strong>Para escanear desde el móvil:</strong> abre esta misma página en el navegador usando la IP de tu PC (ej. <code className="bg-amber-100 px-1 rounded">http://192.168.1.X:3000/table</code>). Así el QR llevará al móvil a la misma red.
-          </div>
-        )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+        {/* Grid de mesas */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
           {tables.map((table: { id: number; tableNumber: number; capacity?: number; zoneName?: string; status?: string; qrCode?: string }) => {
-            // Usar el qrCode real de la mesa, o fallback a table-{id}
             const tableIdentifier = table.qrCode || `table-${table.id}`;
             const tableUrl = `${baseUrl}/table/${tableIdentifier}`;
             return (
-              <div
+              <button
                 key={table.id}
-                className="bg-white rounded-2xl shadow-lg p-4 flex flex-col items-center border border-gray-100"
+                onClick={() => router.push(`/table/${tableIdentifier}`)}
+                className="bg-white rounded-2xl shadow-sm hover:shadow-lg active:scale-95 transition-all p-3 sm:p-4 flex flex-col items-center border border-gray-100"
               >
-                <div className="bg-white p-2 rounded-lg border border-gray-200 mb-3">
-                  <QRCodeSVG value={tableUrl} size={120} level="M" />
+                <div className="bg-white p-1.5 rounded-lg border border-gray-200 mb-2">
+                  <QRCodeSVG value={tableUrl} size={80} level="M" />
                 </div>
-                <p className="font-bold text-lg text-gray-900">Mesa {table.tableNumber}</p>
+                <p className="font-bold text-sm sm:text-base text-gray-900">Mesa {table.tableNumber}</p>
                 {table.zoneName && (
-                  <p className="text-sm text-gray-500">{table.zoneName}</p>
+                  <p className="text-[11px] text-gray-500">{table.zoneName}</p>
                 )}
                 {table.capacity != null && (
-                  <p className="text-xs text-gray-400">{table.capacity} personas</p>
+                  <p className="text-[10px] text-gray-400">{table.capacity} pers</p>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>

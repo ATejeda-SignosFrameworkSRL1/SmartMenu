@@ -1,60 +1,21 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { Users, Calendar, LogOut, Plus, X, Clock, Phone, Mail, User, DollarSign, CreditCard, Filter, Bell, CheckCircle, XCircle, CalendarCheck, Globe, UtensilsCrossed, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Calendar, LogOut, X, Clock, Phone, Mail, User, CreditCard, CheckCircle, XCircle, CalendarCheck, Globe, UtensilsCrossed, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
-import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
+import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
+import HostReservationWizard from '@/components/HostReservationWizard';
+import dynamic from 'next/dynamic';
+import { useHostFloorPlan } from '@/lib/useHostFloorPlan';
 
-const api = axios.create({
-  baseURL: '',
-});
+// F3 — auth-client centralizado reemplaza el interceptor JWT inline.
+const { api } = createAuthApi('host');
 
-// S3.3 — JWT refresh interceptor: auto-renueva access_token cuando expira sin
-// botar al usuario a /login. Espejo del patrón en admin-panel/waiter-app.
-let _refreshPromise: Promise<string | null> | null = null;
-async function _tryRefresh(): Promise<string | null> {
-  if (_refreshPromise) return _refreshPromise;
-  const rt = typeof window !== 'undefined' ? localStorage.getItem('host_refresh') : null;
-  if (!rt) return null;
-  _refreshPromise = (async () => {
-    try {
-      const r = await axios.post('/api/auth/refresh', { refreshToken: rt });
-      const { accessToken, refreshToken: nrt, user } = r.data ?? {};
-      if (!accessToken) return null;
-      localStorage.setItem('host_token', accessToken);
-      if (nrt) localStorage.setItem('host_refresh', nrt);
-      if (user) localStorage.setItem('host_user', JSON.stringify(user));
-      return accessToken as string;
-    } catch { return null; }
-    finally { _refreshPromise = null; }
-  })();
-  return _refreshPromise;
-}
-api.interceptors.request.use((config) => {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('host_token') : null;
-  if (t && config.headers) config.headers.Authorization = `Bearer ${t}`;
-  return config;
-});
-api.interceptors.response.use(
-  (r) => r,
-  async (error) => {
-    const o: any = error.config;
-    if (error.response?.status === 401 && o && !o._refreshAttempted) {
-      o._refreshAttempted = true;
-      const nt = await _tryRefresh();
-      if (nt) {
-        o.headers = o.headers ?? {};
-        o.headers.Authorization = `Bearer ${nt}`;
-        return api.request(o);
-      }
-      localStorage.removeItem('host_token');
-      localStorage.removeItem('host_refresh');
-      localStorage.removeItem('host_user');
-      if (typeof window !== 'undefined') window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
+// Plano de salón (react-konva) en SOLO LECTURA — ssr:false porque Konva necesita el DOM.
+const MultiZoneFloorPlanViewer = dynamic(
+  () => import('@smartmenu/ui').then((m) => ({ default: m.MultiZoneFloorPlanViewer })),
+  { ssr: false, loading: () => <p className="p-6 text-sm text-gray-500 animate-pulse">Cargando plano...</p> }
 );
 
 interface Zone {
@@ -94,16 +55,59 @@ interface Reservation {
   customerName: string;
   customerPhone: string;
   customerEmail?: string;
+  confirmationCode?: string;
   numberOfGuests: number;
   reservationDateTime: string;
   isConfirmed: boolean;
-  tableNumber: number;
-  tableId: number;
-  zoneName: string;
+  isCancelled?: boolean;
+  status?: string; // Pending | Confirmed | Seated | Completed | Cancelled | Expired | NoShow
+  assignedTableIds?: number[];
+  tableNumber: number | null;
+  tableId: number | null;
+  zoneName: string | null;
+  requestedZoneId?: number | null;
+  requestedZoneName?: string | null;
+  isZoneExclusive?: boolean;  // reserva de ZONA completa (uso exclusivo)
   specialRequests?: string;
+  occasionType?: number; // 0=Casual, 1=Birthday, 2=Anniversary, 3=Business, 4=Romantic, 5=FamilyCelebration, 99=Other
   source?: string;
   advanceBlockMinutes?: number;
   preOrder?: PreOrder | null;
+  // Host (empleado) que aceptó/creó la reserva — visible en cards y modales
+  createdByHostId?: number | null;
+  createdByHostName?: string | null;
+}
+
+const OCCASION_LABELS: Record<number, { label: string; icon: string; color: string }> = {
+  0: { label: 'Casual', icon: '', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+  1: { label: 'Cumpleaños', icon: '🎂', color: 'bg-pink-100 text-pink-700 border-pink-200' },
+  2: { label: 'Aniversario', icon: '💐', color: 'bg-pink-100 text-pink-700 border-pink-200' },
+  3: { label: 'Negocios', icon: '💼', color: 'bg-slate-200 text-slate-700 border-slate-300' },
+  4: { label: 'Romántica', icon: '❤️', color: 'bg-rose-100 text-rose-700 border-rose-200' },
+  5: { label: 'Familiar', icon: '👨‍👩‍👧', color: 'bg-teal-100 text-teal-700 border-teal-200' },
+  99: { label: 'Otra', icon: '✨', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+};
+
+interface AssignableTable {
+  id: number;
+  tableNumber: number;
+  capacity: number;
+  zoneName: string;
+  isOccupied: boolean;
+  isCurrent: boolean;
+}
+
+interface TableAvailability {
+  tableId: number;
+  tableNumber: number;
+  zoneName: string;
+  capacity: number;
+  freeSlots: string[];     // ["12:00","12:30","19:00"]
+}
+interface TablesAvailabilityResponse {
+  date: string;
+  slotMinutes: number;
+  tables: TableAvailability[];
 }
 
 export default function HostApp() {
@@ -112,42 +116,81 @@ export default function HostApp() {
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
+  // Guard de hidratación: el dashboard es auth-gated (SSR no tiene token → render vacío).
+  // Renderizamos el loader hasta montar en el cliente, evitando el mismatch SSR/cliente
+  // (#418) que dejaba la página en blanco al recargar.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  // HOST-MESAS-RESERVAS.2 — mini-modal para "+N más" reservas de una mesa
+  const [tableReservasModal, setTableReservasModal] = useState<{ table: Table } | null>(null);
+  const [occTableDate, setOccTableDate] = useState<string>('');               // ocupación por mesa: día seleccionado (YYYY-MM-DD)
+  const [occTableMonth, setOccTableMonth] = useState<Date>(() => new Date()); // mes navegable del calendario del modal de ocupación por mesa
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
 
   // View tabs: 'tables' or 'reservations'
-  const [activeView, setActiveView] = useState<'tables' | 'reservations'>('tables');
+  const [activeView, setActiveView] = useState<'tables' | 'reservations' | 'calendar'>('tables');
+  const { data: floorPlanData, palette: floorPlanPalette } = useHostFloorPlan();
+  const [showPlan, setShowPlan] = useState(false);
+  const [planoSel, setPlanoSel] = useState<string | number | null>(null);
+  const [planoTable, setPlanoTable] = useState<Table | null>(null);
 
   // Reservations state
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationFilter, setReservationFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
+  // ASSIGN-DATE-FILTER: filtro DESDE→HASTA en tab Reservas (combinable con tab status)
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  // UX: búsqueda por nombre/teléfono/email de cliente
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [pendingAlert, setPendingAlert] = useState(0);
   const [expandedReservationId, setExpandedReservationId] = useState<number | null>(null);
+  // RESCHEDULE: Modal mover reserva a otra fecha/hora
+  const [rescheduleModalForReservation, setRescheduleModalForReservation] = useState<Reservation | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<string>('');
+  const [rescheduleTime, setRescheduleTime] = useState<string>('');
+  const [rescheduling, setRescheduling] = useState(false);
+  // Día seleccionado en calendario (para abrir modal CalendarDay)
+  const [calendarDaySelected, setCalendarDaySelected] = useState<string | null>(null);
+  // Filtro de ocasión dentro del modal CalendarDay ('all' o el occasionType numérico)
+  const [dayModalOccasionFilter, setDayModalOccasionFilter] = useState<number | 'all'>('all');
+  // Reset filtro cuando se cambia de día o se cierra el modal
+  useEffect(() => { setDayModalOccasionFilter('all'); }, [calendarDaySelected]);
+
+  // ASSIGN.4: Modal de asignación de mesa a reserva
+  const [assignModalForReservation, setAssignModalForReservation] = useState<Reservation | null>(null);
+  const [contactReservation, setContactReservation] = useState<Reservation | null>(null);
+  const [assignableTables, setAssignableTables] = useState<AssignableTable[]>([]);
+  const [loadingAssignable, setLoadingAssignable] = useState(false);
+  const [assigningTableId, setAssigningTableId] = useState<number | null>(null);
+  // Zona actualmente filtrada en el modal (default: la pedida por el cliente)
+  const [assignableZoneId, setAssignableZoneId] = useState<number | null>(null);
+  const [allZonesForAssign, setAllZonesForAssign] = useState<Zone[]>([]);
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Filters
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCapacity, setFilterCapacity] = useState<string>('all');
+  // HOST-MESAS-FILTRO.1 — Filtro temporal de reservas en tab Mesas
+  // 'any' = sin filtro | 'today' | 'tomorrow' | 'week' (próximos 7 días) | 'custom' (rango DESDE→HASTA)
+  const [filterTime, setFilterTime] = useState<'any' | 'today' | 'tomorrow' | 'week' | 'custom'>('any');
+  const [filterTimeFrom, setFilterTimeFrom] = useState<string>('');
+  const [filterTimeTo, setFilterTimeTo] = useState<string>('');
+
+  // CAL-FE FEATURE 2 — Slots libres por mesa (mapa tableId -> freeSlots[])
+  const [tableSlots, setTableSlots] = useState<Record<number, string[]>>({});
+  const [tableSlotsLoading, setTableSlotsLoading] = useState(false);
+  // Dropdown de "Horarios libres" abierto por tarjeta (tableId) — null = ninguno
+  const [openSlotsTableId, setOpenSlotsTableId] = useState<number | null>(null);
 
   // Assign form
   const [numberOfGuests, setNumberOfGuests] = useState('');
   const [specialNotes, setSpecialNotes] = useState('');
 
-  // Reservation form
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [reservationDate, setReservationDate] = useState('');
-  const [reservationTime, setReservationTime] = useState('');
-  const [reservationGuests, setReservationGuests] = useState('');
-  const [reservationNotes, setReservationNotes] = useState('');
-  const [advanceBlockMinutes, setAdvanceBlockMinutes] = useState('60');
-  // Pre-order in reservation
-  const [showPreOrder, setShowPreOrder] = useState(false);
+  // Menú para el wizard de reserva (lazy-load en openReservationModal → prop de HostReservationWizard)
   const [menuDishes, setMenuDishes] = useState<any[]>([]);
-  const [preOrderItems, setPreOrderItems] = useState<{ dishId: number; name: string; price: number; quantity: number }[]>([]);
 
   const n = (obj: any, key: string) => obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
 
@@ -214,26 +257,193 @@ export default function HostApp() {
     }
   }, []);
 
-  const confirmReservation = async (id: number) => {
+
+  // Cargar tablas disponibles para una reserva, opcionalmente filtrando por zona específica
+  const loadAssignableTables = async (reservationId: number, zoneId: number | null) => {
+    setLoadingAssignable(true);
     try {
-      await api.put(`/api/tablereservation/${id}/confirm`);
-      toast.success('Reserva aceptada');
-      loadReservations();
-      loadData();
+      const url = zoneId
+        ? `/api/tablereservation/${reservationId}/available-tables?zoneId=${zoneId}`
+        : `/api/tablereservation/${reservationId}/available-tables`;
+      const res = await api.get(url);
+      setAssignableTables(Array.isArray(res.data) ? res.data : []);
     } catch {
-      toast.error('Error al confirmar reserva');
+      toast.error('No se pudieron cargar las mesas disponibles');
+      setAssignableTables([]);
+    } finally {
+      setLoadingAssignable(false);
     }
   };
 
-  const cancelReservation = async (id: number) => {
-    if (!confirm('¿Rechazar esta reserva?')) return;
+  // ASSIGN.4: Abrir modal para asignar/reasignar mesa a una reserva
+  const openReservationAssignModal = async (r: Reservation) => {
+    setAssignModalForReservation(r);
+    setAssignableTables([]);
+    // Default: la zona que pidió el cliente
+    const initialZone = r.requestedZoneId ?? null;
+    setAssignableZoneId(initialZone);
+    // Cargar lista de zonas (para el selector) si todavía no la tenemos
+    if (allZonesForAssign.length === 0) {
+      try {
+        const res = await api.get('/api/zone');
+        const list = Array.isArray(res.data) ? res.data : [];
+        const dining = list
+          .map((z: any) => ({
+            id: Number(z.id ?? z.Id),
+            name: String(z.name ?? z.Name ?? ''),
+            tableCount: Number(z.tableCount ?? z.TableCount ?? 0),
+            availableTables: Number(z.availableTables ?? z.AvailableTables ?? 0),
+            type: String(z.type ?? z.Type ?? ''),
+          }))
+          .filter((z: any) => !z.type || (z.type.toLowerCase() !== 'kitchen' && z.type.toLowerCase() !== 'bar'));
+        setAllZonesForAssign(dining);
+      } catch { /* ignore */ }
+    }
+    await loadAssignableTables(r.id, initialZone);
+  };
+
+  // Cambiar la zona dentro del modal — refresca la lista de mesas
+  const changeAssignableZone = async (zoneId: number) => {
+    if (!assignModalForReservation) return;
+    setAssignableZoneId(zoneId);
+    await loadAssignableTables(assignModalForReservation.id, zoneId);
+  };
+
+  const closeReservationAssignModal = () => {
+    setAssignModalForReservation(null);
+    setAssignableTables([]);
+    setAssigningTableId(null);
+    setAssignableZoneId(null);
+  };
+
+  const assignTableToReservation = async (tableId: number) => {
+    if (!assignModalForReservation) return;
+    const reservation = assignModalForReservation;
+    setAssigningTableId(tableId);
     try {
-      await api.put(`/api/tablereservation/${id}/cancel`);
-      toast.success('Reserva rechazada');
+      // 1. Asignar mesa
+      await api.put(`/api/tablereservation/${reservation.id}/assign-table`, { tableId });
+      // 2. Si la reserva era pendiente, también confirmarla (flujo unificado "Aceptar")
+      if (!reservation.isConfirmed) {
+        await api.put(`/api/tablereservation/${reservation.id}/confirm`);
+        toast.success('Reserva aceptada y mesa asignada');
+      } else {
+        toast.success('Mesa reasignada correctamente');
+      }
+      closeReservationAssignModal();
+      loadReservations();
+      loadData();
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Error al asignar mesa';
+      toast.error(msg);
+    } finally {
+      setAssigningTableId(null);
+    }
+  };
+
+  // RESCHEDULE: abrir modal con la fecha/hora actual de la reserva pre-llenadas
+  const openRescheduleModal = (r: Reservation) => {
+    const dt = new Date(r.reservationDateTime);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    const hh = String(dt.getHours()).padStart(2, '0');
+    const mm = String(dt.getMinutes()).padStart(2, '0');
+    setRescheduleDate(`${y}-${m}-${d}`);
+    setRescheduleTime(`${hh}:${mm}`);
+    setRescheduleModalForReservation(r);
+  };
+
+  const closeRescheduleModal = () => {
+    setRescheduleModalForReservation(null);
+    setRescheduleDate('');
+    setRescheduleTime('');
+  };
+
+  // Mover reserva a la fecha/hora seleccionadas. Si targetDate viene, se usa
+  // (caso: click en día del calendario para mover una reserva).
+  const submitReschedule = async (reservationOverride?: Reservation, targetDateTime?: string) => {
+    const r = reservationOverride ?? rescheduleModalForReservation;
+    if (!r) return;
+    const newDateTime = targetDateTime ?? `${rescheduleDate}T${rescheduleTime}:00`;
+    if (!newDateTime || newDateTime.startsWith('T')) {
+      toast.error('Fecha y hora son requeridas');
+      return;
+    }
+    setRescheduling(true);
+    try {
+      const res = await api.put(`/api/tablereservation/${r.id}/reschedule`, { newDateTime });
+      const data = res.data;
+      if (data?.hasConflict && data?.warning) {
+        toast(data.warning, { icon: '⚠️', duration: 6000 });
+      } else {
+        toast.success('Reserva reprogramada');
+      }
+      closeRescheduleModal();
+      setCalendarDaySelected(null);
+      loadReservations();
+      loadData();
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Error al reprogramar reserva';
+      toast.error(msg);
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
+  // Modal de confirmación al cancelar/rechazar una reserva
+  const [cancelConfirmReservation, setCancelConfirmReservation] = useState<Reservation | null>(null);
+  const [cancellingReservation, setCancellingReservation] = useState(false);
+  // ZONA-EXCL — decisión del host sobre reservas de zona completa (aceptar bloquea la zona / rechazar)
+  const [zoneDecisionModal, setZoneDecisionModal] = useState<{ r: Reservation; accept: boolean } | null>(null);
+  const [zoneDecisionMsg, setZoneDecisionMsg] = useState('');
+  const [zoneDeciding, setZoneDeciding] = useState(false);
+
+  const requestCancelReservation = (r: Reservation) => {
+    setCancelConfirmReservation(r);
+  };
+
+  const confirmCancelReservation = async () => {
+    if (!cancelConfirmReservation) return;
+    setCancellingReservation(true);
+    try {
+      await api.put(`/api/tablereservation/${cancelConfirmReservation.id}/cancel`);
+      toast.success(cancelConfirmReservation.isConfirmed ? 'Reserva cancelada' : 'Reserva rechazada');
+      setCancelConfirmReservation(null);
       loadReservations();
       loadData();
     } catch {
       toast.error('Error al cancelar reserva');
+    } finally {
+      setCancellingReservation(false);
+    }
+  };
+
+  // ZONA-EXCL — abrir el modal de decisión (aceptar/rechazar) para una reserva de zona completa
+  const openZoneDecision = (r: Reservation, accept: boolean) => {
+    setZoneDecisionMsg(accept ? '¡Confirmado! Reservamos toda la zona para tu evento. ¡Los esperamos!' : '');
+    setZoneDecisionModal({ r, accept });
+  };
+
+  const submitZoneDecision = async () => {
+    if (!zoneDecisionModal) return;
+    const { r, accept } = zoneDecisionModal;
+    setZoneDeciding(true);
+    try {
+      await api.post(`/api/tablereservation/${r.id}/zone-decision`, { accept, message: zoneDecisionMsg });
+      toast.success(accept ? 'Zona reservada y confirmada al cliente' : 'Reserva de zona rechazada');
+      setZoneDecisionModal(null);
+      setZoneDecisionMsg('');
+      loadReservations();
+      loadData();
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        toast.error('No se puede: la zona ya tiene reservas en esa fecha/horario. Podés rechazar con un mensaje.');
+      } else {
+        toast.error('Error al responder la reserva de zona');
+      }
+    } finally {
+      setZoneDeciding(false);
     }
   };
 
@@ -247,9 +457,15 @@ export default function HostApp() {
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        // Leer el token FRESCO en cada negotiate/reconnect (no capturar el valor de montaje):
+        // tras un relogin/refresh, la próxima reconexión usa el token nuevo sin recargar la página.
+        accessTokenFactory: () => ensureFreshToken('host'),
         skipNegotiation: false,
-        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+        // El proxy same-origin de Next (/hubs/* → backend) no actualiza WebSockets,
+        // por lo que el intento de WS fallaba siempre y ensuciaba la consola con
+        // "WebSocket failed to connect". LongPolling es el transporte fiable a través
+        // del rewrite; el polling de respaldo (5-30s) cubre cualquier caída de RT.
+        transport: signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(signalR.LogLevel.Warning)
@@ -334,6 +550,46 @@ export default function HostApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // CAL-FE FEATURE 2 — día efectivo para slots de mesa: deriva del filtro temporal activo (o "hoy")
+  const slotsDay = useMemo<string>(() => {
+    const now = new Date();
+    const fmt = (d: Date) => d.toLocaleDateString('sv-SE');
+    if (filterTime === 'tomorrow') {
+      return fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+    }
+    if (filterTime === 'custom' && filterTimeFrom) {
+      return filterTimeFrom;
+    }
+    // 'any' | 'today' | 'week' → hoy por defecto
+    return fmt(now);
+  }, [filterTime, filterTimeFrom]);
+
+  // CAL-FE FEATURE 2 — cargar slots libres por mesa para el día efectivo (recarga al cambiar el día)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      setTableSlotsLoading(true);
+      try {
+        const res = await api.get(`/api/tablereservation/availability/tables?date=${slotsDay}`);
+        const data = res.data as TablesAvailabilityResponse;
+        const map: Record<number, string[]> = {};
+        for (const t of (Array.isArray(data?.tables) ? data.tables : [])) {
+          if (typeof t?.tableId === 'number') {
+            map[t.tableId] = Array.isArray(t.freeSlots) ? t.freeSlots : [];
+          }
+        }
+        if (!cancelled) setTableSlots(map);
+      } catch {
+        // Degradar con elegancia: sin slots no rompe el render de las tarjetas
+        if (!cancelled) setTableSlots({});
+      } finally {
+        if (!cancelled) setTableSlotsLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [slotsDay]);
+
   const openAssignModal = (table: Table) => {
     if (table.status !== 'Available') {
       toast.error('Esta mesa no está disponible');
@@ -369,59 +625,11 @@ export default function HostApp() {
 
   const openReservationModal = (table: Table) => {
     setSelectedTable(table);
-    setCustomerName('');
-    setCustomerPhone('');
-    setCustomerEmail('');
-    setReservationDate('');
-    setReservationTime('');
-    setReservationGuests('');
-    setReservationNotes('');
-    setAdvanceBlockMinutes('60');
-    setShowPreOrder(false);
-    setPreOrderItems([]);
     setShowReservationModal(true);
+    // El wizard (HostReservationWizard) maneja su propio estado; aquí solo
+    // precargamos el menú para el paso de pre-orden.
     if (menuDishes.length === 0) {
       api.get('/api/dish').then(res => setMenuDishes(Array.isArray(res.data) ? res.data : [])).catch(() => {});
-    }
-  };
-
-  const createReservation = async () => {
-    if (!selectedTable || !customerName || !customerPhone || !reservationDate || !reservationTime || !reservationGuests) {
-      toast.error('Por favor completa todos los campos requeridos');
-      return;
-    }
-
-    try {
-      // Enviar la fecha/hora exacta que el usuario ingresó, sin convertir a UTC
-      // (evita el bug donde 8:30 PM local → 12:30 AM UTC del día siguiente)
-      const reservationDateTime = `${reservationDate}T${reservationTime}:00`;
-
-      await api.post('/api/tablereservation', {
-        tableId: selectedTable.id,
-        customerName,
-        customerPhone,
-        customerEmail,
-        numberOfGuests: parseInt(reservationGuests),
-        reservationDateTime,
-        specialRequests: reservationNotes,
-        hostId: user?.id,
-        advanceBlockMinutes: parseInt(advanceBlockMinutes) || 60
-      });
-
-      const reservationId = (await api.get('/api/tablereservation')).data?.slice?.(-1)?.[0]?.id;
-      if (preOrderItems.length > 0 && reservationId) {
-        try {
-          await api.post(`/api/tablereservation/${reservationId}/preorder`, {
-            notes: reservationNotes || null,
-            items: preOrderItems.map(i => ({ dishId: i.dishId, quantity: i.quantity })),
-          });
-        } catch { /* optional */ }
-      }
-      toast.success('Reserva creada exitosamente');
-      setShowReservationModal(false);
-      loadData();
-    } catch (error) {
-      toast.error('Error al crear reserva');
     }
   };
 
@@ -464,10 +672,49 @@ export default function HostApp() {
     window.location.href = '/login';
   };
 
-  const capacityOptions = useMemo(() => {
-    const caps = [...new Set(tables.map(t => t.capacity))].sort((a, b) => a - b);
-    return caps;
-  }, [tables]);
+  // HOST-MESAS-FILTRO.1 — Resolver el rango [from, to] del filtro temporal en runtime
+  const timeRange = useMemo<{ from: Date; to: Date } | null>(() => {
+    if (filterTime === 'any') return null;
+    const now = new Date();
+    if (filterTime === 'today') {
+      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      return { from, to };
+    }
+    if (filterTime === 'tomorrow') {
+      const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const from = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0);
+      const to = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59);
+      return { from, to };
+    }
+    if (filterTime === 'week') {
+      // Próximos 7 días desde HOY (inclusive)
+      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 23, 59, 59);
+      return { from, to };
+    }
+    if (filterTime === 'custom' && filterTimeFrom && filterTimeTo) {
+      return { from: new Date(filterTimeFrom + 'T00:00:00'), to: new Date(filterTimeTo + 'T23:59:59') };
+    }
+    return null;
+  }, [filterTime, filterTimeFrom, filterTimeTo]);
+
+  // Mapa tableId → array de reservas en el rango actual (calc 1 vez por tick)
+  const reservationsByTableInRange = useMemo<Map<number, Reservation[]>>(() => {
+    const map = new Map<number, Reservation[]>();
+    if (!timeRange) return map;
+    for (const r of reservations) {
+      if (r.isCancelled) continue;
+      if (!r.tableId) continue;
+      const dt = new Date(r.reservationDateTime);
+      if (dt >= timeRange.from && dt <= timeRange.to) {
+        const arr = map.get(r.tableId) ?? [];
+        arr.push(r);
+        map.set(r.tableId, arr);
+      }
+    }
+    return map;
+  }, [reservations, timeRange]);
 
   const filteredTables = useMemo(() => {
     const selectedZoneName = selectedZone ? zones.find(z => z.id === selectedZone)?.name : null;
@@ -479,16 +726,33 @@ export default function HostApp() {
         (filterCapacity === '2' && t.capacity <= 2) ||
         (filterCapacity === '4' && t.capacity >= 3 && t.capacity <= 4) ||
         (filterCapacity === '6+' && t.capacity >= 5);
-      return zoneMatch && statusMatch && capacityMatch;
+      // HOST-MESAS-FILTRO.1 — si hay filtro temporal activo, solo mesas con reserva en ese rango
+      const timeMatch = !timeRange || (reservationsByTableInRange.get(t.id)?.length ?? 0) > 0;
+      return zoneMatch && statusMatch && capacityMatch && timeMatch;
     });
-  }, [tables, selectedZone, zones, filterStatus, filterCapacity]);
+  }, [tables, selectedZone, zones, filterStatus, filterCapacity, timeRange, reservationsByTableInRange]);
 
-  const hasActiveFilters = filterStatus !== 'all' || filterCapacity !== 'all';
+  // Conteo de reservas por zona en el rango actual (para mostrar en chips)
+  const reservationCountByZone = useMemo<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    if (!timeRange) return map;
+    for (const [tid, arr] of reservationsByTableInRange.entries()) {
+      const t = tables.find(tb => tb.id === tid);
+      if (!t) continue;
+      map.set(t.zoneName, (map.get(t.zoneName) ?? 0) + arr.length);
+    }
+    return map;
+  }, [reservationsByTableInRange, tables, timeRange]);
+
+  const hasActiveFilters = filterStatus !== 'all' || filterCapacity !== 'all' || filterTime !== 'any';
 
   const clearFilters = () => {
     setSelectedZone(null);
     setFilterStatus('all');
     setFilterCapacity('all');
+    setFilterTime('any');
+    setFilterTimeFrom('');
+    setFilterTimeTo('');
   };
 
   const totalCapacity = tables.reduce((sum, t) => sum + t.capacity, 0);
@@ -505,11 +769,36 @@ export default function HostApp() {
   const confirmedReservations = todayReservations.filter(r => r.isConfirmed);
 
   // All reservations filtered by status (for the grouped-by-date view)
-  const allFiltered = reservationFilter === 'pending'
+  const statusFiltered = reservationFilter === 'pending'
     ? reservations.filter(r => !r.isConfirmed)
     : reservationFilter === 'confirmed'
     ? reservations.filter(r => r.isConfirmed)
     : reservations;
+
+  // Filtro DESDE→HASTA (YYYY-MM-DD) combinable con el status
+  const dateFiltered = (!dateFrom && !dateTo)
+    ? statusFiltered
+    : statusFiltered.filter(r => {
+        const dKey = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
+        if (dateFrom && dKey < dateFrom) return false;
+        if (dateTo && dKey > dateTo) return false;
+        return true;
+      });
+
+  // Filtro de búsqueda (nombre / teléfono / email) — combinable con todo
+  const q = searchQuery.trim().toLowerCase();
+  const allFiltered = !q
+    ? dateFiltered
+    : dateFiltered.filter(r => {
+        const haystack = `${r.customerName || ''} ${r.customerPhone || ''} ${r.customerEmail || ''}`.toLowerCase();
+        return haystack.includes(q);
+      });
+
+  const hasActiveReservationFilters = !!dateFrom || !!dateTo || !!q || reservationFilter !== 'all';
+
+  // Contador de ocasiones especiales en el rango filtrado (cumple/aniversario/etc)
+  const birthdayCount = allFiltered.filter(r => r.occasionType === 1).length;
+  const specialOccasionsCount = allFiltered.filter(r => r.occasionType && r.occasionType !== 0).length;
 
   const groupedByDate = allFiltered.reduce<Record<string, Reservation[]>>((acc, r) => {
     const key = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
@@ -517,13 +806,57 @@ export default function HostApp() {
     acc[key].push(r);
     return acc;
   }, {});
-  const sortedDateKeys = Object.keys(groupedByDate).sort();
+
+  // HOST-RESERVAS-ORDER.1 — ordenar reservas dentro de cada fecha: Pendientes > Confirmadas > Canceladas.
+  // Las FECHAS se ordenan más abajo: HOY siempre primero, luego futuras (cronológico), luego pasadas.
+  Object.keys(groupedByDate).forEach(key => {
+    groupedByDate[key].sort((a, b) => {
+      const sa = a.isCancelled ? 2 : (a.isConfirmed ? 1 : 0);
+      const sb = b.isCancelled ? 2 : (b.isConfirmed ? 1 : 0);
+      if (sa !== sb) return sa - sb;
+      return new Date(a.reservationDateTime).getTime() - new Date(b.reservationDateTime).getTime();
+    });
+  });
+  const sortedDateKeys = Object.keys(groupedByDate).sort((a, b) => {
+    // HOY (rank 0) siempre primero; futuras (rank 1) cronológico; pasadas (rank 2) al final, más reciente arriba.
+    const ra = a === today ? 0 : (a > today ? 1 : 2);
+    const rb = b === today ? 0 : (b > today ? 1 : 2);
+    if (ra !== rb) return ra - rb;
+    return ra === 2 ? b.localeCompare(a) : a.localeCompare(b);
+  });
 
   const totalPending = reservations.filter(r => !r.isConfirmed).length;
   const totalConfirmed = reservations.filter(r => r.isConfirmed).length;
 
+  // Ocupación por mesa: reservas confirmadas/sentadas que ocupan la mesa en un día (YYYY-MM-DD).
+  const occupancyForTableOnDate = (table: Table, ymd: string) =>
+    reservations
+      .filter(r => {
+        const occupies = r.tableId === table.id || (r.assignedTableIds || []).includes(table.id);
+        const st = r.status || (r.isConfirmed ? 'Confirmed' : (r.isCancelled ? 'Cancelled' : 'Pending'));
+        const active = st === 'Confirmed' || st === 'Seated';
+        const sameDay = (r.reservationDateTime || '').slice(0, 10) === ymd;
+        return occupies && active && sameDay;
+      })
+      .sort((a, b) => (a.reservationDateTime || '').localeCompare(b.reservationDateTime || ''));
+  const openTableOccupancy = (table: Table) => {
+    const t = new Date();
+    const ymd = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    setOccTableDate(ymd);
+    setOccTableMonth(new Date(t.getFullYear(), t.getMonth(), 1));
+    setTableReservasModal({ table });
+  };
+  const to12h = (t?: string | null): string => {
+    if (!t) return '';
+    const [hs, m = '00'] = String(t).split(':');
+    let h = parseInt(hs, 10);
+    if (Number.isNaN(h)) return String(t);
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m.padStart(2, '0')} ${ap}`;
+  };
   const formatReservationTime = (dt: string) => {
-    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }); }
+    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }); }
     catch { return '-'; }
   };
 
@@ -536,7 +869,7 @@ export default function HostApp() {
 
   const isPastDate = (dateStr: string) => dateStr < today;
 
-  if (loading) {
+  if (loading || !mounted) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
@@ -552,11 +885,13 @@ export default function HostApp() {
       {/* Header */}
       <div className="bg-slate-900 shadow-xl">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-6">
               <div>
                 <h1 className="text-xl font-bold text-white tracking-tight">Host App</h1>
-                <p className="text-sm text-slate-400">Bienvenido, {user?.name}</p>
+                <p className="text-sm text-slate-400">
+                  Bienvenido, {user?.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() : (user?.name ?? user?.email ?? '')}
+                </p>
               </div>
               {/* View Tabs */}
               <div className="flex rounded-xl bg-white/5 border border-white/10 overflow-hidden">
@@ -585,17 +920,36 @@ export default function HostApp() {
                       {pendingAlert}
                     </span>
                   )}
-                  {pendingReservations.length > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/30 text-purple-300 text-[10px] font-bold">
-                      {pendingReservations.length}
+                  {totalPending > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-200 text-[10px] font-bold">
+                      {totalPending}
                     </span>
                   )}
                 </button>
+                <button
+                  onClick={() => setActiveView('calendar')}
+                  className={`px-5 py-2 text-sm font-semibold transition-all flex items-center gap-2 ${
+                    activeView === 'calendar'
+                      ? 'bg-white/15 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" />
+                  Calendario
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              {/* Stats */}
-              <div className="hidden md:flex items-center gap-2 mr-2">
+            {/* Salir — esquina superior derecha (fila 1) */}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-all border border-white/10"
+            >
+              <LogOut className="w-4 h-4" />
+              Salir
+            </button>
+          </div>
+          {/* Fila 2: indicadores de estado, centrados */}
+          <div className="hidden md:flex flex-wrap items-center justify-center gap-2 mt-4">
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-center min-w-[80px]">
                   <p className="text-2xl font-black text-white leading-none">{tables.filter(t => t.status === 'Available').length}</p>
                   <p className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider mt-0.5">Libres</p>
@@ -616,44 +970,43 @@ export default function HostApp() {
                   <p className="text-2xl font-black text-white leading-none">{availableSeats}</p>
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Asientos libres</p>
                 </div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-all border border-white/10"
-              >
-                <LogOut className="w-4 h-4" />
-                Salir
-              </button>
-            </div>
           </div>
         </div>
       </div>
 
+      {/* ════════ CALENDAR VIEW ════════ */}
+      {activeView === 'calendar' && (
+        <CalendarView
+          reservations={reservations}
+          onDayClick={(dateKey) => setCalendarDaySelected(dateKey)}
+        />
+      )}
+
       {/* ════════ RESERVATIONS VIEW ════════ */}
       {activeView === 'reservations' && (
         <div className="max-w-5xl mx-auto px-6 pt-5 pb-10">
-          {/* Stats row */}
+          {/* Stats row — del DÍA actual (no sistema). Usa las variables day-scoped pre-computadas. */}
           <div className="grid grid-cols-3 gap-4 mb-5">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
-              <p className="text-3xl font-black text-slate-900">{reservations.length}</p>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Total</p>
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center border-l-4 border-l-slate-400">
+              <p className="text-3xl font-black text-slate-700">{todayReservations.length}</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Total · Hoy</p>
             </div>
-            <div className="bg-white rounded-2xl shadow-sm border border-purple-200 p-5 text-center">
-              <p className="text-3xl font-black text-purple-600">{totalPending}</p>
-              <p className="text-xs text-purple-400 font-semibold uppercase tracking-wider mt-1">Pendientes</p>
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center border-l-4 border-l-amber-400">
+              <p className="text-3xl font-black text-slate-700">{pendingReservations.length}</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Pendientes · Hoy</p>
             </div>
-            <div className="bg-white rounded-2xl shadow-sm border border-emerald-200 p-5 text-center">
-              <p className="text-3xl font-black text-emerald-600">{totalConfirmed}</p>
-              <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider mt-1">Confirmadas</p>
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center border-l-4 border-l-emerald-400">
+              <p className="text-3xl font-black text-slate-700">{confirmedReservations.length}</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Confirmadas · Hoy</p>
             </div>
           </div>
 
-          {/* Filter tabs */}
-          <div className="flex gap-2 mb-5">
+          {/* Filter tabs + filtro de fecha inline (ASSIGN-DATE-FILTER) */}
+          <div className="flex flex-wrap items-center gap-2 mb-5">
             {([
-              { key: 'all', label: `Todas (${reservations.length})` },
-              { key: 'pending', label: `Pendientes (${totalPending})` },
-              { key: 'confirmed', label: `Confirmadas (${totalConfirmed})` },
+              { key: 'all', label: 'Todas' },
+              { key: 'pending', label: 'Pendientes' },
+              { key: 'confirmed', label: 'Confirmadas' },
             ] as const).map(f => (
               <button
                 key={f.key}
@@ -667,13 +1020,133 @@ export default function HostApp() {
                 {f.label}
               </button>
             ))}
+
+            {/* Búsqueda + Filtro DESDE→HASTA + contador cumpleaños — alineados a la derecha */}
+            <div className="ml-auto flex items-center gap-2 flex-wrap">
+              {/* Buscar por cliente */}
+              <div className={`relative flex items-center transition-all ${
+                searchQuery ? 'ring-2 ring-blue-200 rounded-xl' : ''
+              }`}>
+                <Search className={`absolute left-3 w-4 h-4 pointer-events-none ${
+                  searchQuery ? 'text-blue-500' : 'text-slate-400'
+                }`} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar cliente..."
+                  aria-label="Buscar reserva por nombre, teléfono o email"
+                  className={`pl-9 pr-8 py-2 w-56 rounded-xl text-sm font-medium border transition-all focus:outline-none focus:border-blue-500 ${
+                    searchQuery
+                      ? 'bg-blue-50 text-blue-900 border-blue-300 placeholder:text-blue-300'
+                      : 'bg-white text-slate-600 border-gray-200 hover:border-gray-300 placeholder:text-slate-400'
+                  }`}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 text-slate-400 hover:text-red-600 transition-colors p-1"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtro DESDE→HASTA */}
+              <div className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 border transition-all ${
+                (dateFrom || dateTo) ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-white border-gray-200'
+              }`}>
+                <Calendar className={`w-4 h-4 ${(dateFrom || dateTo) ? 'text-blue-500' : 'text-slate-400'}`} />
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  aria-label="Desde"
+                  title="Desde"
+                  className="px-2 py-1 text-xs font-medium text-slate-700 bg-white border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                />
+                <span className={`text-xs font-bold ${(dateFrom || dateTo) ? 'text-blue-500' : 'text-slate-400'}`}>→</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  min={dateFrom}
+                  aria-label="Hasta"
+                  title="Hasta"
+                  className="px-2 py-1 text-xs font-medium text-slate-700 bg-white border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                />
+                {(dateFrom || dateTo) && (
+                  <button
+                    onClick={() => { setDateFrom(''); setDateTo(''); }}
+                    className="text-slate-400 hover:text-red-600 transition-colors p-0.5"
+                    aria-label="Limpiar rango"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Badge cumpleaños del rango filtrado — estilo sobrio */}
+              {birthdayCount > 0 && (
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm"
+                  title={`${birthdayCount} cumpleaños en el rango filtrado`}
+                >
+                  <span className="text-base leading-none">🎂</span>
+                  <span className="text-sm font-bold text-slate-800 tabular-nums">{birthdayCount}</span>
+                  <span className="text-xs font-medium text-slate-500">
+                    {birthdayCount === 1 ? 'cumpleaños' : 'cumpleaños'}
+                  </span>
+                </div>
+              )}
+              {specialOccasionsCount > birthdayCount && (
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm"
+                  title={`${specialOccasionsCount - birthdayCount} otras ocasiones especiales (aniversarios, romántica, etc.)`}
+                >
+                  <span className="text-base leading-none">✨</span>
+                  <span className="text-sm font-bold text-slate-800 tabular-nums">{specialOccasionsCount - birthdayCount}</span>
+                  <span className="text-xs font-medium text-slate-500">
+                    {specialOccasionsCount - birthdayCount === 1 ? 'ocasión' : 'ocasiones'}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Reservations grouped by date */}
           {sortedDateKeys.length === 0 ? (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-              <CalendarCheck className="w-16 h-16 text-gray-200 mx-auto mb-4" />
-              <p className="text-lg text-gray-400">No hay reservas</p>
+              {hasActiveReservationFilters ? (
+                <>
+                  <Search className="w-14 h-14 text-blue-200 mx-auto mb-3" />
+                  <p className="text-lg font-semibold text-slate-700">Sin resultados</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    No encontramos reservas que coincidan con los filtros activos.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setReservationFilter('all');
+                      setDateFrom('');
+                      setDateTo('');
+                      setSearchQuery('');
+                    }}
+                    className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    Limpiar todos los filtros
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Inbox className="w-14 h-14 text-gray-200 mx-auto mb-3" />
+                  <p className="text-lg font-semibold text-slate-600">Aún no hay reservas</p>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Cuando lleguen reservas del portal o las crees aquí, aparecerán en esta lista.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -701,13 +1174,11 @@ export default function HostApp() {
                       return (
                         <div
                           key={r.id}
-                          className={`bg-white rounded-2xl shadow-sm border-2 transition-all ${
-                            isPending && isPortal
-                              ? 'border-purple-300 bg-purple-50/30'
-                              : isPending
-                              ? 'border-amber-300 bg-amber-50/30'
+                          className={`bg-white rounded-2xl shadow-sm border transition-all ${
+                            isPending
+                              ? 'border-slate-200 border-l-4 border-l-amber-400'
                               : isUpcoming
-                              ? 'border-emerald-300 bg-emerald-50/30'
+                              ? 'border-slate-200 border-l-4 border-l-emerald-400'
                               : 'border-gray-100'
                           }`}
                         >
@@ -722,14 +1193,12 @@ export default function HostApp() {
                                     </span>
                                   )}
                                   {isPending ? (
-                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                                      isPortal ? 'bg-purple-100 text-purple-700 animate-pulse' : 'bg-amber-100 text-amber-700'
-                                    }`}>
-                                      <Clock className="w-3 h-3" />Pendiente
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                      <Clock className="w-3 h-3 text-amber-500" />Pendiente
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                                      <CheckCircle className="w-3 h-3" />Confirmada
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                      <CheckCircle className="w-3 h-3 text-emerald-500" />Confirmada
                                     </span>
                                   )}
                                   {isUpcoming && r.isConfirmed && (
@@ -737,24 +1206,48 @@ export default function HostApp() {
                                       Próxima
                                     </span>
                                   )}
+                                  {r.isZoneExclusive && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200"
+                                      title="Reserva de zona completa (uso exclusivo)"
+                                    >
+                                      🏛 Zona completa{r.requestedZoneName ? `: ${r.requestedZoneName}` : ''}
+                                    </span>
+                                  )}
+                                  {/* Badge de tipo de ocasión (si != Casual) */}
+                                  {r.occasionType !== undefined && r.occasionType !== 0 && OCCASION_LABELS[r.occasionType] ? (
+                                    <span
+                                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${OCCASION_LABELS[r.occasionType].color}`}
+                                      title={`Ocasión: ${OCCASION_LABELS[r.occasionType].label}`}
+                                    >
+                                      <span>{OCCASION_LABELS[r.occasionType].icon}</span>
+                                      {OCCASION_LABELS[r.occasionType].label}
+                                    </span>
+                                  ) : null}
                                 </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                                {/* Contacto del cliente: el botón "Contactar" se movió a la columna de acciones (debajo de "Mover") */}
+
+                                {/* 2️⃣ Datos de la reserva */}
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Reserva</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                                   <div className="flex items-center gap-1.5 text-slate-600">
                                     <Clock className="w-3.5 h-3.5 text-slate-400" />
                                     <span className="font-semibold">{formatReservationTime(r.reservationDateTime)}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 text-slate-600">
                                     <Users className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>{r.numberOfGuests} personas</span>
+                                    <span>{r.numberOfGuests} {r.numberOfGuests === 1 ? 'persona' : 'personas'}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 text-slate-600">
                                     <CreditCard className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>Mesa {r.tableNumber} · {r.zoneName}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 text-slate-600">
-                                    <Phone className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>{r.customerPhone}</span>
+                                    {r.tableId && r.tableNumber ? (
+                                      <span>Mesa {r.tableNumber} · {r.zoneName}</span>
+                                    ) : (
+                                      <span className="text-amber-600 font-medium">
+                                        Sin mesa · {r.requestedZoneName || r.zoneName || 'Sin zona'}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
@@ -776,23 +1269,66 @@ export default function HostApp() {
                                 )}
                               </div>
 
-                              <div className="flex flex-col gap-2 flex-shrink-0">
-                                {isPending && (
+                              {/* Acciones — todos del mismo tamaño (w-full en columna de ancho fijo) */}
+                              <div className="flex flex-col gap-2 flex-shrink-0 ml-auto w-[210px]">
+                                {isPending ? (
+                                  // Pendiente: Aceptar y Rechazar JUNTOS en la misma línea
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => r.isZoneExclusive ? openZoneDecision(r, true) : openReservationAssignModal(r)}
+                                      className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                      Aceptar
+                                    </button>
+                                    <button
+                                      onClick={() => r.isZoneExclusive ? openZoneDecision(r, false) : requestCancelReservation(r)}
+                                      className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                      Rechazar
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
-                                    onClick={() => confirmReservation(r.id)}
-                                    className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                                    onClick={() => requestCancelReservation(r)}
+                                    className="flex items-center justify-center gap-1.5 w-full px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                                   >
-                                    <CheckCircle className="w-4 h-4" />
-                                    Aceptar
+                                    <XCircle className="w-4 h-4" />
+                                    Cancelar
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => cancelReservation(r.id)}
-                                  className="flex items-center gap-1.5 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                  {isPending ? 'Rechazar' : 'Cancelar'}
-                                </button>
+                                {/* Solo confirmadas: botón Reasignar (las pendientes asignan vía Aceptar) */}
+                                {!isPending && (
+                                  <button
+                                    onClick={() => openReservationAssignModal(r)}
+                                    className="flex items-center justify-center gap-1.5 w-full px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                                  >
+                                    <CalendarCheck className="w-4 h-4" />
+                                    Reasignar mesa
+                                  </button>
+                                )}
+                                {/* Mover y Contactar JUNTOS en la misma línea */}
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => openRescheduleModal(r)}
+                                    className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-white hover:bg-blue-50 text-blue-600 rounded-xl text-sm font-semibold transition-colors shadow-sm border-2 border-blue-300"
+                                    title="Mover a otra fecha u hora"
+                                  >
+                                    <Calendar className="w-4 h-4" />
+                                    Mover
+                                  </button>
+                                  {(r.customerPhone || r.customerEmail) && (
+                                    <button
+                                      onClick={() => setContactReservation(r)}
+                                      className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-sm font-semibold transition-colors border-2 border-blue-200"
+                                      title="Ver datos de contacto"
+                                    >
+                                      <Phone className="w-4 h-4" />
+                                      Contactar
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
@@ -849,7 +1385,16 @@ export default function HostApp() {
 
           {/* Zone tabs */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Zona</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Zona</p>
+              <button
+                onClick={() => setShowPlan((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                style={{ backgroundColor: '#16a34a' }}
+              >
+                {showPlan ? 'Ver lista' : 'Ver plano'}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedZone(null)}
@@ -860,25 +1405,103 @@ export default function HostApp() {
                 }`}
               >
                 Todas
+                {timeRange && (
+                  <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                    selectedZone === null ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {Array.from(reservationsByTableInRange.values()).reduce((s, a) => s + a.length, 0)} res
+                  </span>
+                )}
               </button>
-              {zones.map((zone) => (
+              {zones.map((zone) => {
+                const reservasEnZona = timeRange ? (reservationCountByZone.get(zone.name) ?? 0) : null;
+                return (
+                  <button
+                    key={zone.id}
+                    onClick={() => setSelectedZone(zone.id)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                      selectedZone === zone.id
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {zone.name}
+                    {timeRange ? (
+                      // HOST-MESAS-FILTRO.1: mostrar conteo de reservas en el rango
+                      <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                        selectedZone === zone.id ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {reservasEnZona} res
+                      </span>
+                    ) : (
+                      <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                        selectedZone === zone.id ? 'bg-white/25 text-white' : 'bg-white text-gray-500'
+                      }`}>
+                        {zone.availableTables}/{zone.tableCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100" />
+
+          {/* HOST-MESAS-FILTRO.1 — Filtro temporal de reservas */}
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Calendar className="w-3 h-3" />
+              Reservas
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { value: 'any',      label: 'Cualquier momento' },
+                { value: 'today',    label: 'Hoy' },
+                { value: 'tomorrow', label: 'Mañana' },
+                { value: 'week',     label: 'Esta semana' },
+                { value: 'custom',   label: 'Personalizado' },
+              ].map(opt => (
                 <button
-                  key={zone.id}
-                  onClick={() => setSelectedZone(zone.id)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                    selectedZone === zone.id
-                      ? 'bg-primary-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  key={opt.value}
+                  onClick={() => setFilterTime(opt.value as any)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                    filterTime === opt.value
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
                   }`}
                 >
-                  {zone.name}
-                  <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                    selectedZone === zone.id ? 'bg-white/25 text-white' : 'bg-white text-gray-500'
-                  }`}>
-                    {zone.availableTables}/{zone.tableCount}
-                  </span>
+                  {opt.label}
                 </button>
               ))}
+              {/* Date pickers — visibles solo en modo 'custom' */}
+              {filterTime === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={filterTimeFrom}
+                    onChange={e => setFilterTimeFrom(e.target.value)}
+                    className="border border-blue-300 rounded-lg px-2 py-1 text-sm text-blue-700 bg-blue-50"
+                  />
+                  <span className="text-gray-400 text-sm">→</span>
+                  <input
+                    type="date"
+                    value={filterTimeTo}
+                    onChange={e => setFilterTimeTo(e.target.value)}
+                    className="border border-blue-300 rounded-lg px-2 py-1 text-sm text-blue-700 bg-blue-50"
+                  />
+                </>
+              )}
+              {/* Resumen del rango activo */}
+              {timeRange && (
+                <span className="ml-2 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded">
+                  {timeRange.from.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}
+                  {timeRange.from.toDateString() !== timeRange.to.toDateString() && (
+                    <> → {timeRange.to.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}</>
+                  )}
+                </span>
+              )}
+
             </div>
           </div>
 
@@ -962,9 +1585,33 @@ export default function HostApp() {
         </div>
       </div>
 
-      {/* Tables Grid */}
-      <div className="max-w-7xl mx-auto px-6 pb-10">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      {/* Tables Grid / Plano del salón */}
+      {showPlan ? (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between px-4 py-2 text-xs text-slate-500">
+            <span>Toca una mesa para gestionarla</span>
+            <span className="hidden sm:inline">Plano en vivo · estado por color</span>
+          </div>
+          <div style={{ height: 560 }}>
+            <MultiZoneFloorPlanViewer
+              data={floorPlanData}
+              palette={floorPlanPalette}
+              fill
+              fitToContent
+              selectedTableId={planoSel ?? undefined}
+              onTableClick={(id) => {
+                setPlanoSel(id);
+                const t = tables.find((x) => Number(x.id) === Number(id));
+                if (t) setPlanoTable(t);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      ) : (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
           {filteredTables.map((table) => (
             <div
               key={table.id}
@@ -974,64 +1621,476 @@ export default function HostApp() {
               <div className={`h-1.5 w-full ${getStatusStrip(table.status)}`} />
 
               <div className="p-4 flex flex-col flex-1">
-                {/* Number + badge */}
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-4xl font-black text-slate-900 leading-none">
-                    {table.tableNumber}
-                  </span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${getStatusBadge(table.status)}`}>
-                    {getStatusLabel(table.status)}
-                  </span>
+                {/* Encabezado (no clickable) — "Ver reservas" se abre solo con el botón de abajo */}
+                <div className="mb-2">
+                  {/* Number + badge */}
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-4xl font-black text-slate-900 leading-none">
+                      {table.tableNumber}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${getStatusBadge(table.status)}`}>
+                      {getStatusLabel(table.status)}
+                    </span>
+                  </div>
+
+                  {/* Zone + Capacity */}
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest truncate">{table.zoneName}</p>
+                  <div className="flex items-center gap-1 mt-1 text-slate-500">
+                    <Users className="w-3 h-3" />
+                    <span className="text-xs">{table.capacity} personas</span>
+                  </div>
                 </div>
 
-                {/* Zone + Capacity */}
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest truncate">{table.zoneName}</p>
-                <div className="flex items-center gap-1 mt-1 text-slate-500">
-                  <Users className="w-3 h-3" />
-                  <span className="text-xs">{table.capacity} personas</span>
-                </div>
+                {/* Ver reservas — botón explícito siempre visible (táctil/tablet: el hover no aplica) */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); openTableOccupancy(table); }}
+                  className="mt-1 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200 text-xs font-bold transition-colors"
+                >
+                  <CalendarCheck className="w-4 h-4" /> Ver reservas
+                </button>
 
-                {/* Actions */}
-                <div className="mt-auto pt-3 space-y-1.5">
-                  {table.status === 'Available' ? (
-                    <>
+                {/* CAL-FE FEATURE 2 — Horarios libres de la mesa para el día efectivo (badges + "+N más") */}
+                {(() => {
+                  const slots = tableSlots[table.id];
+                  // Aún cargando y sin datos previos → placeholder sutil (no bloquea el render)
+                  if (slots === undefined) {
+                    return tableSlotsLoading ? (
+                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
+                        <Clock className="w-3 h-3 animate-pulse" />
+                        <span className="animate-pulse">Cargando horarios…</span>
+                      </div>
+                    ) : null;
+                  }
+                  if (slots.length === 0) {
+                    return (
+                      <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+                        <Clock className="w-3 h-3" />
+                        Sin horarios libres
+                      </div>
+                    );
+                  }
+                  const MAX_BADGES = 5;
+                  const isOpen = openSlotsTableId === table.id;
+                  const visible = isOpen ? slots : slots.slice(0, MAX_BADGES);
+                  const extra = slots.length - MAX_BADGES;
+                  return (
+                    <div className="mt-2">
+                      <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Horarios libres ({slots.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {visible.map((s) => (
+                          <span
+                            key={s}
+                            className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold leading-none tabular-nums"
+                          >
+                            {to12h(s)}
+                          </span>
+                        ))}
+                        {!isOpen && extra > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setOpenSlotsTableId(table.id); }}
+                            className="px-2 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-semibold leading-none hover:bg-slate-200 transition-colors"
+                          >
+                            +{extra} más
+                          </button>
+                        )}
+                        {isOpen && extra > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setOpenSlotsTableId(null); }}
+                            className="px-2 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-semibold leading-none hover:bg-slate-200 transition-colors"
+                          >
+                            Menos
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* HOST-MESAS-FILTRO.1 — badge de reservas en el rango */}
+                {timeRange && (() => {
+                  const rsv = reservationsByTableInRange.get(table.id) ?? [];
+                  if (rsv.length === 0) return null;
+                  const earliest = rsv.slice().sort((a, b) =>
+                    new Date(a.reservationDateTime).getTime() - new Date(b.reservationDateTime).getTime()
+                  )[0];
+                  const dt = new Date(earliest.reservationDateTime);
+                  const dayLabel = dt.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' });
+                  const timeLabel = dt.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                      <Calendar className="w-3 h-3 text-blue-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-bold text-blue-900 leading-tight">
+                          {rsv.length} reserva{rsv.length !== 1 ? 's' : ''}
+                        </p>
+                        <p className="text-[10px] text-blue-700 truncate">
+                          Próx: {dayLabel} · {timeLabel}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* HOST-MESAS-UX.1 — Sección reserva + walk-in actions, diseño táctil tablet/cell */}
+                {(() => {
+                  const tableReservas = reservations
+                    .filter(r => r.tableId === table.id && !r.isCancelled)
+                    .filter(r => {
+                      const dt = new Date(r.reservationDateTime);
+                      const cutoff = new Date();
+                      cutoff.setHours(0, 0, 0, 0);
+                      return dt >= cutoff;
+                    })
+                    .sort((a, b) => {
+                      const sa = a.isConfirmed ? 1 : 0;
+                      const sb = b.isConfirmed ? 1 : 0;
+                      if (sa !== sb) return sa - sb;
+                      return new Date(a.reservationDateTime).getTime() - new Date(b.reservationDateTime).getTime();
+                    });
+                  const hasReserva = tableReservas.length > 0;
+                  const isPhysicallyBusy = table.status === 'Occupied' || table.status === 'Billing' || table.status === 'Cleaning';
+
+                  // Caso 1: mesa físicamente ocupada → solo estado (no actionable)
+                  if (isPhysicallyBusy) {
+                    return (
+                      <div className="mt-auto pt-3">
+                        {table.status === 'Billing' ? (
+                          <div className="w-full py-3 px-2 rounded-xl text-center bg-violet-50 border border-violet-200">
+                            <p className="text-xs font-bold text-violet-700 leading-tight">Proceso de cobro</p>
+                            <p className="text-[10px] text-violet-500 mt-0.5">Liberándose pronto</p>
+                          </div>
+                        ) : (
+                          <div className={`w-full py-3 rounded-xl text-xs font-semibold text-center ${
+                            table.status === 'Occupied' ? 'bg-red-50 text-red-500'
+                            : 'bg-blue-50 text-blue-500'
+                          }`}>
+                            {table.status === 'Occupied' ? 'En uso' : 'En limpieza'}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Caso 2: mesa con reserva próxima → gestión de reserva como acción principal
+                  if (hasReserva) {
+                    const r = tableReservas[0];
+                    const isPending = !r.isConfirmed;
+                    const extra = tableReservas.length - 1;
+                    const dt = new Date(r.reservationDateTime);
+                    const now = new Date();
+                    const hoursUntil = (dt.getTime() - now.getTime()) / 3600000;
+                    const dayLabel = dt.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' });
+                    const timeLabel = dt.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
+                    const dayLong = dt.toLocaleDateString('es-DO', { weekday: 'short' }).replace('.', '');
+                    // Si la reserva es lejana (>2h), permite walk-in. Si ya está cerca, mejor no.
+                    const allowWalkIn = hoursUntil > 2;
+
+                    return (
+                      <div className="mt-3 flex flex-col flex-1">
+                        {/* Bloque de reserva — más claro y respirado */}
+                        <div className={`rounded-xl p-2.5 ${
+                          isPending ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'
+                        }`}>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="font-bold text-sm text-slate-900 truncate flex-1" title={r.customerName}>
+                              {r.customerName}
+                            </p>
+                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              isPending ? 'bg-amber-200 text-amber-800' : 'bg-emerald-200 text-emerald-800'
+                            }`}>
+                              {isPending ? 'Pend' : 'OK'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-snug">
+                            <span className="font-semibold">{dayLong} {dayLabel}</span> · {timeLabel}
+                            <br />
+                            <span className="text-slate-500">{r.numberOfGuests} {r.numberOfGuests === 1 ? 'persona' : 'personas'}</span>
+                          </p>
+                        </div>
+
+                        {/* Acción primaria — full width, alta para tap */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openReservationAssignModal(r); }}
+                          className={`mt-2 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm transition-colors ${
+                            isPending ? 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700' : 'bg-blue-500 hover:bg-blue-600 active:bg-blue-700'
+                          }`}
+                        >
+                          {isPending ? (
+                            <><CheckCircle className="w-4 h-4" /> Aceptar reserva</>
+                          ) : (
+                            <><CalendarCheck className="w-4 h-4" /> Reasignar mesa</>
+                          )}
+                        </button>
+
+                        {/* Acciones secundarias — 50/50 con icon + texto chico */}
+                        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); requestCancelReservation(r); }}
+                            className="flex items-center justify-center gap-1 py-2 rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 text-[11px] font-semibold transition-colors"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            {isPending ? 'Rechazar' : 'Cancelar'}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openRescheduleModal(r); }}
+                            className="flex items-center justify-center gap-1 py-2 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 active:bg-blue-100 text-[11px] font-semibold transition-colors"
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                            Mover
+                          </button>
+                        </div>
+
+                        {/* +N más reservas */}
+                        {extra > 0 && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openTableOccupancy(table); }}
+                            className="mt-1.5 w-full py-1.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 rounded transition-colors flex items-center justify-center gap-1"
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                            Ver {extra} reserva{extra !== 1 ? 's' : ''} más
+                          </button>
+                        )}
+
+                        {/* Walk-in — separador sutil + texto, solo si la reserva está lejos */}
+                        {allowWalkIn && (
+                          <>
+                            <div className="mt-2 pt-2 border-t border-dashed border-gray-200">
+                              <p className="text-[9px] text-slate-400 uppercase tracking-wider text-center mb-1.5">
+                                o cliente walk-in
+                              </p>
+                              <button
+                                onClick={() => openAssignModal(table)}
+                                className="w-full py-2 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 text-[11px] font-semibold transition-colors"
+                              >
+                                Asignar ahora
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Caso 3: mesa libre sin reservas → flujo simple
+                  return (
+                    <div className="mt-auto pt-3 space-y-2">
                       <button
                         onClick={() => openAssignModal(table)}
-                        className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors"
+                        className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                       >
                         Asignar
                       </button>
                       <button
                         onClick={() => openReservationModal(table)}
-                        className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                        className="w-full py-2.5 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
                       >
                         Reservar
                       </button>
-                    </>
-                  ) : table.status === 'Billing' ? (
-                    <div className="w-full py-2 px-2 rounded-xl text-center bg-violet-50 border border-violet-200">
-                      <p className="text-[10px] font-bold text-violet-700 leading-tight">Proceso de cobro</p>
-                      <p className="text-[9px] text-violet-500 mt-0.5">Liberándose pronto</p>
                     </div>
-                  ) : (
-                    <div className={`w-full py-2 rounded-xl text-xs font-semibold text-center ${
-                      table.status === 'Occupied' ? 'bg-red-50 text-red-400'
-                      : table.status === 'Cleaning' ? 'bg-blue-50 text-blue-400'
-                      : 'bg-amber-50 text-amber-500'
-                    }`}>
-                      {table.status === 'Occupied' ? 'En uso'
-                       : table.status === 'Cleaning' ? 'En limpieza'
-                       : 'Reservada'}
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             </div>
           ))}
         </div>
       </div>
+      )}
+
+      {/* Hoja de acciones del host al tocar una mesa en el plano */}
+      {planoTable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(15,23,42,0.55)' }} onClick={() => setPlanoTable(null)}>
+          <div style={{ width: '100%', maxWidth: 380 }} onClick={(e) => e.stopPropagation()} className="overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Mesa {planoTable.tableNumber}</h3>
+                <p className="text-xs text-slate-500">{planoTable.zoneName} · {planoTable.capacity} pers.</p>
+              </div>
+              <button type="button" onClick={() => setPlanoTable(null)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-2 p-5">
+              {planoTable.status === 'Available' ? (
+                <>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openAssignModal(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
+                    <Users className="h-4 w-4" /> Sentar comensales
+                  </button>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openReservationModal(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <CalendarCheck className="h-4 w-4" /> Reservar
+                  </button>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openTableOccupancy(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <Calendar className="h-4 w-4" /> Ver reservas
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="mb-1 text-xs text-slate-500">Mesa {planoTable.status === 'Reserved' ? 'reservada' : planoTable.status === 'Occupied' ? 'ocupada' : planoTable.status === 'Billing' ? 'por cobrar' : 'en limpieza'} — gestiona sus reservas:</p>
+                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openTableOccupancy(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
+                    <Calendar className="h-4 w-4" /> Ver reservas
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       </>}
+
+
+      {/* HOST-MESAS-RESERVAS.2 — Mini-modal: TODAS las reservas de una mesa con sus acciones */}
+      {tableReservasModal && (() => {
+        const tbl = tableReservasModal.table;
+        const dayRes = occTableDate ? occupancyForTableOnDate(tbl, occTableDate) : [];
+        const dateLabel = occTableDate
+          ? new Date(occTableDate + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          : '';
+        return (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setTableReservasModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[90vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-indigo-600 text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="text-base font-bold flex items-center gap-2">
+                  <CalendarCheck className="w-4 h-4" />
+                  Reservas · Mesa #{tbl.tableNumber}
+                </h3>
+                <p className="text-xs text-indigo-100 mt-0.5">
+                  {tbl.zoneName} · hasta {tbl.capacity} personas
+                </p>
+              </div>
+              <button onClick={() => setTableReservasModal(null)} className="p-1.5 hover:bg-white/10 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              {/* Calendario — día seleccionable (reservas confirmadas/sentadas de la mesa) */}
+              <div className="px-4 pt-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label="Mes anterior">
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <p className="text-sm font-bold capitalize text-slate-700">{occTableMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' })}</p>
+                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label="Mes siguiente">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="mb-1 grid grid-cols-7">
+                    {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => (
+                      <span key={i} className="py-1 text-center text-[10px] font-bold uppercase text-slate-400">{d}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {(() => {
+                      const year = occTableMonth.getFullYear();
+                      const month = occTableMonth.getMonth();
+                      const firstDay = new Date(year, month, 1).getDay();
+                      const daysInMonth = new Date(year, month + 1, 0).getDate();
+                      const cells: any[] = [];
+                      for (let i = 0; i < firstDay; i++) cells.push(<div key={`b${i}`} />);
+                      for (let d = 1; d <= daysInMonth; d++) {
+                        const ymd = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        const isSel = ymd === occTableDate;
+                        const count = occupancyForTableOnDate(tbl, ymd).length;
+                        cells.push(
+                          <button
+                            key={ymd}
+                            type="button"
+                            onClick={() => setOccTableDate(ymd)}
+                            className={[
+                              'relative flex h-9 w-full items-center justify-center rounded-lg text-sm transition-colors',
+                              isSel ? 'bg-indigo-600 font-bold text-white' : 'text-slate-700 hover:bg-slate-200',
+                            ].join(' ')}
+                          >
+                            {d}
+                            {count > 0 && <span className={`absolute bottom-1 h-1 w-1 rounded-full ${isSel ? 'bg-white' : 'bg-indigo-500'}`} />}
+                          </button>
+                        );
+                      }
+                      return cells;
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Reservas confirmadas / sentadas del día seleccionado */}
+              <div className="px-4 py-3">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400 capitalize">{dateLabel}</p>
+                {dayRes.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-slate-400">
+                    <CalendarCheck className="mx-auto mb-2 h-7 w-7 opacity-40" />
+                    Sin reservas confirmadas para este día
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {dayRes.map(r => {
+                      const seated = r.status === 'Seated';
+                      return (
+                        <div key={r.id} className={`rounded-lg p-3 border-l-4 ${seated ? 'bg-blue-50 border-blue-400' : 'bg-emerald-50 border-emerald-400'}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className={`font-bold text-sm truncate ${r.customerName ? 'text-slate-900' : 'italic text-slate-400'}`}>{r.customerName || (r.confirmationCode ? `Reserva ${r.confirmationCode}` : 'Sin nombre')}</p>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${seated ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {seated ? 'Sentada' : 'Confirmada'}
+                            </span>
+                          </div>
+                          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-600">
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{to12h((r.reservationDateTime || '').slice(11, 16))}</span>
+                            <span className="flex items-center gap-1"><Users className="w-3 h-3" />{r.numberOfGuests} {r.numberOfGuests === 1 ? 'persona' : 'personas'}</span>
+                            {r.occasionType && r.occasionType !== 0 && OCCASION_LABELS[r.occasionType] ? (
+                              <span>{OCCASION_LABELS[r.occasionType].icon} {OCCASION_LABELS[r.occasionType].label}</span>
+                            ) : null}
+                          </p>
+                          {r.specialRequests && <p className="mt-1 text-[11px] italic text-amber-600 truncate" title={r.specialRequests}>“{r.specialRequests}”</p>}
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {r.customerPhone && (
+                              <a href={`tel:${r.customerPhone}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-semibold transition-colors">
+                                <Phone className="w-3 h-3" /> Contactar
+                              </a>
+                            )}
+                            {!seated && (
+                              <>
+                                <button onClick={() => { openReservationAssignModal(r); setTableReservasModal(null); }} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-semibold">
+                                  <CalendarCheck className="w-3 h-3" /> Reasignar
+                                </button>
+                                <button onClick={() => { openRescheduleModal(r); setTableReservasModal(null); }} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 text-[11px] font-semibold">
+                                  <Calendar className="w-3 h-3" /> Mover
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-4 py-2.5 border-t flex items-center justify-between flex-shrink-0">
+              <span className="text-xs text-slate-500">{dayRes.length} reserva{dayRes.length !== 1 ? 's' : ''} este día</span>
+              <button
+                onClick={() => setTableReservasModal(null)}
+                className="px-4 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {/* Assign Modal */}
       {showAssignModal && selectedTable && (
@@ -1088,161 +2147,898 @@ export default function HostApp() {
 
       {/* Reservation Modal */}
       {showReservationModal && selectedTable && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden my-8">
-            <div className="bg-slate-900 px-6 py-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Reservar</p>
-                <h2 className="text-xl font-bold text-white">Mesa #{selectedTable.tableNumber}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{selectedTable.zoneName} · hasta {selectedTable.capacity} personas</p>
+        <HostReservationWizard
+          table={selectedTable}
+          hostId={user?.id ?? null}
+          menuDishes={menuDishes}
+          api={api}
+          onClose={() => setShowReservationModal(false)}
+          onCreated={() => { setShowReservationModal(false); loadData(); }}
+        />
+      )}
+
+      {/* Modal de confirmación al cancelar/rechazar reserva */}
+      {/* ZONA-EXCL — Modal de decisión del host (aceptar bloquea la zona / rechazar) con mensaje al cliente */}
+      {zoneDecisionModal && (() => {
+        const r = zoneDecisionModal.r;
+        const accept = zoneDecisionModal.accept;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => !zoneDeciding && setZoneDecisionModal(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className={`px-6 py-4 flex items-center gap-3 border-b ${accept ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                <div className={`rounded-full w-10 h-10 flex items-center justify-center flex-shrink-0 ${accept ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                  <span className="text-lg">🏛</span>
+                </div>
+                <div className="min-w-0">
+                  <h3 className={`text-lg font-bold ${accept ? 'text-emerald-900' : 'text-red-900'}`}>
+                    {accept ? 'Aceptar zona completa' : 'Rechazar zona completa'}
+                  </h3>
+                  <p className="text-xs text-slate-500 truncate">{r.customerName} · {r.requestedZoneName || r.zoneName || 'zona'} · {r.numberOfGuests} pers</p>
+                </div>
               </div>
-              <button onClick={() => setShowReservationModal(false)} className="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+              <div className="px-6 py-5">
+                <p className="text-sm text-slate-600 mb-3">
+                  {accept
+                    ? <>Se bloqueará <b>toda la zona {r.requestedZoneName || ''}</b> (todas sus mesas) para este cliente. Si la zona ya tiene reservas en esa ventana, no se podrá.</>
+                    : <>La solicitud se marcará como rechazada. El cliente verá tu mensaje en su seguimiento.</>}
+                </p>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Mensaje al cliente</label>
+                <textarea
+                  value={zoneDecisionMsg}
+                  onChange={(e) => setZoneDecisionMsg(e.target.value)}
+                  rows={3}
+                  placeholder={accept ? '¡Confirmado! Los esperamos…' : 'Lo sentimos, esa zona ya está comprometida ese día…'}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+              </div>
+              <div className="bg-slate-50 px-6 py-3 flex items-center justify-end gap-2 border-t">
+                <button onClick={() => setZoneDecisionModal(null)} disabled={zoneDeciding} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+                  Cerrar
+                </button>
+                <button
+                  onClick={submitZoneDecision}
+                  disabled={zoneDeciding || (!accept && !zoneDecisionMsg.trim())}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold text-white shadow-sm disabled:opacity-50 ${accept ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}
+                >
+                  {zoneDeciding ? 'Enviando…' : (accept ? 'Aceptar y bloquear zona' : 'Rechazar')}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {cancelConfirmReservation && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => !cancellingReservation && setCancelConfirmReservation(null)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !cancellingReservation) setCancelConfirmReservation(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-modal-title"
+          >
+            <div className="bg-red-50 border-b border-red-100 px-6 py-4 flex items-center gap-3">
+              <div className="bg-red-100 rounded-full w-10 h-10 flex items-center justify-center flex-shrink-0">
+                <XCircle className="w-5 h-5 text-red-600" />
+              </div>
+              <h3 id="cancel-modal-title" className="text-lg font-bold text-red-900">
+                {cancelConfirmReservation.isConfirmed ? '¿Cancelar reserva?' : '¿Rechazar reserva?'}
+              </h3>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="text-sm text-slate-600 mb-4">
+                {cancelConfirmReservation.isConfirmed
+                  ? 'Esta reserva ya estaba confirmada. Al cancelar se notificará a los demás staff y se liberará la mesa si aplica.'
+                  : 'La reserva volverá al cliente como rechazada. Esta acción no se puede deshacer.'}
+              </p>
+
+              <div className="bg-slate-50 rounded-lg p-3 space-y-1.5 text-sm">
+                <div className="flex items-center gap-2">
+                  <User className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="font-semibold text-slate-900">
+                    {cancelConfirmReservation.customerName}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>
+                    {new Date(cancelConfirmReservation.reservationDateTime).toLocaleString('es-DO', {
+                      weekday: 'short', day: 'numeric', month: 'short',
+                      hour: '2-digit', minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Users className="w-3.5 h-3.5 text-slate-400" />
+                  <span>
+                    {cancelConfirmReservation.numberOfGuests} {cancelConfirmReservation.numberOfGuests === 1 ? 'persona' : 'personas'}
+                    {cancelConfirmReservation.tableId && cancelConfirmReservation.tableNumber && (
+                      <> · Mesa {cancelConfirmReservation.tableNumber} · {cancelConfirmReservation.zoneName}</>
+                    )}
+                    {!cancelConfirmReservation.tableId && (
+                      <> · {cancelConfirmReservation.requestedZoneName || cancelConfirmReservation.zoneName || 'Sin zona'} · sin mesa asignada</>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-3 bg-slate-50 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setCancelConfirmReservation(null)}
+                disabled={cancellingReservation}
+                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                No, mantener
+              </button>
+              <button
+                onClick={confirmCancelReservation}
+                disabled={cancellingReservation}
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+              >
+                {cancellingReservation ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                    Cancelando...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    {cancelConfirmReservation.isConfirmed ? 'Sí, cancelar' : 'Sí, rechazar'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESCHEDULE: Modal mover reserva a otra fecha/hora */}
+      {/* Modal: datos de contacto del cliente (teléfono + correo) */}
+      {contactReservation && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setContactReservation(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Contacto</p>
+                <h2 className="text-lg font-bold text-white truncate">{contactReservation.customerName}</h2>
+              </div>
+              <button onClick={() => setContactReservation(null)} className="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors flex-shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <User className="w-3 h-3" /> Nombre del Cliente *
-                  </label>
-                  <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-slate-900" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Phone className="w-3 h-3" /> Teléfono *
-                  </label>
-                  <input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-slate-900" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Mail className="w-3 h-3" /> Email
-                  </label>
-                  <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-slate-900" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Fecha *</label>
-                  <input type="date" value={reservationDate} onChange={(e) => setReservationDate(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-slate-900" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Hora *</label>
-                  <input type="time" value={reservationTime} onChange={(e) => setReservationTime(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-slate-900" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Users className="w-3 h-3" /> Personas *
-                  </label>
-                  <input type="number" value={reservationGuests} onChange={(e) => setReservationGuests(e.target.value)}
-                    max={selectedTable.capacity} placeholder={`Máximo ${selectedTable.capacity}`}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-slate-900" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Clock className="w-3 h-3" /> Bloquear mesa (min antes)
-                  </label>
-                  <div className="flex gap-2">
-                    {[30, 45, 60, 90, 120].map(min => (
-                      <button
-                        key={min}
-                        type="button"
-                        onClick={() => setAdvanceBlockMinutes(String(min))}
-                        className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all border ${
-                          advanceBlockMinutes === String(min)
-                            ? 'bg-amber-400 text-white border-amber-400'
-                            : 'bg-white text-slate-600 border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        {min} min
-                      </button>
-                    ))}
+            <div className="p-6 space-y-3">
+              {contactReservation.customerPhone ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Phone className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wider">Teléfono</p>
+                      <p className="text-slate-900 font-semibold truncate">{contactReservation.customerPhone}</p>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">La mesa se mostrará como reservada este tiempo antes de la hora de la reserva</p>
+                  <a href={`tel:${contactReservation.customerPhone}`} className="flex-shrink-0 px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">Llamar</a>
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Notas especiales</label>
-                  <textarea value={reservationNotes} onChange={(e) => setReservationNotes(e.target.value)} rows={2}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-slate-900 resize-none" />
+              ) : (
+                <p className="text-sm text-slate-400">Sin teléfono registrado</p>
+              )}
+              {contactReservation.customerEmail ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Mail className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wider">Correo</p>
+                      <p className="text-slate-900 font-semibold truncate">{contactReservation.customerEmail}</p>
+                    </div>
+                  </div>
+                  <a href={`mailto:${contactReservation.customerEmail}`} className="flex-shrink-0 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold">Enviar</a>
                 </div>
+              ) : (
+                <p className="text-sm text-slate-400">Sin correo registrado</p>
+              )}
+            </div>
+            <div className="px-6 pb-6">
+              <button onClick={() => setContactReservation(null)} className="w-full py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-gray-50">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rescheduleModalForReservation && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={closeRescheduleModal}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Mover reserva
+                </h3>
+                <p className="text-xs text-blue-100 mt-0.5">
+                  {rescheduleModalForReservation.customerName} · {rescheduleModalForReservation.numberOfGuests} pers
+                </p>
+              </div>
+              <button onClick={closeRescheduleModal} className="p-1.5 hover:bg-white/10 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm">
+                <p className="text-xs text-slate-500 mb-1">Fecha y hora actuales</p>
+                <p className="font-semibold text-slate-700">
+                  {new Date(rescheduleModalForReservation.reservationDateTime).toLocaleString('es-DO', {
+                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                  })}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3" /> Nueva fecha
+                  </span>
+                  <input
+                    type="date"
+                    value={rescheduleDate}
+                    onChange={(e) => setRescheduleDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Clock className="w-3 h-3" /> Nueva hora
+                  </span>
+                  <input
+                    type="time"
+                    value={rescheduleTime}
+                    onChange={(e) => setRescheduleTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-slate-700 focus:outline-none focus:border-blue-500"
+                  />
+                </label>
+              </div>
+              {rescheduleDate && rescheduleTime && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                  <p className="text-xs text-blue-600 mb-1">Será movida a</p>
+                  <p className="font-semibold text-blue-900">
+                    {new Date(`${rescheduleDate}T${rescheduleTime}:00`).toLocaleString('es-DO', {
+                      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              )}
+              {rescheduleModalForReservation.tableId && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                  ℹ️ La mesa <strong>#{rescheduleModalForReservation.tableNumber}</strong> se mantiene asignada. Si hay conflicto con otra reserva ese día, recibirás un aviso.
+                </p>
+              )}
+            </div>
+            <div className="px-6 py-3 bg-slate-50 border-t flex justify-end gap-2">
+              <button
+                onClick={closeRescheduleModal}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => submitReschedule()}
+                disabled={rescheduling || !rescheduleDate || !rescheduleTime}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                {rescheduling ? (
+                  <>
+                    <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                    Moviendo...
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-3.5 h-3.5" />
+                    Confirmar movimiento
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESCHEDULE: Modal CalendarDay — al hacer click en día del calendario */}
+      {calendarDaySelected && (() => {
+        const dayReservas = reservations.filter(r => {
+          const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
+          return k === calendarDaySelected;
+        });
+        const otherReservas = reservations.filter(r => {
+          const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
+          return k !== calendarDaySelected;
+        });
+        const dayLabel = new Date(calendarDaySelected + 'T12:00:00').toLocaleDateString('es-DO', {
+          weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+        });
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+            onClick={() => setCalendarDaySelected(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <Calendar className="w-5 h-5" />
+                    {dayLabel}
+                  </h3>
+                  <p className="text-xs text-blue-100 mt-0.5">
+                    {dayReservas.length} reserva{dayReservas.length !== 1 ? 's' : ''} este día
+                  </p>
+                </div>
+                <button onClick={() => setCalendarDaySelected(null)} className="p-1.5 hover:bg-white/10 rounded">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {/* Pre-order section */}
-              <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setShowPreOrder(!showPreOrder)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <span className="text-sm font-semibold text-slate-700">
-                    Pre-ordenar platos <span className="font-normal text-slate-400">(opcional)</span>
-                  </span>
-                  <span className={`text-xs transition-transform ${showPreOrder ? 'rotate-180' : ''}`}>▼</span>
-                </button>
-                {showPreOrder && (
-                  <div className="p-4 space-y-3">
-                    <div className="max-h-48 overflow-y-auto space-y-2">
-                      {menuDishes.filter((d: any) => d.isAvailable !== false).map((dish: any) => {
-                        const inCart = preOrderItems.find(i => i.dishId === (dish.id ?? dish.Id));
-                        const id = dish.id ?? dish.Id;
+              <div className="px-6 py-4 overflow-y-auto flex-1 space-y-5">
+                {/* Sección 1: Reservas del día */}
+                <div>
+                  <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">
+                    Reservas de este día
+                  </p>
+                  {/* Tabs por ocasión — solo si hay >1 tipo distinto */}
+                  {(() => {
+                    const groups = new Map<number, number>();
+                    dayReservas.forEach(r => {
+                      const t = r.occasionType ?? 0;
+                      groups.set(t, (groups.get(t) || 0) + 1);
+                    });
+                    if (groups.size <= 1) return null;
+                    const sortedGroups = Array.from(groups.entries()).sort(([a], [b]) => a - b);
+                    return (
+                      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 -mx-1 px-1">
+                        <button
+                          onClick={() => setDayModalOccasionFilter('all')}
+                          className={`flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                            dayModalOccasionFilter === 'all'
+                              ? 'bg-blue-500 text-white border-blue-500'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          Todas ({dayReservas.length})
+                        </button>
+                        {sortedGroups.map(([occType, count]) => {
+                          const meta = OCCASION_LABELS[occType];
+                          if (!meta) return null;
+                          const isActive = dayModalOccasionFilter === occType;
+                          return (
+                            <button
+                              key={occType}
+                              onClick={() => setDayModalOccasionFilter(occType)}
+                              className={`flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                                isActive
+                                  ? meta.color + ' ring-2 ring-offset-1 ring-blue-300'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              {meta.icon && <span className="text-sm leading-none">{meta.icon}</span>}
+                              {meta.label} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const filteredDayReservas = dayModalOccasionFilter === 'all'
+                      ? dayReservas
+                      : dayReservas.filter(r => (r.occasionType ?? 0) === dayModalOccasionFilter);
+                    if (dayReservas.length === 0) {
+                      return (
+                        <p className="text-sm text-slate-400 italic bg-slate-50 rounded-lg p-3">
+                          No hay reservas para este día todavía.
+                        </p>
+                      );
+                    }
+                    if (filteredDayReservas.length === 0) {
+                      const filterMeta = OCCASION_LABELS[dayModalOccasionFilter as number];
+                      return (
+                        <div className="text-sm text-slate-500 bg-slate-50 rounded-lg p-3 flex items-center gap-2">
+                          <span>Ninguna reserva con ocasión {filterMeta?.icon} <strong>{filterMeta?.label}</strong> este día.</span>
+                          <button
+                            onClick={() => setDayModalOccasionFilter('all')}
+                            className="ml-auto text-blue-600 hover:underline font-semibold text-xs"
+                          >
+                            Ver todas
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                    <div className="space-y-2">
+                      {filteredDayReservas.map(r => {
+                        const isCancelled = r.isCancelled;
+                        const isPending = !r.isConfirmed && !isCancelled;
                         return (
-                          <div key={id} className="flex items-center justify-between py-1.5">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-slate-800 truncate">{dish.name ?? dish.Name}</p>
-                              <p className="text-xs text-amber-600">RD$ {Number(dish.price ?? dish.Price).toLocaleString('es-DO')}</p>
+                          <div key={r.id} className={`border rounded-lg p-3 flex items-center gap-3 ${
+                            isCancelled
+                              ? 'bg-red-50/40 border-red-100 opacity-70'
+                              : isPending
+                                ? 'bg-amber-50/40 border-amber-200'
+                                : 'bg-emerald-50/30 border-emerald-200'
+                          }`}>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-slate-900 truncate">{r.customerName}</p>
+                              <p className="text-xs text-slate-500">
+                                🕐 {formatReservationTime(r.reservationDateTime)} · 👥 {r.numberOfGuests} pers
+                                {r.tableNumber && ` · Mesa ${r.tableNumber}`}
+                                {!r.tableNumber && r.requestedZoneName && ` · Zona ${r.requestedZoneName}`}
+                              </p>
+                              {(() => {
+                                const occType = r.occasionType;
+                                if (occType === undefined || occType === 0) return null;
+                                const occMeta = OCCASION_LABELS[occType];
+                                if (!occMeta) return null;
+                                return (
+                                  <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                                    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-semibold border ${occMeta.color}`}>
+                                      <span className="text-sm leading-none">{occMeta.icon}</span>
+                                      {occMeta.label}
+                                    </span>
+                                    {r.specialRequests && (
+                                      <span className="text-[11px] text-slate-500 italic truncate" title={r.specialRequests}>
+                                        “{r.specialRequests}”
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
-                            <div className="flex items-center gap-1.5 ml-2">
-                              {inCart ? (
-                                <>
-                                  <button type="button" onClick={() => setPreOrderItems(prev => {
-                                    const ex = prev.find(i => i.dishId === id);
-                                    if (ex && ex.quantity > 1) return prev.map(i => i.dishId === id ? { ...i, quantity: i.quantity - 1 } : i);
-                                    return prev.filter(i => i.dishId !== id);
-                                  })} className="h-6 w-6 rounded-full bg-gray-200 text-xs font-bold">-</button>
-                                  <span className="w-4 text-center text-sm font-bold">{inCart.quantity}</span>
-                                  <button type="button" onClick={() => setPreOrderItems(prev => prev.map(i => i.dishId === id ? { ...i, quantity: i.quantity + 1 } : i))} className="h-6 w-6 rounded-full bg-amber-400 text-white text-xs font-bold">+</button>
-                                </>
-                              ) : (
-                                <button type="button" onClick={() => setPreOrderItems(prev => [...prev, { dishId: id, name: dish.name ?? dish.Name, price: dish.price ?? dish.Price, quantity: 1 }])} className="px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 border border-amber-200">+</button>
+                            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                                isCancelled
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : r.isConfirmed
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}>
+                                {isCancelled ? 'Cancelada' : r.isConfirmed ? 'Confirmada' : 'Pendiente'}
+                              </span>
+                              {!isCancelled && (
+                                <button
+                                  onClick={() => openReservationAssignModal(r)}
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors shadow-sm text-white ${
+                                    isPending
+                                      ? 'bg-emerald-500 hover:bg-emerald-600'
+                                      : 'bg-blue-500 hover:bg-blue-600'
+                                  }`}
+                                  title={isPending ? 'Aceptar reserva y asignar mesa' : 'Reasignar mesa'}
+                                >
+                                  {isPending ? (
+                                    <>
+                                      <CheckCircle className="w-3.5 h-3.5" />
+                                      Aceptar
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CalendarCheck className="w-3.5 h-3.5" />
+                                      Reasignar
+                                    </>
+                                  )}
+                                </button>
                               )}
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                    {preOrderItems.length > 0 && (
-                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-                        {preOrderItems.map(i => (
-                          <div key={i.dishId} className="flex justify-between text-xs text-slate-600">
-                            <span>{i.quantity}x {i.name}</span>
-                            <span className="text-amber-700 font-medium">RD$ {(i.price * i.quantity).toLocaleString('es-DO')}</span>
+                    );
+                  })()}
+                </div>
+
+                {/* Sección 2: Mover otras reservas a este día */}
+                <div className="pt-4 border-t border-slate-200">
+                  <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">
+                    Mover una reserva a este día
+                  </p>
+                  {otherReservas.length === 0 ? (
+                    <p className="text-sm text-slate-400 italic bg-slate-50 rounded-lg p-3">
+                      No hay otras reservas para mover.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {otherReservas.map(r => {
+                        const origDt = new Date(r.reservationDateTime);
+                        const newDateTime = `${calendarDaySelected}T${String(origDt.getHours()).padStart(2,'0')}:${String(origDt.getMinutes()).padStart(2,'0')}:00`;
+                        return (
+                          <div key={r.id} className="bg-white border border-slate-200 rounded-lg p-3 flex items-center gap-3 hover:border-blue-300 transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-slate-900 truncate">{r.customerName}</p>
+                              <p className="text-xs text-slate-500">
+                                Actualmente: {new Date(r.reservationDateTime).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}, {formatReservationTime(r.reservationDateTime)}
+                                {' '}· 👥 {r.numberOfGuests}
+                                {r.tableNumber && ` · Mesa ${r.tableNumber}`}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => submitReschedule(r, newDateTime)}
+                              disabled={rescheduling}
+                              className="flex-shrink-0 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50"
+                            >
+                              Mover aquí
+                            </button>
                           </div>
-                        ))}
-                        <div className="mt-1 pt-1 border-t border-amber-300 flex justify-between text-sm font-bold">
-                          <span>Total</span>
-                          <span className="text-amber-700">RD$ {preOrderItems.reduce((s, i) => s + i.price * i.quantity, 0).toLocaleString('es-DO')}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex gap-3 pt-3">
-                <button onClick={() => setShowReservationModal(false)} className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 text-sm font-semibold transition-colors">
-                  Cancelar
-                </button>
-                <button onClick={createReservation} className="flex-1 px-4 py-3 bg-amber-400 text-white rounded-xl hover:bg-amber-500 text-sm font-semibold transition-colors shadow-sm">
-                  Crear Reserva
+              <div className="px-6 py-3 bg-slate-50 border-t flex justify-end">
+                <button
+                  onClick={() => setCalendarDaySelected(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+                >
+                  Cerrar
                 </button>
               </div>
             </div>
           </div>
+        );
+      })()}
+
+      {/* ASSIGN.4: Modal de asignación / reasignación de mesa */}
+      {assignModalForReservation && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={closeReservationAssignModal}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <CalendarCheck className="w-5 h-5" />
+                  {assignModalForReservation.isConfirmed ? 'Reasignar mesa' : 'Aceptar reserva'}
+                </h3>
+                <p className="text-xs text-blue-100 mt-0.5">
+                  {assignModalForReservation.customerName} · {assignModalForReservation.numberOfGuests} pers · zona pedida:{' '}
+                  <span className="font-semibold">
+                    {assignModalForReservation.requestedZoneName || assignModalForReservation.zoneName || '—'}
+                  </span>
+                </p>
+              </div>
+              <button onClick={closeReservationAssignModal} className="p-1.5 hover:bg-white/10 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {/* Selector de zona */}
+              {allZonesForAssign.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">
+                    Zona
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {allZonesForAssign.map(z => {
+                      const isOriginal = z.id === assignModalForReservation.requestedZoneId;
+                      const isActive = z.id === assignableZoneId;
+                      return (
+                        <button
+                          key={z.id}
+                          onClick={() => changeAssignableZone(z.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                            isActive
+                              ? 'bg-blue-500 text-white border-blue-500'
+                              : 'bg-white text-slate-600 border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
+                          {z.name}
+                          {isOriginal && (
+                            <span className={`ml-1.5 text-[10px] px-1 py-0.5 rounded ${
+                              isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              pedida
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {loadingAssignable ? (
+                <div className="text-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
+                  <p className="text-sm text-slate-500">Cargando mesas disponibles...</p>
+                </div>
+              ) : assignableTables.length === 0 ? (
+                <div className="text-center py-8 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-amber-900 font-semibold">Sin disponibilidad en esta zona</p>
+                  <p className="text-sm text-amber-700 mt-1">
+                    No hay mesas con capacidad ≥ {assignModalForReservation.numberOfGuests} libres este día.
+                  </p>
+                  <p className="text-xs text-amber-600 mt-2">
+                    💡 Prueba otra zona arriba — el cliente puede ser reubicado.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <p className="text-xs uppercase tracking-wider font-semibold text-slate-400">
+                      Mesas disponibles
+                    </p>
+                    {assignableZoneId !== assignModalForReservation.requestedZoneId && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
+                        Diferente a la zona pedida
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {assignableTables.map((t) => {
+                      const disabled = t.isOccupied || assigningTableId !== null;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => !t.isOccupied && assignTableToReservation(t.id)}
+                          className={`relative rounded-xl border-2 p-4 text-left transition-all ${
+                            t.isCurrent
+                              ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-300'
+                              : t.isOccupied
+                                ? 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed'
+                                : 'border-blue-200 bg-white hover:border-blue-500 hover:bg-blue-50'
+                          }`}
+                        >
+                          <div className="text-2xl font-bold text-slate-900">
+                            Mesa {t.tableNumber}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {t.capacity} pers
+                          </div>
+                          {t.isCurrent && (
+                            <span className="absolute top-1.5 right-1.5 text-xs bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">
+                              Actual
+                            </span>
+                          )}
+                          {t.isOccupied && !t.isCurrent && (
+                            <span className="absolute top-1.5 right-1.5 text-[10px] bg-slate-400 text-white px-1.5 py-0.5 rounded-full font-medium">
+                              Ocupada
+                            </span>
+                          )}
+                          {assigningTableId === t.id && (
+                            <div className="absolute inset-0 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                              <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-3 bg-slate-50 border-t flex justify-end">
+              <button
+                onClick={closeReservationAssignModal}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CALENDAR VIEW — Vista mensual con cuenta de reservas por día
+   ════════════════════════════════════════════════════════════════ */
+function CalendarView({
+  reservations,
+  onDayClick,
+}: {
+  reservations: Reservation[];
+  onDayClick: (dateKey: string) => void;
+}) {
+  const today = new Date();
+  const todayKey = today.toLocaleDateString('sv-SE');
+  const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+
+  // Agrupar reservas por día YYYY-MM-DD
+  const byDate = reservations.reduce<Record<string, Reservation[]>>((acc, r) => {
+    const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(r);
+    return acc;
+  }, {});
+
+  // Construir grid del mes: empieza el primer día calendario de la semana
+  const firstDay = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
+  const dayOfWeekStart = firstDay.getDay(); // 0 = domingo
+  const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate();
+
+  // Pad para que la primera fila empiece en domingo
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < dayOfWeekStart; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d));
+  }
+  // Pad final para completar la última fila
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const monthName = viewMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' });
+  const prevMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1));
+  const nextMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1));
+  const goToday = () => setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+
+  const weekDayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  return (
+    <div className="max-w-6xl mx-auto px-6 pt-5 pb-10">
+      {/* Header con navegación */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={prevMonth}
+            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Mes anterior"
+          >
+            <ChevronDown className="w-5 h-5 rotate-90 text-slate-600" />
+          </button>
+          <h2 className="text-2xl font-bold text-slate-900 capitalize min-w-[200px] text-center">
+            {monthName}
+          </h2>
+          <button
+            onClick={nextMonth}
+            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Mes siguiente"
+          >
+            <ChevronDown className="w-5 h-5 -rotate-90 text-slate-600" />
+          </button>
+        </div>
+        <button
+          onClick={goToday}
+          className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors"
+        >
+          Hoy
+        </button>
+      </div>
+
+      {/* Grid de calendario */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Encabezado días semana */}
+        <div className="grid grid-cols-7 bg-slate-50 border-b border-gray-100">
+          {weekDayLabels.map((d, i) => (
+            <div
+              key={d}
+              className={`px-3 py-2 text-xs font-bold uppercase tracking-wider text-center ${
+                i === 0 || i === 6 ? 'text-rose-500' : 'text-slate-500'
+              }`}
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Celdas */}
+        <div className="grid grid-cols-7">
+          {cells.map((date, idx) => {
+            if (!date) {
+              return <div key={`empty-${idx}`} className="aspect-square border-r border-b border-gray-100 bg-slate-50/50" />;
+            }
+            const key = date.toLocaleDateString('sv-SE');
+            const dayReservas = byDate[key] || [];
+            const total = dayReservas.length;
+            const pending = dayReservas.filter(r => !r.isConfirmed).length;
+            const confirmed = total - pending;
+            const birthdays = dayReservas.filter(r => r.occasionType === 1).length;
+            const specials = dayReservas.filter(r => r.occasionType && r.occasionType !== 0 && r.occasionType !== 1).length;
+            const isToday = key === todayKey;
+            const isPast = key < todayKey;
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+
+            return (
+              <button
+                key={key}
+                onClick={() => total > 0 && onDayClick(key)}
+                disabled={total === 0}
+                className={`aspect-square border-r border-b border-gray-100 p-2 text-left transition-all flex flex-col gap-1 ${
+                  total > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'
+                } ${isToday ? 'bg-blue-50/40 ring-2 ring-blue-300 ring-inset' : ''} ${isPast ? 'opacity-60' : ''}`}
+                title={total > 0 ? `${total} reserva${total !== 1 ? 's' : ''} — click para filtrar` : 'Sin reservas'}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-base font-bold ${
+                    isToday
+                      ? 'text-blue-600'
+                      : isWeekend
+                        ? 'text-rose-500'
+                        : 'text-slate-700'
+                  }`}>
+                    {date.getDate()}
+                  </span>
+                  {total > 0 && (
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                      {total}
+                    </span>
+                  )}
+                </div>
+                {total > 0 && (
+                  <div className="flex flex-col gap-1 flex-1 overflow-hidden text-sm">
+                    {confirmed > 0 && (
+                      <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                        {confirmed} confirmada{confirmed !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                    {pending > 0 && (
+                      <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+                        {pending} pendiente{pending !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                    {birthdays > 0 && (
+                      <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                        <span className="text-base leading-none">🎂</span> {birthdays}
+                      </div>
+                    )}
+                    {specials > 0 && (
+                      <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                        <span className="text-base leading-none">✨</span> {specials}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Leyenda */}
+      <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Confirmadas</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span>Pendientes</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span>🎂</span>
+          <span>Cumpleaños</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span>✨</span>
+          <span>Otras ocasiones</span>
+        </div>
+        <div className="ml-auto text-slate-400">
+          Click en un día con reservas para filtrar la lista
+        </div>
+      </div>
     </div>
   );
 }

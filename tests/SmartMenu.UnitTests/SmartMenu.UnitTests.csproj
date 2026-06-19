@@ -1,16 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- S1.D2: necesario para testear middleware ASP.NET y servicios que usan ApplicationDbContext -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <!-- S1.D4: coverlet.msbuild habilita /p:CollectCoverage=true y /p:Threshold para el gate. -->
+    <PackageReference Include="coverlet.msbuild" Version="6.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="xunit" Version="2.9.2" />
@@ -24,6 +35,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\backend\SmartMenu.Application\SmartMenu.Application.csproj" />
     <ProjectReference Include="..\..\src\backend\SmartMenu.Domain\SmartMenu.Domain.csproj" />
+    <ProjectReference Include="..\..\src\backend\SmartMenu.Infrastructure\SmartMenu.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\backend\SmartMenu.API\SmartMenu.API.csproj" />
   </ItemGroup>
 
 </Project>

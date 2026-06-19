@@ -1,0 +1,241 @@
+# SmartMenu QA stack
+# Uso:
+#   cd docker/qa
+#   cp .env.qa.example .env
+#   docker compose -f docker-compose.qa.yml up -d --build
+#
+# Hosts (agregar a Windows: C:\Windows\System32\drivers\etc\hosts):
+#   127.0.0.1 qa.smartmenu.local api.qa.smartmenu.local admin.qa.smartmenu.local kds.qa.smartmenu.local waiter.qa.smartmenu.local host.qa.smartmenu.local cashier.qa.smartmenu.local reservation.qa.smartmenu.local
+
+name: smartmenu-qa
+
+x-frontend-base: &frontend-base
+  restart: unless-stopped
+  depends_on:
+    backend:
+      condition: service_healthy
+  networks:
+    - smartmenu-qa
+  environment:
+    NODE_ENV: production
+    # SSR proxy interno (server-side fetch desde Next → backend)
+    BACKEND_HTTP_URL: http://backend:8080
+    # Client-side: mismo origen vacío — los fetches usan paths relativos /api/*
+    # que Next reescribe internamente al backend. Funciona tanto via
+    # https://localhost:84XX (MCP/Chrome) como via https://*.qa.smartmenu.local:8443.
+    NEXT_PUBLIC_API_URL: ""
+    NEXT_PUBLIC_WS_URL: ""
+    # QR-FIX.2 — URL del client-app PWA usada al generar QRs de mesas.
+    # Debe ser alcanzable desde el celular del cliente (NO localhost).
+    # Usamos nip.io porque:
+    #   - 172-31-98-60.nip.io resuelve a 172.31.98.60 sin que el cell configure DNS
+    #   - Caddy genera cert válido por hostname (SNI), evita errores SChannel
+    #   - Si tu IP cambia, actualiza este valor + rebuild admin-panel
+    NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-60.nip.io:8443"
+
+services:
+  # ─── SQL Server ─────────────────────────────────────────────────────────
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: smartmenu-qa-sqlserver
+    user: root                              # entrypoint custom necesita root para sqlcmd
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
+      SA_PASSWORD: ${SQL_SA_PASSWORD}       # alias usado por el entrypoint custom
+      MSSQL_PID: ${SQL_PID:-Developer}
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+      - ../qa/sqlserver/init.sql:/docker-init/init.sql:ro
+      - ../qa/sqlserver/entrypoint.sh:/usr/local/bin/qa-entrypoint.sh:ro
+    entrypoint: ["bash", "/usr/local/bin/qa-entrypoint.sh"]
+    networks:
+      - smartmenu-qa
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$SA_PASSWORD\" -C -Q 'SELECT 1' -d DbNewMenu || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ─── Redis (opcional, encendido para QA por completitud) ───────────────
+  redis:
+    image: redis:7-alpine
+    container_name: smartmenu-qa-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - smartmenu-qa
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ─── Backend API (.NET 10) ──────────────────────────────────────────────
+  backend:
+    build:
+      context: ../../src/backend
+      dockerfile: ../../docker/qa/Dockerfile.backend
+    image: smartmenu-qa/backend:latest
+    container_name: smartmenu-qa-backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development         # mantiene auto-migration + seed
+      ASPNETCORE_URLS: http://+:8080
+      # ── Conexiones DB ──
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=DbNewMenu;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=False;
+      ConnectionStrings__AuditConnection:   Server=sqlserver,1433;Database=DbNewMenuAudit;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=False;
+      ConnectionStrings__Redis: redis:6379
+      # ── JWT ──
+      JwtSettings__Secret:         ${JWT_SECRET}
+      JwtSettings__Issuer:         ${JWT_ISSUER}
+      JwtSettings__Audience:       ${JWT_AUDIENCE}
+      JwtSettings__ExpirationMinutes: ${JWT_EXPIRATION_MIN}
+      # ── CORS adicional para los hosts QA ──
+      Cors__AllowedOrigins__0: https://qa.smartmenu.local
+      Cors__AllowedOrigins__1: https://admin.qa.smartmenu.local
+      Cors__AllowedOrigins__2: https://kds.qa.smartmenu.local
+      Cors__AllowedOrigins__3: https://waiter.qa.smartmenu.local
+      Cors__AllowedOrigins__4: https://host.qa.smartmenu.local
+      Cors__AllowedOrigins__5: https://cashier.qa.smartmenu.local
+      Cors__AllowedOrigins__6: https://reservation.qa.smartmenu.local
+      # ── Stripe / DGII placeholders ──
+      Stripe__SecretKey:        ${STRIPE_SECRET}
+      Stripe__PublishableKey:   ${STRIPE_PUBLISHABLE}
+      Stripe__WebhookSecret:    ${STRIPE_WEBHOOK}
+      DGII__RNC:                ${DGII_RNC}
+      DGII__RazonSocial:        ${DGII_RAZON_SOCIAL}
+      DGII__NombreComercial:    ${DGII_NOMBRE_COMERCIAL}
+    volumes:
+      # Persistencia de uploads (imágenes de dishes + thumbnails)
+      - backend-uploads:/app/wwwroot/uploads
+      - backend-logs:/app/logs
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - smartmenu-qa
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s          # EF migrations + seed pueden tardar el primer arranque
+
+  # ─── Frontends (7 apps Next.js 14) ─────────────────────────────────────
+  client-app:
+    <<: *frontend-base
+    build:
+      context: ../../src/frontend/client-app
+      dockerfile: ../../../docker/qa/Dockerfile.frontend
+      args:
+        APP_PORT: "3000"
+        # QR-MOBILE.1 — URL alcanzable desde celular usada en los QRs físicos de mesas
+        NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-60.nip.io:8443"
+    image: smartmenu-qa/client-app:latest
+    container_name: smartmenu-qa-client
+
+  admin-panel:
+    <<: *frontend-base
+    build:
+      # Monorepo: contexto = raíz del workspace (incluye packages/ui = @smartmenu/ui).
+      context: ../../src/frontend
+      dockerfile: ../../docker/qa/Dockerfile.admin
+      args:
+        APP_PORT: "3001"
+        # QR-FIX.2 — URL del client-app PWA usada al generar QRs físicos de mesas.
+        # Debe ser alcanzable desde el celular del cliente (NO localhost).
+        NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-60.nip.io:8443"
+    image: smartmenu-qa/admin-panel:latest
+    container_name: smartmenu-qa-admin
+
+  kds-app:
+    <<: *frontend-base
+    build: { context: ../../src/frontend/kds-app, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3002" } }
+    image: smartmenu-qa/kds-app:latest
+    container_name: smartmenu-qa-kds
+
+  waiter-app:
+    <<: *frontend-base
+    build:
+      # Monorepo: contexto = raíz del workspace (incluye packages/ui = @smartmenu/ui).
+      context: ../../src/frontend
+      dockerfile: ../../docker/qa/Dockerfile.waiter
+      args:
+        APP_PORT: "3003"
+    image: smartmenu-qa/waiter-app:latest
+    container_name: smartmenu-qa-waiter
+
+  host-app:
+    <<: *frontend-base
+    build:
+      # Monorepo: contexto = raíz del workspace (incluye packages/ui = @smartmenu/ui).
+      context: ../../src/frontend
+      dockerfile: ../../docker/qa/Dockerfile.host
+      args:
+        APP_PORT: "3004"
+    image: smartmenu-qa/host-app:latest
+    container_name: smartmenu-qa-host
+
+  cashier-app:
+    <<: *frontend-base
+    build: { context: ../../src/frontend/cashier-app, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3005" } }
+    image: smartmenu-qa/cashier-app:latest
+    container_name: smartmenu-qa-cashier
+
+  reservation-app:
+    <<: *frontend-base
+    build: { context: ../../src/frontend/reservation-app, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3007" } }
+    image: smartmenu-qa/reservation-app:latest
+    container_name: smartmenu-qa-reservation
+
+  # ─── Caddy HTTPS reverse proxy ─────────────────────────────────────────
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: smartmenu-qa-caddy
+    ports:
+      - "8443:443"            # HTTPS público (landing + qa.smartmenu.local)
+      - "8080:80"             # HTTP (redirige a HTTPS si se quita disable_redirects)
+      - "8444:8444"           # admin-panel  (localhost:8444 — MCP/Chrome)
+      - "8445:8445"           # kds-app
+      - "8446:8446"           # waiter-app
+      - "8447:8447"           # host-app
+      - "8448:8448"           # cashier-app
+      - "8449:8449"           # reservation-app
+      - "8450:8450"           # backend API
+      - "8451:8451"           # client-app PWA (localhost direct)
+      - "8455:8455"           # kds-app 2º origen (Bar) — abrir Cocina+Bar a la vez
+    volumes:
+      - ../qa/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Staff hub estático (landing con QR de cada panel) servido por Caddy
+      - ../qa/staff-hub:/srv/hub:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - client-app
+      - admin-panel
+      - kds-app
+      - waiter-app
+      - host-app
+      - cashier-app
+      - reservation-app
+    networks:
+      - smartmenu-qa
+    restart: unless-stopped
+
+networks:
+  smartmenu-qa:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
+  redis-data:
+  backend-uploads:
+  backend-logs:
+  caddy-data:
+  caddy-config:

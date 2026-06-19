@@ -17,7 +17,6 @@ import {
   Power,
   Tag,
   Link2,
-  Unlink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
@@ -416,7 +415,6 @@ export default function MaintenancePage() {
                 {filteredZones.map(zone => {
                   const Icon = getTypeIcon(g(zone, 'type'));
                   const isActive = g(zone, 'isActive') !== false;
-                  const tableCount = g(zone, 'tableCount') || 0;
 
                   return (
                     <div

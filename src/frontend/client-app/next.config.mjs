@@ -6,10 +6,16 @@ const nextConfig = {
     unoptimized: process.env.NODE_ENV === 'development',
   },
   async headers() {
+    // Cache-Control only on dynamic routes (/api, /uploads). Static assets
+    // (_next/static, manifest, icons, etc.) get default cache → PWA-friendly.
     return [
       {
-        source: '/(.*)',
+        source: '/api/:path*',
         headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }],
+      },
+      {
+        source: '/uploads/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400' }],
       },
     ];
   },

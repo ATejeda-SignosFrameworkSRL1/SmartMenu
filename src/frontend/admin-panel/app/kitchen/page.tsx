@@ -139,7 +139,6 @@ export default function KitchenPage() {
   };
 
   const getOrderStatus = (o: any) => o?.status ?? o?.Status ?? '';
-  const getOrderItems = (o: any) => o?.items ?? o?.Items ?? [];
   // Solo pedidos que tienen al menos un ítem de comida (las bebidas van al Bar).
   // Excluir órdenes donde la cocina ya sirvió su parte (KitchenServed=true)
   // para evitar que reaparezcan cuando el cliente agrega bebidas a una orden ya servida.

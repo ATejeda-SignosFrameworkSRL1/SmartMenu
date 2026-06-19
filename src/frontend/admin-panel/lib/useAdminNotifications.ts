@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as signalR from '@microsoft/signalr';
+import { ensureFreshToken } from '@/lib/api';
 
 export interface TableClaimNotification {
   id: string;
@@ -48,7 +49,8 @@ export function useAdminNotifications(token: string | null) {
     const hubUrl = getHubUrl();
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+        accessTokenFactory: () => ensureFreshToken(),
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })

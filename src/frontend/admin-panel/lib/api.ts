@@ -40,6 +40,28 @@ async function tryRefresh(): Promise<string | null> {
   return refreshPromise;
 }
 
+function tokenExpiringSoon(token: string, withinMs = 60_000): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return ((payload.exp ?? 0) * 1000) - Date.now() < withinMs;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Token válido para el accessTokenFactory de SignalR: refresca (vía el MISMO `tryRefresh`
+ * + lock que el interceptor REST) si está vencido o por vencer. Evita los 401 de
+ * reconexión del hub al expirar el token con la pestaña abierta.
+ */
+export async function ensureFreshToken(): Promise<string> {
+  if (typeof window === 'undefined') return '';
+  const token = localStorage.getItem('admin_token');
+  if (token && !tokenExpiringSoon(token)) return token;
+  const refreshed = await tryRefresh();
+  return refreshed ?? token ?? '';
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('admin_token');
   if (token) {

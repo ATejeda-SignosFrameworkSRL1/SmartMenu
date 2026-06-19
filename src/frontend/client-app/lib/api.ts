@@ -28,10 +28,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // El customer-app es anónimo — no hay login al cual redirigir. Si llega un
+    // 401 (ej: endpoint que aún requiere auth y no es customer-friendly) lo
+    // dejamos propagar para que React Query maneje el error en la UI; NO
+    // redirigimos al root porque eso provoca un loop infinito vs / → /table
+    // → /api/table 401 → /...
     if (error.response?.status === 401) {
-      // Token expirado, limpiar y redirigir
       localStorage.removeItem('token');
-      window.location.href = '/';
     }
     return Promise.reject(error);
   }

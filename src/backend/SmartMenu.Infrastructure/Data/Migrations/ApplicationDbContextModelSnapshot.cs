@@ -22,6 +22,54 @@ namespace SmartMenu.Infrastructure.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("SmartMenu.Domain.Entities.AuditEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("AuthMethod")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("EntityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AuditEvents");
+                });
+
             modelBuilder.Entity("SmartMenu.Domain.Entities.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -680,6 +728,21 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.ToTable("ReservationPreOrders");
                 });
 
+            modelBuilder.Entity("SmartMenu.Domain.Entities.ReservationTable", b =>
+                {
+                    b.Property<int>("ReservationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TableId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ReservationId", "TableId");
+
+                    b.HasIndex("TableId");
+
+                    b.ToTable("ReservationTables");
+                });
+
             modelBuilder.Entity("SmartMenu.Domain.Entities.Restaurant", b =>
                 {
                     b.Property<int>("Id")
@@ -719,9 +782,79 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("WaiterAuthMode")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.ToTable("Restaurants");
+                });
+
+            modelBuilder.Entity("SmartMenu.Domain.Entities.ServicePeriod", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DaysOfWeekMask")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DefaultDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("LargePartyDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LargePartyThreshold")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LeadTimeMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxCoversPerSlot")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxHorizonDays")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxReservationsPerSlot")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("RestaurantId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SlotMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<int>("TurnoverBufferMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestaurantId", "IsActive");
+
+                    b.ToTable("ServicePeriods");
                 });
 
             modelBuilder.Entity("SmartMenu.Domain.Entities.Table", b =>
@@ -824,6 +957,18 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.Property<int>("AdvanceBlockMinutes")
                         .HasColumnType("int");
 
+                    b.Property<string>("CancelReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ConfirmationCode")
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<string>("ConfirmationLink")
                         .HasColumnType("nvarchar(max)");
 
@@ -847,13 +992,40 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal?>("DepositAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("DepositStatus")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EndDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("HoldExpiresAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<bool>("IsCancelled")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsConfirmed")
                         .HasColumnType("bit");
 
+                    b.Property<DateTime?>("NoShowAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("NumberOfGuests")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OccasionType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ReminderSentAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RequestedZoneId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("ReservationDateTime")
@@ -862,6 +1034,17 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("ReservedUntil")
                         .HasColumnType("datetime2");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("SeatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ServicePeriodId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -869,7 +1052,13 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.Property<string>("SpecialRequests")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("TableId")
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TableId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TableSessionId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -877,9 +1066,19 @@ namespace SmartMenu.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ConfirmationCode");
+
                     b.HasIndex("CreatedByHostId");
 
+                    b.HasIndex("RequestedZoneId");
+
                     b.HasIndex("TableId");
+
+                    b.HasIndex("TableSessionId");
+
+                    b.HasIndex("ServicePeriodId", "ReservationDateTime");
+
+                    b.HasIndex("Status", "ReservationDateTime", "EndDateTime");
 
                     b.ToTable("TableReservations");
                 });
@@ -1011,6 +1210,18 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("PinFailedAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PinHash")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("PinLockedUntil")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PinSetAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("RestaurantId")
                         .HasColumnType("int");
 
@@ -1055,6 +1266,9 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("PayerTableId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -1153,6 +1367,15 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.HasIndex("RestaurantId");
 
                     b.ToTable("Zones");
+                });
+
+            modelBuilder.Entity("SmartMenu.Domain.Entities.AuditEvent", b =>
+                {
+                    b.HasOne("SmartMenu.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SmartMenu.Domain.Entities.Category", b =>
@@ -1333,6 +1556,36 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     b.Navigation("Reservation");
                 });
 
+            modelBuilder.Entity("SmartMenu.Domain.Entities.ReservationTable", b =>
+                {
+                    b.HasOne("SmartMenu.Domain.Entities.TableReservation", "Reservation")
+                        .WithMany("AssignedTables")
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartMenu.Domain.Entities.Table", "Table")
+                        .WithMany()
+                        .HasForeignKey("TableId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Reservation");
+
+                    b.Navigation("Table");
+                });
+
+            modelBuilder.Entity("SmartMenu.Domain.Entities.ServicePeriod", b =>
+                {
+                    b.HasOne("SmartMenu.Domain.Entities.Restaurant", "Restaurant")
+                        .WithMany()
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restaurant");
+                });
+
             modelBuilder.Entity("SmartMenu.Domain.Entities.Table", b =>
                 {
                     b.HasOne("SmartMenu.Domain.Entities.Restaurant", "Restaurant")
@@ -1384,15 +1637,35 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                         .HasForeignKey("CreatedByHostId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("SmartMenu.Domain.Entities.Zone", "RequestedZone")
+                        .WithMany()
+                        .HasForeignKey("RequestedZoneId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("SmartMenu.Domain.Entities.ServicePeriod", "ServicePeriod")
+                        .WithMany()
+                        .HasForeignKey("ServicePeriodId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("SmartMenu.Domain.Entities.Table", "Table")
                         .WithMany()
                         .HasForeignKey("TableId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SmartMenu.Domain.Entities.TableSession", "TableSession")
+                        .WithMany()
+                        .HasForeignKey("TableSessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("CreatedByHost");
 
+                    b.Navigation("RequestedZone");
+
+                    b.Navigation("ServicePeriod");
+
                     b.Navigation("Table");
+
+                    b.Navigation("TableSession");
                 });
 
             modelBuilder.Entity("SmartMenu.Domain.Entities.TableSession", b =>
@@ -1555,6 +1828,8 @@ namespace SmartMenu.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("SmartMenu.Domain.Entities.TableReservation", b =>
                 {
+                    b.Navigation("AssignedTables");
+
                     b.Navigation("PreOrder");
                 });
 

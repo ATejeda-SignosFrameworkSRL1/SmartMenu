@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { ensureFreshToken } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -84,7 +85,8 @@ export default function ReservationsPage() {
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/hubs/reservations', {
-        accessTokenFactory: () => token,
+        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+        accessTokenFactory: () => ensureFreshToken(),
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
@@ -139,7 +141,7 @@ export default function ReservationsPage() {
     obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)] ?? '';
 
   const formatTime = (dt: string) => {
-    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }); }
+    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }); }
     catch { return '-'; }
   };
 

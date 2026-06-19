@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Transpila el design system compartido (TS/TSX sin build step).
+  transpilePackages: ["@smartmenu/ui"],
   async headers() {
     return [
       {
@@ -42,6 +44,9 @@ const nextConfig = {
         },
       };
     }
+    // Konva (react-konva del plano) referencia 'canvas' (solo Node); stub en el bundle del browser.
+    config.resolve = config.resolve || {};
+    config.resolve.alias = { ...(config.resolve.alias || {}), canvas: false };
     return config;
   },
 };

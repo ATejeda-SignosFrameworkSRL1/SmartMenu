@@ -19,12 +19,16 @@ public class PaymentController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<PaymentController> _logger;
     private readonly IHubContext<OrderHub> _hub;
+    private readonly SmartMenu.Application.Services.IAuditService _audit;
+    private readonly SmartMenu.Application.Services.ITableRealtimeNotifier _tableNotifier;
 
-    public PaymentController(ApplicationDbContext context, ILogger<PaymentController> logger, IHubContext<OrderHub> hub)
+    public PaymentController(ApplicationDbContext context, ILogger<PaymentController> logger, IHubContext<OrderHub> hub, SmartMenu.Application.Services.IAuditService audit, SmartMenu.Application.Services.ITableRealtimeNotifier tableNotifier)
     {
         _context = context;
         _logger = logger;
         _hub = hub;
+        _audit = audit;
+        _tableNotifier = tableNotifier;
     }
 
     // S1.3 — quien procesa el pago siempre es el usuario autenticado.
@@ -45,6 +49,7 @@ public class PaymentController : ControllerBase
     /// </summary>
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentDto dto)
     {
         // S1.3 — usar identidad del JWT salvo override Admin/Manager.
@@ -65,6 +70,9 @@ public class PaymentController : ControllerBase
 
             if (order.Status == Domain.Enums.OrderStatus.Completed)
                 return BadRequest(new { error = "Esta orden ya está pagada" });
+
+            if (dto.Amount <= 0)
+                return BadRequest(new { error = "El monto debe ser mayor a 0." });
 
             decimal tipAmount = 0;
             decimal tipPercentage = 0;
@@ -109,14 +117,40 @@ public class PaymentController : ControllerBase
                 order.UpdatedAt = DateTime.UtcNow;
             }
 
+            int? billingTableId = null;
             if (order.Table != null && order.Table.Status != Domain.Enums.TableStatus.Billing)
+            {
                 order.Table.Status = Domain.Enums.TableStatus.Billing;
+                billingTableId = order.Table.Id;
+            }
 
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
 
+            if (billingTableId != null)
+                await _tableNotifier.TableStatusChangedAsync(billingTableId.Value, nameof(Domain.Enums.TableStatus.Billing));
+
             _logger.LogInformation("Payment {PaymentId} created for Order {OrderId} by processor {ProcessorId}, Method: {Method}, Amount: {Amount}",
                 payment.Id, dto.OrderId, processorId, dto.PaymentMethod, dto.Amount);
+
+            // Sprint 4.2 — audit DGII (fail-safe)
+            var authMethod = User.FindFirst("auth_method")?.Value ?? "password";
+            await _audit.LogAsync(
+                userId: processorId.Value,
+                action: "Payment.Created",
+                entityType: "Payment",
+                entityId: payment.Id,
+                ip: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                authMethod: authMethod,
+                metadata: new {
+                    orderId = payment.OrderId,
+                    orderNumber = order.OrderNumber,
+                    amount = payment.Amount,
+                    tipAmount = payment.TipAmount,
+                    totalAmount = payment.TotalAmount,
+                    method = payment.Method.ToString(),
+                    orderCompleted = order.Status == Domain.Enums.OrderStatus.Completed
+                });
 
             // S5.1 — push a cashier-app (y cualquier suscriptor) para refrescar caja sin polling.
             await _hub.Clients.All.SendAsync("PaymentRegistered", new
@@ -214,6 +248,7 @@ public class PaymentController : ControllerBase
     [HttpGet("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> GetPayment(int id)
     {
         try
@@ -252,6 +287,7 @@ public class PaymentController : ControllerBase
     /// </summary>
     [HttpGet("order/{orderId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> GetPaymentsByOrder(int orderId)
     {
         try
@@ -297,8 +333,12 @@ public class PaymentController : ControllerBase
             if (order == null)
                 return NotFound(new { error = "Orden no encontrada" });
 
+            int? billingTableId = null;
             if (order.Table != null && order.Table.Status == Domain.Enums.TableStatus.Occupied)
+            {
                 order.Table.Status = Domain.Enums.TableStatus.Billing;
+                billingTableId = order.Table.Id;
+            }
 
             // Guardar preferencias del cliente si se enviaron
             if (dto != null)
@@ -317,6 +357,13 @@ public class PaymentController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
+
+            // Plano en vivo: la mesa pasó a "Por cobrar" (aditivo; no afecta el flujo del cliente).
+            if (billingTableId != null)
+            {
+                try { await _tableNotifier.TableStatusChangedAsync(billingTableId.Value, nameof(Domain.Enums.TableStatus.Billing)); }
+                catch (Exception ex) { _logger.LogWarning(ex, "No se pudo difundir Billing de la mesa {TableId}", billingTableId); }
+            }
 
             // Solo notificar al mesero vía SignalR cuando el cliente envía sus preferencias
             // de pago (método de pago elegido). La primera llamada automática al abrir la
@@ -365,6 +412,7 @@ public class PaymentController : ControllerBase
     [HttpPost("collect")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> CollectPayment([FromBody] CollectPaymentDto dto)
     {
         // S1.3 — processor del cobro siempre desde JWT (Admin puede override con dto.WaiterId).
@@ -476,11 +524,30 @@ public class PaymentController : ControllerBase
             }
 
             // Mesa a Cleaning
+            int? cleaningTableId = null;
             if (order.Table != null)
+            {
                 order.Table.Status = Domain.Enums.TableStatus.Cleaning;
+                cleaningTableId = order.Table.Id;
+                // Cerrar la sesión activa de la mesa al cobrar: evita sesiones huérfanas y
+                // destraba el auto-complete de la reserva Seated (que espera IsActive=false).
+                var activeSession = await _context.TableSessions
+                    .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
+                if (activeSession != null)
+                {
+                    activeSession.IsActive = false;
+                    activeSession.EndTime = DateTime.UtcNow;
+                }
+            }
 
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
+
+            if (cleaningTableId != null)
+            {
+                await _tableNotifier.TableStatusChangedAsync(cleaningTableId.Value, nameof(Domain.Enums.TableStatus.Cleaning));
+                await _tableNotifier.TableWaiterChangedAsync(cleaningTableId.Value, null, null);
+            }
 
             _logger.LogInformation("Payment collected by processor {ProcessorId} for order {OrderId}, table set to Cleaning", processorId, dto.OrderId);
             return Ok(new { message = "Cobro registrado. Mesa en limpieza.", tableId = order.TableId });
@@ -549,6 +616,7 @@ public class PaymentController : ControllerBase
     /// Listar pagos en un rango de fechas (para cajero/admin)
     /// </summary>
     [HttpGet("list")]
+    [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> ListPayments(
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
@@ -621,6 +689,7 @@ public class PaymentController : ControllerBase
     /// Agregar o actualizar comprobante fiscal (NCF) a un pago existente
     /// </summary>
     [HttpPatch("{id}/fiscal")]
+    [Authorize(Roles = "Admin,Manager,Cashier")]
     public async Task<IActionResult> UpdateFiscalReceipt(int id, [FromBody] UpdateFiscalReceiptDto dto)
     {
         var payment = await _context.Payments.FindAsync(id);
@@ -639,6 +708,7 @@ public class PaymentController : ControllerBase
     /// Obtener estadísticas de ventas y propinas de un mesero
     /// </summary>
     [HttpGet("waiter-stats/{waiterId}")]
+    [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> GetWaiterStats(int waiterId, [FromQuery] DateTime? date)
     {
         try

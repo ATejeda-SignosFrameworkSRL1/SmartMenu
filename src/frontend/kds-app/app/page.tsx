@@ -1,61 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Clock, Check, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
+import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 
-const api = axios.create({
-  baseURL: '',
-});
-
-// S3.3 — JWT refresh interceptor: auto-renueva access_token cuando expira sin
-// botar al usuario a /login. Espejo del patrón en admin-panel/waiter-app.
-let _refreshPromise: Promise<string | null> | null = null;
-async function _tryRefresh(): Promise<string | null> {
-  if (_refreshPromise) return _refreshPromise;
-  const rt = typeof window !== 'undefined' ? localStorage.getItem('kds_refresh') : null;
-  if (!rt) return null;
-  _refreshPromise = (async () => {
-    try {
-      const r = await axios.post('/api/auth/refresh', { refreshToken: rt });
-      const { accessToken, refreshToken: nrt, user } = r.data ?? {};
-      if (!accessToken) return null;
-      localStorage.setItem('kds_token', accessToken);
-      if (nrt) localStorage.setItem('kds_refresh', nrt);
-      if (user) localStorage.setItem('kds_user', JSON.stringify(user));
-      return accessToken as string;
-    } catch { return null; }
-    finally { _refreshPromise = null; }
-  })();
-  return _refreshPromise;
-}
-api.interceptors.request.use((config) => {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('kds_token') : null;
-  if (t && config.headers) config.headers.Authorization = `Bearer ${t}`;
-  return config;
-});
-api.interceptors.response.use(
-  (r) => r,
-  async (error) => {
-    const o: any = error.config;
-    if (error.response?.status === 401 && o && !o._refreshAttempted) {
-      o._refreshAttempted = true;
-      const nt = await _tryRefresh();
-      if (nt) {
-        o.headers = o.headers ?? {};
-        o.headers.Authorization = `Bearer ${nt}`;
-        return api.request(o);
-      }
-      localStorage.removeItem('kds_token');
-      localStorage.removeItem('kds_refresh');
-      localStorage.removeItem('kds_user');
-      if (typeof window !== 'undefined') window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+// F3 — auth-client centralizado reemplaza el interceptor JWT inline.
+const { api } = createAuthApi('kds');
 
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
@@ -112,6 +65,7 @@ interface OrderItem {
   dishName: string;
   quantity: number;
   notes?: string;
+  customerName?: string; // comensal que pidió este ítem (varios comensales por mesa)
   customizations?: string;
   allergies?: string;
   sideDish?: string;
@@ -195,7 +149,7 @@ export default function KDSPage() {
 
     // SignalR: escuchar nuevas órdenes para cocina (cuando el mesero confirma la orden)
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${wsBaseUrl}/hubs/kitchen`, { accessTokenFactory: () => Promise.resolve(token) })
+      .withUrl(`${wsBaseUrl}/hubs/kitchen`, { accessTokenFactory: () => ensureFreshToken('kds') })
       .withAutomaticReconnect()
       .build();
 
@@ -340,7 +294,7 @@ export default function KDSPage() {
       {/* Header */}
       <div className="border-b border-gray-800 bg-gray-950">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
               <h1 className="text-2xl font-bold">
                 {isBar ? '🍹 Bar Display System' : '🍳 Kitchen Display System'}
@@ -442,7 +396,45 @@ export default function KDSPage() {
             <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
             <p className="text-2xl text-gray-400">¡Todo listo! No hay órdenes pendientes</p>
           </div>
-        ) : (
+        ) : (() => {
+          // KDS-NAV.1 — antes: cuando un tab filtraba a 0 items, la página quedaba
+          // EN BLANCO (orders.length > 0 → entraba al grid, pero items.length === 0
+          // en cada card devolvía null → nada visible). Ahora computamos el total
+          // filtrado para mostrar un empty state claro por tab vacío.
+          const matchingItemsTotal = orders.reduce((acc, o) => {
+            const all = o.items || [];
+            const filtered = isBar
+              ? (drinkTimingFilter === 'all' ? all : all.filter((i: any) => resolveDrinkTiming(i) === drinkTimingFilter))
+              : (courseFilter === 'all' ? all : all.filter((i: any) => resolveItemCourse(i) === courseFilter));
+            return acc + filtered.length;
+          }, 0);
+
+          if (matchingItemsTotal === 0) {
+            const tabLabel = isBar
+              ? (DRINK_TIMING_META[drinkTimingFilter as 'Before'|'During'|'After']?.label ?? 'esta categoría')
+              : (COURSE_META[courseFilter as 'Entrada'|'PlatoFuerte'|'Postre']?.label ?? 'esta categoría');
+            const tabIcon = isBar
+              ? (DRINK_TIMING_META[drinkTimingFilter as 'Before'|'During'|'After']?.icon ?? '🍹')
+              : (COURSE_META[courseFilter as 'Entrada'|'PlatoFuerte'|'Postre']?.icon ?? '📋');
+            return (
+              <div className="text-center py-20">
+                <div className="text-6xl mb-4">{tabIcon}</div>
+                <p className="text-2xl text-gray-300 mb-2">Sin pedidos en <span className="text-primary-400 font-semibold">{tabLabel}</span></p>
+                <p className="text-sm text-gray-500">
+                  Tienes {orders.length} {orders.length === 1 ? 'orden activa' : 'órdenes activas'},
+                  pero ningún ítem está en este filtro. Cambia de tab para verlos.
+                </p>
+                <button
+                  onClick={() => isBar ? setDrinkTimingFilter('all') : setCourseFilter('all')}
+                  className="mt-6 px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Ver todos
+                </button>
+              </div>
+            );
+          }
+
+          return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {orders.map((order) => {
               const elapsed = getTimeElapsed(order.createdAt);
@@ -508,6 +500,11 @@ export default function KDSPage() {
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badgeMeta.badge}`}>
                               {badgeMeta.icon} {badgeMeta.label}
                             </span>
+                            {(item.customerName ?? item.CustomerName) ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-500/25 text-sky-200 border border-sky-400/50">
+                                👤 {item.customerName ?? item.CustomerName}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         {(() => {
@@ -584,7 +581,8 @@ export default function KDSPage() {
               );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

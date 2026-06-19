@@ -75,6 +75,9 @@ build/
 # Testing
 coverage/
 *.cover
+*.cobertura.xml
+coverage.json
+TestResults/
 .hypothesis/
 .pytest_cache/
 
@@ -102,3 +105,4 @@ logs/
 tmp/
 temp/
 *.tmp
+*.tsbuildinfo

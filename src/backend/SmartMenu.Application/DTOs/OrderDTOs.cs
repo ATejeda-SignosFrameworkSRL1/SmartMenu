@@ -87,6 +87,7 @@ public record OrderDto
     public bool BarPreparing { get; init; }
     public bool BarReady { get; init; }
     public bool BarServed { get; init; }
+    public bool CustomerFinishedEating { get; init; }
     public string? SpecialInstructions { get; init; }
     public DateTime CreatedAt { get; init; }
     public List<OrderItemDto> Items { get; init; } = new();
@@ -118,6 +119,8 @@ public record OrderItemDto
     public decimal UnitPrice { get; init; }
     public decimal Subtotal { get; init; }
     public string? Notes { get; init; }
+    /// <summary>Comensal que pidió este ítem (para mostrar en cocina/bar/mesero).</summary>
+    public string? CustomerName { get; init; }
     public string? Customizations { get; init; }
     public string? Allergies { get; init; }
     public string? SideDish { get; init; }

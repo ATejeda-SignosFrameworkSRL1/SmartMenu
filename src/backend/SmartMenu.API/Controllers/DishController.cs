@@ -79,6 +79,7 @@ public class DishController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<ActionResult<DishDto>> CreateDish([FromBody] CreateDishDto dto)
     {
         var dish = new Dish
@@ -121,6 +122,7 @@ public class DishController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> UpdateDish(int id, [FromBody] CreateDishDto dto)
     {
         var dish = await _context.Dishes.Include(d => d.DishTags).FirstOrDefaultAsync(d => d.Id == id);
@@ -176,6 +178,7 @@ public class DishController : ControllerBase
     }
 
     [HttpPatch("{id}/toggle-availability")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> ToggleAvailability(int id)
     {
         var dish = await _context.Dishes.FindAsync(id);
@@ -190,6 +193,7 @@ public class DishController : ControllerBase
 
     /// <summary>Add image to a dish</summary>
     [HttpPost("{id}/images")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> AddDishImage(int id, [FromBody] AddDishImageDto dto)
     {
         var dish = await _context.Dishes.Include(d => d.Images).FirstOrDefaultAsync(d => d.Id == id);
@@ -216,6 +220,7 @@ public class DishController : ControllerBase
 
     /// <summary>Delete an image from a dish</summary>
     [HttpDelete("{dishId}/images/{imageId}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> DeleteDishImage(int dishId, int imageId)
     {
         var image = await _context.DishImages.FirstOrDefaultAsync(i => i.Id == imageId && i.DishId == dishId);
@@ -228,6 +233,7 @@ public class DishController : ControllerBase
 
     /// <summary>Set main image</summary>
     [HttpPut("{dishId}/images/{imageId}/set-main")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> SetMainImage(int dishId, int imageId)
     {
         var dish = await _context.Dishes.Include(d => d.Images).FirstOrDefaultAsync(d => d.Id == dishId);

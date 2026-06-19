@@ -2,9 +2,8 @@ import {
   MenuItem, 
   MenuCategory, 
   Table, 
-  Order, 
-  User, 
-  OrderItem,
+  Order,
+  User,
   TableStatus,
   OrderStatus,
   OrderItemStatus,
@@ -224,7 +223,6 @@ export const mockMenuItems: MenuItem[] = [
 
 export const mockTables: Table[] = Array.from({ length: 24 }, (_, i) => {
   const tableNumber = i + 1;
-  const statuses: TableStatus[] = ['available', 'occupied', 'reserved', 'cleaning'];
   const status = i < 6 ? 'available' : i < 18 ? 'occupied' : i < 21 ? 'reserved' : 'cleaning';
   
   return {

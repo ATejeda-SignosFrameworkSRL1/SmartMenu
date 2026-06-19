@@ -8,14 +8,11 @@ import { Button } from '@/components/ui/button';
 import {
   Users,
   RefreshCw,
-  MapPin,
   Plus,
   X,
   Download,
   QrCode,
   Trash2,
-  Edit,
-  Filter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QRCodeSVG } from 'qrcode.react';
@@ -26,7 +23,54 @@ const api = axios.create({
   baseURL: '',
 });
 
-const CLIENT_URL = process.env.NEXT_PUBLIC_CLIENT_URL || (typeof window !== 'undefined' ? window.location.origin.replace(':3001', ':3000') : '');
+/**
+ * QR-FIX.2 — URL base del client-app para QRs físicos.
+ *
+ * Prioridad:
+ *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://172.31.98.60:8443).
+ *      Esta es la opción CORRECTA para producción/QA — sobreescribe todo.
+ *   2. Fallback runtime: derivar del hostname actual.
+ *      - Si admin está en https://localhost:8444 → cambiar a https://localhost:8451 (client Caddy)
+ *      - Si admin está en https://admin.X.nip.io:8443 → cambiar a https://X.nip.io:8443
+ *      - Si admin está en una IP directa → mismo origen
+ *
+ * IMPORTANTE: El QR generado se IMPRIME y se pega en mesas físicas. Los clientes
+ * lo escanean con su celular. Por eso NUNCA debe contener "localhost" — ningún
+ * celular puede resolverlo. Usar siempre IP LAN o domain accesible en la red.
+ */
+function deriveClientUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_CLIENT_URL;
+  if (envUrl) return envUrl;
+  if (typeof window === 'undefined') return '';
+
+  const { protocol, hostname, port } = window.location;
+
+  // localhost detection — usar la convención del stack QA (client en :8451)
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:8451`;
+  }
+
+  // admin.X.nip.io → derivar el client.X.nip.io (mismo cert raíz)
+  // Patrón: cualquier subdomain.* → reemplazar primer label
+  if (hostname.includes('.nip.io') || hostname.includes('.qa.smartmenu.local')) {
+    const parts = hostname.split('.');
+    if (parts.length > 0) {
+      parts[0] = 'client';
+      return `${protocol}//${parts.join('.')}${port ? `:${port}` : ''}`;
+    }
+  }
+
+  // IP directa (192.168.x, 172.x, 10.x) — mismo host
+  // El stack QA expone client-app en :8443 (block qa.smartmenu.local, localhost:8451, IP:8443)
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    return `${protocol}//${hostname}:8443`;
+  }
+
+  // Fallback genérico: mismo origin (puede no funcionar, pero al menos no rompe)
+  return window.location.origin;
+}
+
+const CLIENT_URL = deriveClientUrl();
 
 interface Table {
   id: number;
@@ -36,6 +80,8 @@ interface Table {
   zoneName: string;
   zoneId: number;
   qrCode: string;
+  name?: string;
+  color?: string;
 }
 
 interface Zone {
@@ -54,8 +100,14 @@ export default function TablesPage() {
   const [filterCapacity, setFilterCapacity] = useState<string>('all');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ tableNumber: 0, capacity: 4, zoneId: 0 });
+  const [createForm, setCreateForm] = useState({ tableNumber: 0, capacity: 4, zoneId: 0, name: '', color: '' });
   const [createdTable, setCreatedTable] = useState<Table | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('');
+  useEffect(() => {
+    setEditName(selectedTable?.name ?? '');
+    setEditColor(selectedTable?.color ?? '');
+  }, [selectedTable]);
   // Lee propiedad en camelCase o PascalCase
   const nv = (obj: any, key: string) =>
     obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
@@ -101,6 +153,8 @@ export default function TablesPage() {
           zoneName: String(nv(t, 'zoneName') ?? ''),
           zoneId: 0, // no viene del API, no se usa
           qrCode: String(nv(t, 'qrCode') ?? ''),
+          name: (nv(t, 'name') ?? undefined) as string | undefined,
+          color: (nv(t, 'color') ?? undefined) as string | undefined,
         }))
         .filter(t => diningZoneNames.has(t.zoneName));
       setTables(normalizedTables);
@@ -126,7 +180,6 @@ export default function TablesPage() {
   }, []);
 
   // Tras normalización todos los campos son camelCase con tipos correctos
-  const getVal = (obj: any, key: string) => obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)] ?? '';
   const getTableStatus = (t: Table) => t.status;
   const getZoneId = (z: Zone) => z.id;
 
@@ -223,6 +276,18 @@ export default function TablesPage() {
     }
   };
 
+  const saveTableAppearance = async () => {
+    if (!selectedTable) return;
+    try {
+      await api.put(`/api/table/${selectedTable.id}`, { name: editName.trim() || null, color: editColor || null });
+      toast.success('Mesa actualizada');
+      setSelectedTable(null);
+      loadData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Error al actualizar mesa');
+    }
+  };
+
   const getQrUrl = (table: Table) => `${CLIENT_URL}/table/${table.qrCode}`;
 
   const downloadQR = (table: Table) => {
@@ -254,7 +319,7 @@ export default function TablesPage() {
             <p className="text-muted-foreground">Administra el estado y configuración de las mesas</p>
           </div>
           <div className="flex gap-2 items-center">
-            <Button onClick={() => { setShowCreateModal(true); setCreateForm({ tableNumber: tables.length + 1, capacity: 4, zoneId: zones[0] ? getZoneId(zones[0]) : 0 }); }} variant="default">
+            <Button onClick={() => { setShowCreateModal(true); setCreateForm({ tableNumber: tables.length + 1, capacity: 4, zoneId: zones[0] ? getZoneId(zones[0]) : 0, name: '', color: '' }); }} variant="default">
               <Plus className="h-4 w-4 mr-2" />
               Nueva Mesa
             </Button>
@@ -441,6 +506,7 @@ export default function TablesPage() {
                     )}
                   >
                     <div className="text-3xl font-bold mb-2">#{table.tableNumber}</div>
+                    {table.name && <div className="text-xs font-semibold mb-1 truncate">{table.name}</div>}
                     <div className="text-xs uppercase mb-2">{table.zoneName}</div>
                     <div className="flex items-center justify-center gap-1 text-sm mb-2">
                       <Users className="h-4 w-4" />
@@ -497,6 +563,38 @@ export default function TablesPage() {
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 col-span-2">
                 <span className="text-muted-foreground">Estado actual</span>
                 <p className="font-semibold">{getStatusLabel(selectedTable.status)}</p>
+              </div>
+            </div>
+
+            {/* Apariencia: nombre + color */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Apariencia</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-muted-foreground">Nombre / etiqueta</label>
+                  <input
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    placeholder={`#${selectedTable.tableNumber}`}
+                    maxLength={80}
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
+                  />
+                </div>
+                <div className="flex items-end gap-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-muted-foreground">Color</label>
+                    <input
+                      type="color"
+                      value={editColor || '#2F9E78'}
+                      onChange={e => setEditColor(e.target.value)}
+                      className="h-9 w-12 cursor-pointer rounded border dark:border-gray-700 bg-white p-0.5"
+                    />
+                  </div>
+                  {editColor && (
+                    <button onClick={() => setEditColor('')} className="mb-1.5 text-xs text-muted-foreground underline">Quitar color</button>
+                  )}
+                  <Button size="sm" className="ml-auto" onClick={saveTableAppearance}>Guardar</Button>
+                </div>
               </div>
             </div>
 
@@ -578,6 +676,30 @@ export default function TablesPage() {
                     <option key={z.id} value={z.id}>{z.name}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Nombre / etiqueta (opcional)</label>
+                <input
+                  value={createForm.name}
+                  onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
+                  placeholder={`#${createForm.tableNumber}`}
+                  maxLength={80}
+                  className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
+                />
+              </div>
+              <div className="flex items-end gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Color (opcional)</label>
+                  <input
+                    type="color"
+                    value={createForm.color || '#2F9E78'}
+                    onChange={e => setCreateForm({ ...createForm, color: e.target.value })}
+                    className="h-9 w-12 cursor-pointer rounded border dark:border-gray-700 bg-white p-0.5"
+                  />
+                </div>
+                {createForm.color && (
+                  <button onClick={() => setCreateForm({ ...createForm, color: '' })} className="mb-1.5 text-xs text-muted-foreground underline">Quitar</button>
+                )}
               </div>
               <Button className="w-full" onClick={createTable}>
                 <Plus className="h-4 w-4 mr-2" />

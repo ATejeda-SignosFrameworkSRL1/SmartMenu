@@ -41,4 +41,7 @@ public record UserDto
     public DateTime CreatedAt { get; init; }
     public int? AssignedZoneId { get; init; }
     public string? AssignedZoneName { get; init; }
+    // Sprint 5 — info de PIN para admin UI (sin exponer el hash)
+    public bool HasPin { get; init; }
+    public DateTime? PinSetAt { get; init; }
 }

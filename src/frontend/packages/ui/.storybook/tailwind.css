@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Skins de ejemplo para el selector de tema de Storybook.
+ * Replican el modelo "skin por app": mismas variables, distintos valores.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 96%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 0 100% 27%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 92%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 41 54% 55%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 0 100% 27%;
+    --radius: 0.75rem;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 10%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+    --danger: 0 72% 51%;
+    --danger-foreground: 0 0% 100%;
+    --billing: 271 81% 56%;
+    --billing-foreground: 0 0% 100%;
+    --sidebar-background: 0 0% 17%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 0 100% 27%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 25%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 0 0% 22%;
+    --sidebar-ring: 0 100% 27%;
+  }
+
+  /* Skin "Dorado" — estilo reservation-app */
+  .skin-gold {
+    --background: 30 12% 9%;
+    --foreground: 40 30% 92%;
+    --card: 30 10% 13%;
+    --card-foreground: 40 30% 92%;
+    --primary: 41 88% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 8% 22%;
+    --secondary-foreground: 40 30% 92%;
+    --muted: 30 8% 20%;
+    --muted-foreground: 40 10% 65%;
+    --accent: 41 70% 50%;
+    --accent-foreground: 30 12% 9%;
+    --border: 30 8% 24%;
+    --input: 30 8% 24%;
+    --ring: 41 88% 38%;
+  }
+
+  .dark {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 96%;
+    --primary: 0 100% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 41 54% 60%;
+    --accent-foreground: 0 0% 10%;
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --ring: 0 100% 35%;
+  }
+}
+
+body {
+  @apply bg-background text-foreground;
+  padding: 1.5rem;
+}

@@ -5,6 +5,7 @@ using SmartMenu.Application.DTOs;
 using SmartMenu.Application.Repositories;
 using SmartMenu.Application.Services;
 using SmartMenu.Application.Settings;
+using SmartMenu.Application.Common;
 using SmartMenu.Domain.Entities;
 using SmartMenu.Domain.Enums;
 using SmartMenu.Infrastructure.Data;
@@ -37,13 +38,15 @@ public class OrderService : IOrderService
     private readonly ApplicationDbContext _context;
     private readonly ILogger<OrderService> _logger;
     private readonly BillingSettings _billing;
+    private readonly ITableRealtimeNotifier _tableNotifier;
 
-    public OrderService(IOrderRepository orderRepository, ApplicationDbContext context, ILogger<OrderService> logger, IOptions<BillingSettings> billing)
+    public OrderService(IOrderRepository orderRepository, ApplicationDbContext context, ILogger<OrderService> logger, IOptions<BillingSettings> billing, ITableRealtimeNotifier tableNotifier)
     {
         _orderRepository = orderRepository;
         _context = context;
         _logger = logger;
         _billing = billing.Value;
+        _tableNotifier = tableNotifier;
     }
 
     public async Task<OrderDto> CreateOrderAsync(CreateOrderDto dto)
@@ -86,6 +89,7 @@ public class OrderService : IOrderService
                 Allergies = i.Allergies,
                 SideDish = i.SideDish,
                 PreferenceText = i.MeatCooking,
+                CustomerName = dto.CustomerName,
                 IsReady = false,
                 CourseTiming = i.CourseTiming ?? dish.DefaultCourse
             };
@@ -136,11 +140,38 @@ public class OrderService : IOrderService
         }
 
         var createdOrder = await _orderRepository.AddAsync(order);
+
+        // Marcar la mesa como Ocupada apenas se crea la orden (ocupación física real),
+        // sin pisar un cobro en curso (Billing). Difundir para que el plano cambie al instante.
+        if (dto.TableId.HasValue)
+        {
+            var table = await _context.Tables.FirstOrDefaultAsync(t => t.Id == dto.TableId.Value);
+            if (table != null && (table.Status == TableStatus.Available || table.Status == TableStatus.Reserved))
+            {
+                table.Status = TableStatus.Occupied;
+                await _context.SaveChangesAsync();
+                await _tableNotifier.TableStatusChangedAsync(table.Id, nameof(TableStatus.Occupied));
+            }
+        }
         
         // Obtener orden con includes para el DTO
         var orderWithIncludes = await _orderRepository.GetByIdWithItemsAsync(createdOrder.Id);
         
         return MapToOrderDto(orderWithIncludes!);
+    }
+
+    public async Task<int?> GetActiveOrderIdForTableAsync(int tableId)
+    {
+        // Orden "viva" de la mesa: cualquiera que no esté pagada/cancelada. Si hay varias
+        // (no debería), se toma la más reciente. Permite que varios comensales del mismo QR
+        // agreguen sus pedidos a una sola comanda por mesa en vez de crear órdenes separadas.
+        return await _context.Orders
+            .Where(o => o.TableId == tableId
+                     && o.Status != OrderStatus.Completed
+                     && o.Status != OrderStatus.Cancelled)
+            .OrderByDescending(o => o.Id)
+            .Select(o => (int?)o.Id)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<OrderDto?> GetOrderByIdAsync(int id)
@@ -284,6 +315,7 @@ public class OrderService : IOrderService
 
             order.Status = status;
 
+            int? freedTableId = null;
             if (status == OrderStatus.Completed)
             {
                 order.CompletedAt = DateTime.UtcNow;
@@ -298,11 +330,28 @@ public class OrderService : IOrderService
                         o.Status != OrderStatus.Cancelled);
 
                     if (!hasOtherActiveOrders)
+                    {
                         order.Table.Status = TableStatus.Available;
+                        freedTableId = order.Table.Id;
+                        // Cerrar la sesión activa de la mesa: evita que un nuevo comensal por QR
+                        // reuse la sesión y herede al mesero anterior. Mirror de CloseSession.
+                        var activeSession = await _context.TableSessions
+                            .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
+                        if (activeSession != null)
+                        {
+                            activeSession.IsActive = false;
+                            activeSession.EndTime = DateTime.UtcNow;
+                        }
+                    }
                 }
             }
 
             await _orderRepository.UpdateAsync(order);
+            if (freedTableId != null)
+            {
+                await _tableNotifier.TableStatusChangedAsync(freedTableId.Value, nameof(TableStatus.Available));
+                await NotifyTableWaiterAsync(freedTableId.Value, null);
+            }
         }
 
         var updatedOrder = await _orderRepository.GetByIdWithItemsAsync(id);
@@ -330,6 +379,7 @@ public class OrderService : IOrderService
             : $"[CANCELADA: {reason}] {order.SpecialInstructions}".Trim();
 
         // Liberar la mesa si no hay otras órdenes activas en ella.
+        int? freedTableId = null;
         if (order.Table != null)
         {
             var hasOtherActive = await _context.Orders.AnyAsync(o =>
@@ -338,10 +388,26 @@ public class OrderService : IOrderService
                 o.Status != OrderStatus.Completed &&
                 o.Status != OrderStatus.Cancelled);
             if (!hasOtherActive)
+            {
                 order.Table.Status = TableStatus.Available;
+                freedTableId = order.Table.Id;
+                // Cerrar la sesión activa de la mesa (evita sesiones huérfanas tras cancelar).
+                var activeSession = await _context.TableSessions
+                    .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
+                if (activeSession != null)
+                {
+                    activeSession.IsActive = false;
+                    activeSession.EndTime = DateTime.UtcNow;
+                }
+            }
         }
 
         await _orderRepository.UpdateAsync(order);
+        if (freedTableId != null)
+        {
+            await _tableNotifier.TableStatusChangedAsync(freedTableId.Value, nameof(TableStatus.Available));
+            await NotifyTableWaiterAsync(freedTableId.Value, null);
+        }
         var updated = await _orderRepository.GetByIdWithItemsAsync(id);
         return MapToOrderDto(updated!, false, 0);
     }
@@ -373,12 +439,35 @@ public class OrderService : IOrderService
         order.Status = Domain.Enums.OrderStatus.Confirmed;
 
         // Marcar la mesa como Occupied al confirmar el pedido
+        int? nowOccupiedTableId = null;
         if (order.Table != null && order.Table.Status != TableStatus.Occupied)
         {
             order.Table.Status = TableStatus.Occupied;
+            nowOccupiedTableId = order.Table.Id;
         }
 
         await _orderRepository.UpdateAsync(order);
+        if (nowOccupiedTableId != null)
+            await _tableNotifier.TableStatusChangedAsync(nowOccupiedTableId.Value, nameof(TableStatus.Occupied));
+        if (order.TableId != null)
+            await NotifyTableWaiterAsync(order.TableId.Value, waiterId);
+    }
+
+    /// <summary>Difunde el mesero a cargo de una mesa para el badge del plano (waiterId null = limpia).</summary>
+    private async Task NotifyTableWaiterAsync(int tableId, int? waiterId)
+    {
+        if (waiterId == null)
+        {
+            await _tableNotifier.TableWaiterChangedAsync(tableId, null, null);
+            return;
+        }
+        var w = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == waiterId.Value)
+            .Select(u => new { u.FirstName, u.LastName })
+            .FirstOrDefaultAsync();
+        await _tableNotifier.TableWaiterChangedAsync(tableId,
+            NameFormatting.Initials(w?.FirstName, w?.LastName),
+            NameFormatting.FullName(w?.FirstName, w?.LastName));
     }
 
     public async Task UnassignWaiterAsync(int orderId)
@@ -624,9 +713,18 @@ public class OrderService : IOrderService
         order.Table = null!;
         await _orderRepository.UpdateAsync(order);
         await _context.SaveChangesAsync();
+
+        // Difundir el cambio de ambas mesas al plano en vivo (aditivo: solo notifica).
+        if (oldTableId != null)
+        {
+            await _tableNotifier.TableStatusChangedAsync(oldTableId.Value, nameof(TableStatus.Available));
+            await NotifyTableWaiterAsync(oldTableId.Value, null);
+        }
+        await _tableNotifier.TableStatusChangedAsync(newTableId, nameof(TableStatus.Occupied));
+        await NotifyTableWaiterAsync(newTableId, order.AssignedWaiterId);
     }
 
-    public async Task<OrderDto> AddItemsToOrderAsync(int orderId, List<CreateOrderItemDto> newItems)
+    public async Task<OrderDto> AddItemsToOrderAsync(int orderId, List<CreateOrderItemDto> newItems, string? customerName = null)
     {
         var order = await _context.Orders
             .Include(o => o.Table)
@@ -657,6 +755,7 @@ public class OrderService : IOrderService
                 Customizations = dto.Customizations,
                 Allergies      = dto.Allergies,
                 SideDish       = dto.SideDish,
+                CustomerName   = customerName,
                 CourseTiming   = dto.CourseTiming ?? (CourseTiming?)dish.DefaultCourse,
             });
         }
@@ -724,6 +823,7 @@ public class OrderService : IOrderService
             BarPreparing = order.BarPreparing,
             BarReady = order.BarReady,
             BarServed = order.BarServed,
+            CustomerFinishedEating = order.CustomerFinishedEating,
             SpecialInstructions = order.SpecialInstructions,
             CreatedAt = order.CreatedAt,
             Items = order.Items.Select(i => new OrderItemDto
@@ -739,6 +839,7 @@ public class OrderService : IOrderService
                 Customizations = i.Customizations,
                 Allergies = i.Allergies,
                 SideDish = i.SideDish,
+                CustomerName = i.CustomerName,
                 PreferenceText = i.PreferenceText,
                 IsReady = i.IsReady,
                 KitchenZoneId = i.Dish?.KitchenZoneId,

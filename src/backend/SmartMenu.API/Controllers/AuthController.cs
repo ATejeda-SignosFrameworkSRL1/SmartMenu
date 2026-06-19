@@ -37,12 +37,13 @@ public class AuthController : ControllerBase
         if (user == null)
             return Unauthorized(new { error = "Usuario no encontrado. Inicia sesión de nuevo." });
 
-        Console.WriteLine($"🔐 /api/auth/me devolviendo: Id={user.Id}, Email={user.Email}, Role={user.Role}");
         return Ok(user);
     }
 
+    // Antes [AllowAnonymous]: cualquiera podía auto-registrarse y obtener token.
+    // Ahora solo Admin/Manager crean cuentas (el staff se provisiona; el cliente QR es anónimo, no se registra).
     [HttpPost("register")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<ActionResult<AuthResultDto>> Register([FromBody] RegisterDto dto)
     {
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -57,6 +58,30 @@ public class AuthController : ControllerBase
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var result = await _authService.LoginAsync(dto, ip);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// SPRINT 3 — Login por PIN del waiter (modo PUBLIC en device compartido).
+    /// El device no necesita login previo; cualquier waiter del restaurante con PIN
+    /// configurado puede autenticarse desde el numpad. JWT más corto (60 min) y
+    /// SIN refresh token — al expirar hay que re-ingresar PIN.
+    /// </summary>
+    [HttpPost("pin-verify")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResultDto>> PinVerify([FromBody] PinVerifyDto dto)
+    {
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Pin))
+            return BadRequest(new { error = "PIN requerido" });
+        try
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var result = await _authService.LoginByPinAsync(dto.Pin, ip);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { error = ex.Message });
+        }
     }
 
     /// <summary>
@@ -111,4 +136,11 @@ public class ChangePasswordDto
 {
     public string CurrentPassword { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
+}
+
+/// <summary>SPRINT 3 — DTO para login por PIN del waiter en modo PUBLIC.</summary>
+public class PinVerifyDto
+{
+    /// <summary>PIN de exactamente 6 dígitos numéricos.</summary>
+    public string Pin { get; set; } = string.Empty;
 }

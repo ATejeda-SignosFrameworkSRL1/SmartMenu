@@ -74,7 +74,9 @@ public static class DbInitializer
                 FirstName = "Carlos",
                 LastName = "Martínez",
                 Phone = "809-555-0103",
-                Role = UserRole.Waiter,  // Bartender también es mesero
+                // El KDS expone una vista separada del bar (filtrada por categoría Bebidas).
+                // Para entrar a esa vista se requiere Role=Bartender, no Waiter.
+                Role = UserRole.Bartender,
                 IsActive = true,
                 RestaurantId = restaurant.Id
             },
@@ -365,14 +367,7 @@ public static class DbInitializer
 
         Console.WriteLine("🎉 Database seed completed successfully!");
         Console.WriteLine("");
-        Console.WriteLine("📝 Default users created:");
-        Console.WriteLine("   Admin:     admin@smartmenu.com / Admin123!");
-        Console.WriteLine("   Chef:      chef@smartmenu.com / Chef123!");
-        Console.WriteLine("   Waiter:    waiter@smartmenu.com / Waiter123!");
-        Console.WriteLine("   Waiter 2:  waiter2@smartmenu.com / Waiter2!");
-        Console.WriteLine("   Bartender: bartender@smartmenu.com / Bar123!");
-        Console.WriteLine("   Cashier:   cashier@smartmenu.com / Cash123!");
-        Console.WriteLine("   Host:      host@smartmenu.com / Host123!");
+        Console.WriteLine("📝 Default staff accounts seeded (7). Credentials are not logged.");
         Console.WriteLine("");
     }
 
@@ -401,7 +396,7 @@ public static class DbInitializer
         };
         context.Users.Add(waiter2);
         await context.SaveChangesAsync();
-        Console.WriteLine("✅ Segundo mesero creado: waiter2@smartmenu.com / Waiter2!");
+        Console.WriteLine("✅ Segundo mesero creado: waiter2@smartmenu.com");
     }
 
     /// <summary>
@@ -429,12 +424,27 @@ public static class DbInitializer
         };
         context.Users.Add(cashier);
         await context.SaveChangesAsync();
-        Console.WriteLine("✅ Cajero creado: cashier@smartmenu.com / Cash123!");
+        Console.WriteLine("✅ Cajero creado: cashier@smartmenu.com");
     }
 
     /// <summary>
     /// Crea tablas y columnas de la migración AddVirtualTableTransferDishTags si no existen (para no depender de dotnet ef database update).
     /// </summary>
+    /// <summary>VT-PAY — columna PayerTableId en VirtualTables (cobro unificado de mesa virtual). Idempotente.</summary>
+    public static async Task EnsureVirtualTablePayerColumnAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('VirtualTables') AND name = 'PayerTableId')
+                    ALTER TABLE VirtualTables ADD PayerTableId int NULL;");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureVirtualTablePayerColumn: " + ex.Message); } catch { }
+        }
+    }
+
     public static async Task EnsureMigrationAddVirtualTableTransferDishTagsAsync(ApplicationDbContext context)
     {
         try
@@ -697,49 +707,47 @@ public static class DbInitializer
     }
 
     /// <summary>
-    /// Ensures bar@smartmenu.com bartender user exists.
+    /// Ensures bartender@smartmenu.com has Role=Bartender (corrective for DBs sembradas
+    /// con el bug previo Role=Waiter) y elimina el duplicado legacy bar@smartmenu.com
+    /// si existe — antes había dos usuarios para el bar y eso confundía al quick-login
+    /// del KDS. Idempotente: si todo está correcto, no hace nada.
     /// </summary>
-    public static async Task EnsureBarUserAsync(ApplicationDbContext context)
+    public static async Task EnsureBartenderRoleAsync(ApplicationDbContext context)
     {
         try
         {
-            const string barEmail = "bar@smartmenu.com";
-            if (!context.Users.Any(u => u.Email == barEmail))
+            // 1. Corregir rol de bartender@smartmenu.com si está mal sembrado.
+            var bartender = context.Users.FirstOrDefault(u => u.Email == "bartender@smartmenu.com");
+            if (bartender != null && bartender.Role != UserRole.Bartender)
             {
-                // Obtener el primer restaurante
-                var restaurant = context.Restaurants.FirstOrDefault();
-                if (restaurant != null)
-                {
-                    context.Users.Add(new User
-                    {
-                        Email = barEmail,
-                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("Bar123!"),
-                        FirstName = "Bar",
-                        LastName = "SmartMenu",
-                        Phone = "809-555-0199",
-                        Role = UserRole.Bartender,
-                        IsActive = true,
-                        RestaurantId = restaurant.Id
-                    });
-                    await context.SaveChangesAsync();
-                    Console.WriteLine("✅ Usuario bar@smartmenu.com creado.");
-                }
+                bartender.Role = UserRole.Bartender;
+                await context.SaveChangesAsync();
+                Console.WriteLine("✅ Rol de bartender@smartmenu.com corregido a Bartender.");
             }
-            else
+
+            // 2. Limpiar el duplicado legacy bar@smartmenu.com si quedó de migraciones previas.
+            var legacy = context.Users.FirstOrDefault(u => u.Email == "bar@smartmenu.com");
+            if (legacy != null)
             {
-                // Asegurar que el usuario tenga rol Bartender
-                var barUser = context.Users.FirstOrDefault(u => u.Email == barEmail);
-                if (barUser != null && barUser.Role != UserRole.Bartender)
+                // Sólo borrar si no tiene shifts ni FKs activas (defensa pasiva: si EF
+                // arroja constraint, simplemente lo logueamos y seguimos).
+                context.Users.Remove(legacy);
+                try
                 {
-                    barUser.Role = UserRole.Bartender;
                     await context.SaveChangesAsync();
-                    Console.WriteLine("✅ Rol de bar@smartmenu.com actualizado a Bartender.");
+                    Console.WriteLine("✅ Usuario legacy bar@smartmenu.com eliminado (duplicado).");
+                }
+                catch (Exception fkEx)
+                {
+                    Console.WriteLine("ℹ️ No se pudo eliminar bar@smartmenu.com (probable FK activa): " + fkEx.Message);
+                    // Deshacer el Remove en memoria para no contaminar el ChangeTracker.
+                    context.Entry(legacy).State = EntityState.Unchanged;
                 }
             }
         }
         catch (Exception ex)
         {
-            try { Console.WriteLine("⚠️ EnsureBarUser: " + ex.Message); } catch { }
+            try { Console.WriteLine("⚠️ EnsureBartenderRole: " + ex.Message); } catch { }
         }
     }
 
@@ -807,6 +815,42 @@ public static class DbInitializer
         }
     }
 
+    /// <summary>ZONA-EXCL: columnas IsZoneExclusive + HostResponseMessage en TableReservations (idempotente).</summary>
+    public static async Task EnsureZoneExclusiveColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columnas IsZoneExclusive/HostResponseMessage en TableReservations...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'IsZoneExclusive')
+                    ALTER TABLE TableReservations ADD IsZoneExclusive bit NOT NULL DEFAULT 0;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'HostResponseMessage')
+                    ALTER TABLE TableReservations ADD HostResponseMessage nvarchar(500) NULL;");
+            Console.WriteLine("✅ Columnas IsZoneExclusive/HostResponseMessage listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureZoneExclusiveColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    /// <summary>SHARED-TABLE-ORDER: columna CustomerName en OrderItems (quién pidió cada ítem, varios comensales por mesa) — idempotente.</summary>
+    public static async Task EnsureOrderItemCustomerNameColumnAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columna CustomerName en OrderItems...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'CustomerName')
+                    ALTER TABLE OrderItems ADD CustomerName nvarchar(120) NULL;");
+            Console.WriteLine("✅ Columna CustomerName en OrderItems lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureOrderItemCustomerNameColumn: " + ex.Message); } catch { }
+        }
+    }
+
     public static async Task EnsureFiscalReceiptColumnsAsync(ApplicationDbContext context)
     {
         try
@@ -826,6 +870,86 @@ public static class DbInitializer
         catch (Exception ex)
         {
             try { Console.WriteLine("⚠️ EnsureFiscalReceiptColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureFloorPlanColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columnas de layout del plano en Tables...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'PositionX')
+                    ALTER TABLE Tables ADD PositionX float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'PositionY')
+                    ALTER TABLE Tables ADD PositionY float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Shape')
+                    ALTER TABLE Tables ADD Shape nvarchar(20) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Width')
+                    ALTER TABLE Tables ADD Width float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Height')
+                    ALTER TABLE Tables ADD Height float NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Server')
+                    ALTER TABLE Tables ADD [Server] nvarchar(20) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Name')
+                    ALTER TABLE Tables ADD [Name] nvarchar(80) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Color')
+                    ALTER TABLE Tables ADD Color nvarchar(20) NULL;");
+
+            Console.WriteLine("✅ Columnas de layout del plano listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureFloorPlanColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureRestaurantPaletteColumnAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columna FloorPlanPaletteJson en Restaurants...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'FloorPlanPaletteJson')
+                    ALTER TABLE Restaurants ADD FloorPlanPaletteJson nvarchar(max) NULL;");
+            Console.WriteLine("✅ Columna FloorPlanPaletteJson lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureRestaurantPaletteColumn: " + ex.Message); } catch { }
+        }
+    }
+
+    public static async Task EnsureFloorStructureTableAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Creando tabla FloorStructures...");
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'FloorStructures')
+                BEGIN
+                    CREATE TABLE FloorStructures (
+                        Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        ZoneId int NOT NULL,
+                        Type nvarchar(20) NOT NULL DEFAULT 'wall',
+                        X float NOT NULL DEFAULT 0,
+                        Y float NOT NULL DEFAULT 0,
+                        Width float NULL,
+                        Height float NULL,
+                        Label nvarchar(64) NULL,
+                        CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        UpdatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                        CONSTRAINT FK_FloorStructures_Zones FOREIGN KEY (ZoneId) REFERENCES Zones(Id) ON DELETE CASCADE
+                    );
+                END");
+
+            Console.WriteLine("✅ Tabla FloorStructures lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureFloorStructureTable: " + ex.Message); } catch { }
         }
     }
 
@@ -930,6 +1054,64 @@ public static class DbInitializer
         }
     }
 
+    /// <summary>
+    /// Siembra turnos por defecto (Almuerzo, Cena) si no existe ninguno. Idempotente (data-only).
+    /// Definen la rejilla de slots, duraciones, colchón y topes de pacing del motor de disponibilidad.
+    /// </summary>
+    public static async Task EnsureDefaultServicePeriodsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            if (await context.ServicePeriods.AnyAsync()) return;
+            var restaurant = await context.Restaurants.OrderBy(r => r.Id).FirstOrDefaultAsync();
+            if (restaurant == null) return;
+
+            context.ServicePeriods.AddRange(
+                new ServicePeriod
+                {
+                    RestaurantId = restaurant.Id,
+                    Name = "Almuerzo",
+                    DaysOfWeekMask = 127,
+                    StartTime = new TimeOnly(12, 0),
+                    EndTime = new TimeOnly(15, 30),
+                    SlotMinutes = 30,
+                    DefaultDurationMinutes = 90,
+                    TurnoverBufferMinutes = 10,
+                    MaxCoversPerSlot = 24,
+                    MaxReservationsPerSlot = 6,
+                    LeadTimeMinutes = 30,
+                    MaxHorizonDays = 60,
+                    IsActive = true,
+                    LargePartyThreshold = 8,
+                    LargePartyDurationMinutes = 120,
+                },
+                new ServicePeriod
+                {
+                    RestaurantId = restaurant.Id,
+                    Name = "Cena",
+                    DaysOfWeekMask = 127,
+                    StartTime = new TimeOnly(18, 0),
+                    EndTime = new TimeOnly(22, 0),
+                    SlotMinutes = 30,
+                    DefaultDurationMinutes = 120,
+                    TurnoverBufferMinutes = 15,
+                    MaxCoversPerSlot = 30,
+                    MaxReservationsPerSlot = 8,
+                    LeadTimeMinutes = 30,
+                    MaxHorizonDays = 60,
+                    IsActive = true,
+                    LargePartyThreshold = 8,
+                    LargePartyDurationMinutes = 150,
+                });
+            await context.SaveChangesAsync();
+            Console.WriteLine("✅ ServicePeriods por defecto (Almuerzo, Cena) sembrados.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureDefaultServicePeriods: " + ex.Message); } catch { }
+        }
+    }
+
     // Los métodos EnsureTanda5DbObjectsAsync y EnsureConcurrencyAndSoftDeleteColumnsAsync
     // que vivían aquí fueron migrados a la migration formal
     // 20260519160736_BackfillBlockBTanda5.cs (idempotente).
@@ -942,4 +1124,79 @@ public static class DbInitializer
     // ya no son invocados desde Program.cs — están cubiertos por las migrations EF formales
     // del mismo nombre en Data/Migrations/. Se dejan como dead code (DEPRECATED) hasta
     // un próximo cleanup; eliminarlos no afecta el sistema (no hay callers).
+
+    /// <summary>
+    /// Sprint 2 — Columnas para el modo PIN del waiter en tabla Users:
+    ///   PinHash, PinSetAt, PinFailedAttempts, PinLockedUntil
+    /// Y para la tabla Restaurants:
+    ///   WaiterAuthMode (int, 0=PrivateOnly, 1=PublicPin, 2=Hybrid).
+    /// Idempotente — usa IF NOT EXISTS para que correr múltiples veces sea seguro.
+    /// </summary>
+    public static async Task EnsureWaiterPinColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'PinHash')
+                    ALTER TABLE Users ADD PinHash nvarchar(120) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'PinSetAt')
+                    ALTER TABLE Users ADD PinSetAt datetime2 NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'PinFailedAttempts')
+                    ALTER TABLE Users ADD PinFailedAttempts int NOT NULL DEFAULT 0;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'PinLockedUntil')
+                    ALTER TABLE Users ADD PinLockedUntil datetime2 NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'WaiterAuthMode')
+                    ALTER TABLE Restaurants ADD WaiterAuthMode int NOT NULL DEFAULT 0;");
+            Console.WriteLine("✅ Columnas PIN del waiter + WaiterAuthMode listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureWaiterPinColumns: " + ex.Message); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Sprint 4.2 — Tabla AuditEvents para registro inmutable de acciones sensibles (DGII).
+    /// Idempotente. Una vez generada formalmente vía migration EF se puede deprecar.
+    /// </summary>
+    public static async Task EnsureAuditEventsTableAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'AuditEvents')
+                BEGIN
+                    CREATE TABLE AuditEvents (
+                        Id          int IDENTITY(1,1) PRIMARY KEY,
+                        UserId      int NULL,
+                        Action      nvarchar(80)  NOT NULL,
+                        EntityType  nvarchar(80)  NOT NULL,
+                        EntityId    int NULL,
+                        IpAddress   nvarchar(64)  NULL,
+                        AuthMethod  nvarchar(20)  NOT NULL DEFAULT 'password',
+                        Metadata    nvarchar(2048) NULL,
+                        OccurredAt  datetime2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                        CreatedAt   datetime2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                        UpdatedAt   datetime2 NOT NULL DEFAULT SYSUTCDATETIME()
+                    );
+                    CREATE INDEX IX_AuditEvents_UserId_OccurredAt  ON AuditEvents (UserId, OccurredAt DESC);
+                    CREATE INDEX IX_AuditEvents_Action_OccurredAt  ON AuditEvents (Action, OccurredAt DESC);
+                    CREATE INDEX IX_AuditEvents_Entity            ON AuditEvents (EntityType, EntityId);
+                END;
+                -- AUDIT-FIX.1 — relajar UserId a NULL en instalaciones existentes
+                ELSE IF EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID('AuditEvents')
+                      AND name = 'UserId' AND is_nullable = 0
+                )
+                BEGIN
+                    ALTER TABLE AuditEvents ALTER COLUMN UserId int NULL;
+                END;");
+            Console.WriteLine("✅ Tabla AuditEvents lista.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureAuditEventsTable: " + ex.Message); } catch { }
+        }
+    }
 }

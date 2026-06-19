@@ -2,62 +2,17 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  LogOut, RefreshCw, FileText, X, Building2, CheckCircle2,
+  LogOut, RefreshCw, X, Building2, CheckCircle2,
   DollarSign, CreditCard, ArrowRightLeft, Layers, Receipt,
   AlertCircle, Loader2, ShoppingCart, Plus, Minus, Trash2,
-  ShoppingBag, BarChart3, Search, ChevronRight, User, Radio
+  ShoppingBag, BarChart3, Search, User, Radio
 } from 'lucide-react';
-import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
+import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 
-const api = axios.create({ baseURL: '' });
-
-// S3.3 — JWT refresh interceptor: auto-renueva access_token cuando expira sin
-// botar al usuario a /login. Espejo del patrón en admin-panel/waiter-app.
-let _refreshPromise: Promise<string | null> | null = null;
-async function _tryRefresh(): Promise<string | null> {
-  if (_refreshPromise) return _refreshPromise;
-  const rt = typeof window !== 'undefined' ? localStorage.getItem('cashier_refresh') : null;
-  if (!rt) return null;
-  _refreshPromise = (async () => {
-    try {
-      const r = await axios.post('/api/auth/refresh', { refreshToken: rt });
-      const { accessToken, refreshToken: nrt, user } = r.data ?? {};
-      if (!accessToken) return null;
-      localStorage.setItem('cashier_token', accessToken);
-      if (nrt) localStorage.setItem('cashier_refresh', nrt);
-      if (user) localStorage.setItem('cashier_user', JSON.stringify(user));
-      return accessToken as string;
-    } catch { return null; }
-    finally { _refreshPromise = null; }
-  })();
-  return _refreshPromise;
-}
-api.interceptors.request.use((config) => {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('cashier_token') : null;
-  if (t && config.headers) config.headers.Authorization = `Bearer ${t}`;
-  return config;
-});
-api.interceptors.response.use(
-  (r) => r,
-  async (error) => {
-    const o: any = error.config;
-    if (error.response?.status === 401 && o && !o._refreshAttempted) {
-      o._refreshAttempted = true;
-      const nt = await _tryRefresh();
-      if (nt) {
-        o.headers = o.headers ?? {};
-        o.headers.Authorization = `Bearer ${nt}`;
-        return api.request(o);
-      }
-      localStorage.removeItem('cashier_token');
-      localStorage.removeItem('cashier_refresh');
-      localStorage.removeItem('cashier_user');
-      if (typeof window !== 'undefined') window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+// F3 — auth-client centralizado reemplaza el interceptor JWT inline
+// (refresh transparente con singleton lock, mismo prefijo cashier_*).
+const { api } = createAuthApi('cashier');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -145,7 +100,8 @@ function CajaTab({ user }: { user: any }) {
     const hubUrl = typeof window !== 'undefined' ? `${window.location.origin}/hubs/orders` : '/hubs/orders';
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+        accessTokenFactory: () => ensureFreshToken('cashier'),
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -303,7 +259,7 @@ function CajaTab({ user }: { user: any }) {
                   {payments.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-500">
-                        {p.completedAt ? new Date(p.completedAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        {p.completedAt ? new Date(p.completedAt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }) : '-'}
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-700">{p.orderNumber || '-'}</td>
                       <td className="px-4 py-3 font-medium">{p.tableNumber || 'Mostrador'}</td>
@@ -748,7 +704,7 @@ function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Caja</h1>
             <p className="text-sm text-gray-500">

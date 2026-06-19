@@ -1,0 +1,62 @@
+# SmartMenu frontend — QA image (genérico para los 7 Next.js apps)
+# Build context: src/frontend/<app>
+# Build args:
+#   APP_PORT — puerto interno del Next start (3000..3007)
+# Run-time env (set en docker-compose):
+#   BACKEND_HTTP_URL          — destino del proxy SSR (http://backend:8080)
+#   NEXT_PUBLIC_API_URL       — base de URL del API en el browser (vacío = mismo origen)
+#   NEXT_PUBLIC_WS_URL        — base WebSocket / SignalR (mismo origen recomendado)
+
+# ===== deps + build =====
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Cachear deps. Alpine (musl) requiere @next/swc-linux-x64-musl que es una
+# optionalDependency de next — npm ci no la instala en todas las versiones.
+# Forzamos --include=optional para resolverla y add explicit como fallback.
+COPY package*.json ./
+RUN npm ci --no-audit --no-fund --include=optional && \
+    npm install --no-save --no-audit --no-fund @next/swc-linux-x64-musl@$(node -p "require('./node_modules/next/package.json').version") || true
+
+# Build
+COPY . .
+# Algunas apps (kds, waiter, host, cashier) no traen carpeta /public; la creamos
+# vacía para que el COPY de la fase runtime nunca falle.
+RUN mkdir -p public
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# QR-FIX.2 — NEXT_PUBLIC_* deben inyectarse en build-time (Next.js los reemplaza
+# en el bundle del cliente). Aceptar como build arg para que docker-compose
+# pueda pasarlos sin modificar este Dockerfile.
+ARG NEXT_PUBLIC_CLIENT_URL=""
+ENV NEXT_PUBLIC_CLIENT_URL=${NEXT_PUBLIC_CLIENT_URL}
+
+RUN npm run build
+
+# ===== runtime =====
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ARG APP_PORT=3000
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=${APP_PORT} \
+    HOSTNAME=0.0.0.0
+
+# Trae el build + node_modules de la imagen builder.
+# No usamos output:standalone para no tener que tocar next.config de cada app.
+COPY --from=builder /app/.next         ./.next
+COPY --from=builder /app/public        ./public
+COPY --from=builder /app/node_modules  ./node_modules
+COPY --from=builder /app/package.json  ./package.json
+COPY --from=builder /app/next.config.mjs ./next.config.mjs
+
+EXPOSE ${APP_PORT}
+
+# Healthcheck robusto: usa 127.0.0.1 explícito (no localhost — evita el bug de
+# resolución IPv4/IPv6 de busybox-wget en alpine) y wget --spider (HEAD-only).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+    CMD wget --spider -q "http://127.0.0.1:${PORT}/" || exit 1
+
+# `next start -p $PORT -H 0.0.0.0` — toma PORT/HOSTNAME del env
+CMD ["sh", "-c", "npx next start -p $PORT -H 0.0.0.0"]

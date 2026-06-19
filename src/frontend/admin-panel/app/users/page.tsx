@@ -5,18 +5,24 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
+import {
   Search,
   RefreshCw,
   Users as UsersIcon,
-  ToggleLeft,
-  ToggleRight,
   CheckCircle,
-  XCircle
+  XCircle,
+  KeyRound,
+  Clock,
+  AlertTriangle,
+  Trash2,
+  ShieldAlert,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { PinManagerModal } from '@/components/PinManagerModal';
+import { WaiterAuthModeSelector } from '@/components/WaiterAuthModeSelector';
 
 const api = axios.create({
   baseURL: '',
@@ -31,6 +37,9 @@ interface User {
   role: string;
   isActive: boolean;
   createdAt: string;
+  // Sprint 5 — info PIN
+  hasPin?: boolean;
+  pinSetAt?: string | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -66,6 +75,19 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formUser, setFormUser] = useState({ email: '', password: '', firstName: '', lastName: '', phone: '', role: 'Waiter', isActive: true, assignedZoneId: null as number | null });
   const [kitchenBarZones, setKitchenBarZones] = useState<any[]>([]);
+  // USER-CREATE.2 — UX: loading state + error inline persistente + validaciones
+  const [savingUser, setSavingUser] = useState(false);
+  const [userFormError, setUserFormError] = useState<string | null>(null);
+  // Sprint 5 — PIN management
+  const [pinUser, setPinUser] = useState<User | null>(null);
+  // USER-CRUD.1 — Modal de eliminación con impacto detallado
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [deletionImpact, setDeletionImpact] = useState<any>(null);
+  const [loadingImpact, setLoadingImpact] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // SHIFT — "Tiempo en turno" en vivo por usuario (turno activo del waiter)
+  const [shiftByWaiter, setShiftByWaiter] = useState<Record<number, { baseMinutes: number; fetchedAt: number }>>({});
+  const [shiftNow, setShiftNow] = useState<number>(Date.now());
 
   const loadUsers = async () => {
     setLoading(true);
@@ -103,6 +125,10 @@ export default function UsersPage() {
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     loadUsers();
     loadKitchenBarZones();
+    loadActiveShifts();
+    const refetch = setInterval(loadActiveShifts, 60000);           // refrescar turnos activos
+    const tick = setInterval(() => setShiftNow(Date.now()), 30000); // duración en vivo
+    return () => { clearInterval(refetch); clearInterval(tick); };
   }, []);
 
   const loadKitchenBarZones = async () => {
@@ -116,6 +142,31 @@ export default function UsersPage() {
     } catch (e) {
       console.error('Error loading kitchen/bar zones:', e);
     }
+  };
+
+  // SHIFT — turnos activos (waiter) para la columna "Tiempo en turno"
+  const loadActiveShifts = async () => {
+    try {
+      const res = await api.get('/api/waitershift/active');
+      const fetchedAt = Date.now();
+      const map: Record<number, { baseMinutes: number; fetchedAt: number }> = {};
+      (Array.isArray(res.data) ? res.data : []).forEach((s: any) => {
+        const wid = s.waiterId ?? s.WaiterId;
+        const dm = Number(s.durationMinutes ?? s.DurationMinutes ?? 0) || 0;
+        if (wid) map[wid] = { baseMinutes: dm, fetchedAt };
+      });
+      setShiftByWaiter(map);
+    } catch { /* sin turnos o sin permiso: la columna mostrará "Fuera de turno" */ }
+  };
+
+  // Duración en vivo = base del servidor + minutos desde el fetch (evita problemas de zona horaria)
+  const getOnShift = (u: User): { onShift: boolean; label: string } => {
+    const uid = (u as any).id ?? (u as any).Id;
+    const e = shiftByWaiter[uid];
+    if (!e) return { onShift: false, label: 'Fuera de turno' };
+    const mins = e.baseMinutes + Math.max(0, Math.floor((shiftNow - e.fetchedAt) / 60000));
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return { onShift: true, label: h > 0 ? `${h}h ${m}m` : `${m}m` };
   };
 
   const getRole = (u: User) => (u as any).role ?? (u as any).Role ?? '';
@@ -142,6 +193,7 @@ export default function UsersPage() {
   const openCreate = () => {
     setEditingUser(null);
     setFormUser({ email: '', password: '', firstName: '', lastName: '', phone: '', role: 'Waiter', isActive: true, assignedZoneId: null });
+    setUserFormError(null);
     setShowUserModal(true);
   };
   const openEdit = (u: User) => {
@@ -156,50 +208,115 @@ export default function UsersPage() {
       isActive: (u as any).isActive ?? (u as any).IsActive ?? true,
       assignedZoneId: (u as any).assignedZoneId ?? (u as any).AssignedZoneId ?? null
     });
+    setUserFormError(null);
     setShowUserModal(true);
   };
+
+  // USER-CREATE.2 — Validación cliente con mensajes claros antes de tocar la red
+  const validateUserForm = (): string | null => {
+    const email = formUser.email.trim();
+    if (!email) return 'El correo electrónico es obligatorio';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Formato de correo electrónico inválido';
+    if (!editingUser) {
+      if (!formUser.password) return 'La contraseña es obligatoria para nuevos usuarios';
+      if (formUser.password.length < 8) return 'La contraseña debe tener al menos 8 caracteres';
+    } else if (formUser.password && formUser.password.length > 0 && formUser.password.length < 8) {
+      return 'Si cambias la contraseña debe tener al menos 8 caracteres';
+    }
+    if (!formUser.firstName.trim()) return 'El nombre es obligatorio';
+    if (!formUser.lastName.trim()) return 'El apellido es obligatorio';
+    return null;
+  };
+
   const saveUser = async () => {
+    setUserFormError(null);
+    const clientError = validateUserForm();
+    if (clientError) { setUserFormError(clientError); return; }
+
+    setSavingUser(true);
     try {
       const zoneId = ['Chef', 'KitchenStaff'].includes(formUser.role) || formUser.role === 'Waiter' ? formUser.assignedZoneId : null;
       if (editingUser) {
         await api.put(`/api/user/${(editingUser as any).id ?? (editingUser as any).Id}`, {
-          email: formUser.email,
+          email: formUser.email.trim(),
           password: formUser.password || undefined,
-          firstName: formUser.firstName,
-          lastName: formUser.lastName,
-          phone: formUser.phone,
+          firstName: formUser.firstName.trim(),
+          lastName: formUser.lastName.trim(),
+          phone: formUser.phone.trim(),
           role: formUser.role,
           isActive: formUser.isActive,
           assignedZoneId: zoneId ?? 0
         });
-        toast.success('Usuario actualizado');
+        toast.success(`Usuario "${formUser.firstName} ${formUser.lastName}" actualizado`);
       } else {
         await api.post('/api/user', {
-          email: formUser.email,
+          email: formUser.email.trim(),
           password: formUser.password,
-          firstName: formUser.firstName,
-          lastName: formUser.lastName,
-          phone: formUser.phone,
+          firstName: formUser.firstName.trim(),
+          lastName: formUser.lastName.trim(),
+          phone: formUser.phone.trim(),
           role: formUser.role,
           isActive: formUser.isActive,
           assignedZoneId: zoneId
         });
-        toast.success('Usuario creado');
+        toast.success(`Usuario "${formUser.firstName} ${formUser.lastName}" creado correctamente`);
       }
       setShowUserModal(false);
+      setUserFormError(null);
       loadUsers();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al guardar');
+      // Error inline (queda visible) + toast para usuarios con scroll lejos del modal
+      const msg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Error al guardar usuario';
+      setUserFormError(msg);
+      toast.error(msg);
+    } finally {
+      setSavingUser(false);
     }
   };
-  const deleteUser = async (u: User) => {
-    if (!confirm('¿Eliminar este usuario?')) return;
+  // USER-CRUD.1 — Abrir modal de eliminación: pide el "impact report" al backend
+  // antes de confirmar (cuántas órdenes/audit/etc. quedarán huérfanas), para que
+  // el admin sepa si será hard o soft delete antes de presionar el botón rojo.
+  const openDeleteModal = async (u: User) => {
+    const id = (u as any).id ?? (u as any).Id;
+    setDeletingUser(u);
+    setDeletionImpact(null);
+    setLoadingImpact(true);
     try {
-      await api.delete(`/api/user/${(u as any).id ?? (u as any).Id}`);
-      toast.success('Usuario eliminado');
+      const res = await api.get(`/api/user/${id}/deletion-impact`);
+      setDeletionImpact(res.data);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Error al consultar impacto de eliminación';
+      toast.error(msg);
+      setDeletingUser(null);
+    } finally {
+      setLoadingImpact(false);
+    }
+  };
+
+  const closeDeleteModal = () => {
+    if (confirmingDelete) return;
+    setDeletingUser(null);
+    setDeletionImpact(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingUser) return;
+    const id = (deletingUser as any).id ?? (deletingUser as any).Id;
+    setConfirmingDelete(true);
+    try {
+      const res = await api.delete(`/api/user/${id}`);
+      const mode = res.data?.mode;
+      const msg = res.data?.message ||
+        (mode === 'hard' ? 'Usuario eliminado permanentemente.' : 'Usuario desactivado.');
+      toast.success(msg);
+      setDeletingUser(null);
+      setDeletionImpact(null);
       loadUsers();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al eliminar');
+      const msg = e?.response?.data?.error || e?.response?.data?.detail || 'Error al eliminar';
+      toast.error(msg);
+    } finally {
+      setConfirmingDelete(false);
     }
   };
 
@@ -267,6 +384,9 @@ export default function UsersPage() {
           </Card>
         </div>
 
+        {/* Sprint 5.2 — Selector de modo auth del waiter */}
+        <WaiterAuthModeSelector />
+
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
@@ -330,8 +450,10 @@ export default function UsersPage() {
                       <th className="text-left p-3 font-semibold">Teléfono</th>
                       <th className="text-left p-3 font-semibold">Rol</th>
                       <th className="text-left p-3 font-semibold">Estado</th>
+                      <th className="text-left p-3 font-semibold">Tiempo en turno</th>
+                      <th className="text-left p-3 font-semibold">PIN</th>
                       <th className="text-left p-3 font-semibold">Fecha Registro</th>
-                    <th className="text-left p-3 font-semibold">Acciones</th>
+                      <th className="text-left p-3 font-semibold">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -363,13 +485,75 @@ export default function UsersPage() {
                             </Badge>
                           )}
                         </td>
+                        <td className="p-3">
+                          {(() => {
+                            const s = getOnShift(user);
+                            return s.onShift ? (
+                              <Badge className="bg-emerald-500 text-white text-xs">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {s.label}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">Fuera de turno</span>
+                            );
+                          })()}
+                        </td>
+                        <td className="p-3">
+                          {/* Sprint 5.1 — columna PIN */}
+                          {(() => {
+                            const role = getRole(user);
+                            // Solo mostrar PIN-relevante para roles que usan el waiter-app o cashier-app
+                            const isPinRelevantRole = role === 'Waiter' || role === 'Cashier' || role === 'Manager' || role === 'Admin';
+                            if (!isPinRelevantRole) {
+                              return <span className="text-xs text-gray-400 italic">no aplica</span>;
+                            }
+                            const hasPin = (user as any).hasPin ?? (user as any).HasPin ?? false;
+                            return hasPin ? (
+                              <Badge className="bg-emerald-500 text-white text-xs">
+                                <KeyRound className="h-3 w-3 mr-1" />
+                                Configurado
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs text-amber-700 bg-amber-50 border border-amber-200">
+                                Sin PIN
+                              </Badge>
+                            );
+                          })()}
+                        </td>
                         <td className="p-3 text-muted-foreground">
                           {new Date((user as any).createdAt ?? (user as any).CreatedAt ?? 0).toLocaleDateString('es-DO')}
                         </td>
                         <td className="p-3">
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             <Button variant="outline" size="sm" onClick={() => openEdit(user)}>Editar</Button>
-                            <Button variant="outline" size="sm" className="text-red-600" onClick={() => deleteUser(user)}>Eliminar</Button>
+                            {(() => {
+                              const role = getRole(user);
+                              const isPinRelevantRole = role === 'Waiter' || role === 'Cashier' || role === 'Manager' || role === 'Admin';
+                              if (!isPinRelevantRole) return null;
+                              const hasPin = (user as any).hasPin ?? (user as any).HasPin ?? false;
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setPinUser(user)}
+                                  className={hasPin ? 'text-emerald-700 border-emerald-200 hover:bg-emerald-50' : 'text-amber-700 border-amber-200 hover:bg-amber-50'}
+                                  title={hasPin ? 'Cambiar o remover PIN' : 'Crear PIN'}
+                                >
+                                  <KeyRound className="h-3.5 w-3.5 mr-1" />
+                                  {hasPin ? 'PIN' : '+ PIN'}
+                                </Button>
+                              );
+                            })()}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 border-red-200 hover:bg-red-50"
+                              onClick={() => openDeleteModal(user)}
+                              title="Eliminar o desactivar usuario"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              Eliminar
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -381,45 +565,421 @@ export default function UsersPage() {
           </CardContent>
         </Card>
 
-        {/* Modal Crear/Editar usuario */}
+        {/* USER-CREATE.2 — Modal Crear/Editar usuario rediseñado con UX clara */}
         {showUserModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowUserModal(false)}>
-            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-              <h2 className="text-xl font-bold mb-4">{editingUser ? 'Editar usuario' : 'Crear usuario'}</h2>
-              <div className="space-y-3 mb-4">
-                <input type="text" placeholder="Email" value={formUser.email} onChange={e => setFormUser({ ...formUser, email: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-                <input type="password" placeholder={editingUser ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña'} value={formUser.password} onChange={e => setFormUser({ ...formUser, password: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-                <input type="text" placeholder="Nombre" value={formUser.firstName} onChange={e => setFormUser({ ...formUser, firstName: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-                <input type="text" placeholder="Apellido" value={formUser.lastName} onChange={e => setFormUser({ ...formUser, lastName: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-                <input type="text" placeholder="Teléfono" value={formUser.phone} onChange={e => setFormUser({ ...formUser, phone: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-                <select value={formUser.role} onChange={e => setFormUser({ ...formUser, role: e.target.value, assignedZoneId: null })} className="w-full border rounded-lg px-3 py-2">
-                  {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                </select>
-                {['Chef', 'KitchenStaff'].includes(formUser.role) && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Cocina asignada</label>
-                    <select
-                      value={formUser.assignedZoneId ?? ''}
-                      onChange={e => setFormUser({ ...formUser, assignedZoneId: e.target.value ? Number(e.target.value) : null })}
-                      className="w-full border rounded-lg px-3 py-2"
-                    >
-                      <option value="">Sin asignar</option>
-                      {kitchenBarZones.filter((z: any) => (z.type ?? z.Type) === 'Kitchen').map((z: any) => (
-                        <option key={z.id ?? z.Id} value={z.id ?? z.Id}>{z.name ?? z.Name}</option>
-                      ))}
-                    </select>
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
+            onClick={() => !savingUser && setShowUserModal(false)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden my-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">{editingUser ? 'Editar usuario' : 'Crear nuevo usuario'}</h2>
+                  <p className="text-xs text-blue-100 mt-0.5">
+                    {editingUser
+                      ? `Actualizando: ${editingUser.firstName} ${editingUser.lastName}`
+                      : 'Llena los campos obligatorios (*) para registrar el empleado'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !savingUser && setShowUserModal(false)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-50"
+                  disabled={savingUser}
+                  aria-label="Cerrar"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                {/* Error banner persistente */}
+                {userFormError && (
+                  <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 flex items-start gap-2.5">
+                    <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-red-900">No se pudo guardar el usuario</p>
+                      <p className="text-xs text-red-700 mt-0.5">{userFormError}</p>
+                    </div>
                   </div>
                 )}
-                {editingUser && (
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={formUser.isActive} onChange={e => setFormUser({ ...formUser, isActive: e.target.checked })} />
-                    Activo
-                  </label>
+
+                {/* Sección: Identidad */}
+                <fieldset className="space-y-3" disabled={savingUser}>
+                  <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
+                    <div className="w-1 h-3.5 bg-blue-500 rounded-full"></div>
+                    Identidad
+                  </legend>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                        Nombre <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. María"
+                        value={formUser.firstName}
+                        onChange={e => setFormUser({ ...formUser, firstName: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        autoFocus={!editingUser}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                        Apellido <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. González"
+                        value={formUser.lastName}
+                        onChange={e => setFormUser({ ...formUser, lastName: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Teléfono</label>
+                    <input
+                      type="tel"
+                      placeholder="809-555-0000"
+                      value={formUser.phone}
+                      onChange={e => setFormUser({ ...formUser, phone: e.target.value })}
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                    />
+                  </div>
+                </fieldset>
+
+                {/* Sección: Acceso */}
+                <fieldset className="space-y-3 pt-2 border-t border-gray-100" disabled={savingUser}>
+                  <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
+                    <div className="w-1 h-3.5 bg-emerald-500 rounded-full"></div>
+                    Credenciales
+                  </legend>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Correo electrónico <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="usuario@smartmenu.com"
+                      value={formUser.email}
+                      onChange={e => setFormUser({ ...formUser, email: e.target.value })}
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Contraseña {!editingUser && <span className="text-red-500">*</span>}
+                    </label>
+                    <input
+                      type="password"
+                      placeholder={editingUser ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'}
+                      value={formUser.password}
+                      onChange={e => setFormUser({ ...formUser, password: e.target.value })}
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                      autoComplete="new-password"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {editingUser
+                        ? 'Solo si quieres cambiarla. Mínimo 8 caracteres.'
+                        : 'Mínimo 8 caracteres. El usuario podrá cambiarla después.'}
+                    </p>
+                  </div>
+                </fieldset>
+
+                {/* Sección: Rol */}
+                <fieldset className="space-y-3 pt-2 border-t border-gray-100" disabled={savingUser}>
+                  <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
+                    <div className="w-1 h-3.5 bg-purple-500 rounded-full"></div>
+                    Rol y permisos
+                  </legend>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Rol del empleado</label>
+                    <select
+                      value={formUser.role}
+                      onChange={e => setFormUser({ ...formUser, role: e.target.value, assignedZoneId: null })}
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none bg-white"
+                    >
+                      {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                    </select>
+                  </div>
+
+                  {['Chef', 'KitchenStaff'].includes(formUser.role) && (
+                    <div className="bg-amber-50/50 border border-amber-200 rounded-lg p-3">
+                      <label className="text-xs font-semibold text-amber-900 mb-1 block">Cocina asignada</label>
+                      <select
+                        value={formUser.assignedZoneId ?? ''}
+                        onChange={e => setFormUser({ ...formUser, assignedZoneId: e.target.value ? Number(e.target.value) : null })}
+                        className="w-full border-2 border-amber-200 rounded-lg px-3 py-2 text-sm focus:border-amber-400 focus:outline-none bg-white"
+                      >
+                        <option value="">Sin asignar (todas las cocinas)</option>
+                        {kitchenBarZones.filter((z: any) => (z.type ?? z.Type) === 'Kitchen').map((z: any) => (
+                          <option key={z.id ?? z.Id} value={z.id ?? z.Id}>{z.name ?? z.Name}</option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-amber-700 mt-1">El chef solo verá pedidos de esta cocina en el KDS.</p>
+                    </div>
+                  )}
+
+                  {editingUser && (
+                    <label className="flex items-center gap-2 cursor-pointer bg-gray-50 rounded-lg p-2.5 hover:bg-gray-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formUser.isActive}
+                        onChange={e => setFormUser({ ...formUser, isActive: e.target.checked })}
+                        className="w-4 h-4 accent-emerald-500"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-800">Usuario activo</p>
+                        <p className="text-[11px] text-gray-500">Si está inactivo, no podrá iniciar sesión.</p>
+                      </div>
+                      {formUser.isActive ? (
+                        <CheckCircle className="w-5 h-5 text-emerald-500" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-gray-400" />
+                      )}
+                    </label>
+                  )}
+                </fieldset>
+              </div>
+
+              {/* Footer con botones */}
+              <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowUserModal(false)}
+                  disabled={savingUser}
+                  className="min-w-[100px]"
+                >
+                  Cancelar
+                </Button>
+                <div className="flex-1"></div>
+                <Button
+                  onClick={saveUser}
+                  disabled={savingUser}
+                  className="min-w-[140px] bg-blue-600 hover:bg-blue-700"
+                >
+                  {savingUser ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                      Guardando…
+                    </span>
+                  ) : (
+                    editingUser ? 'Actualizar usuario' : 'Crear usuario'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sprint 5.1 — Modal de gestión de PIN */}
+        {pinUser && (
+          <PinManagerModal
+            user={pinUser as any}
+            onClose={() => setPinUser(null)}
+            onUpdated={() => loadUsers()}
+          />
+        )}
+
+        {/* USER-CRUD.1 — Modal de eliminación con impact report */}
+        {deletingUser && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={closeDeleteModal}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className={cn(
+                'px-6 py-4 flex items-start gap-3',
+                deletionImpact?.isBlocked
+                  ? 'bg-gradient-to-r from-gray-600 to-gray-700 text-white'
+                  : deletionImpact?.willSoftDelete
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                    : 'bg-gradient-to-r from-red-600 to-red-700 text-white'
+              )}>
+                {deletionImpact?.isBlocked ? (
+                  <ShieldAlert className="w-6 h-6 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <h2 className="text-lg font-bold">
+                    {deletionImpact?.isBlocked
+                      ? 'No se puede eliminar este usuario'
+                      : deletionImpact?.willSoftDelete
+                        ? 'Confirmar desactivación'
+                        : 'Confirmar eliminación'}
+                  </h2>
+                  <p className="text-xs opacity-90 mt-0.5">
+                    {getFirstName(deletingUser)} {getLastName(deletingUser)} · {getEmail(deletingUser)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-6 py-5 space-y-4">
+                {loadingImpact && (
+                  <div className="flex items-center justify-center py-8 text-gray-500">
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    Analizando dependencias…
+                  </div>
+                )}
+
+                {!loadingImpact && deletionImpact?.isBlocked && (
+                  <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-4 text-sm">
+                    <p className="font-semibold text-gray-900 mb-1">
+                      {deletionImpact.blockedReason}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {deletionImpact.isCurrentUser
+                        ? 'Por seguridad, otro administrador debe eliminar tu cuenta.'
+                        : 'El sistema necesita al menos un administrador activo para funcionar.'}
+                    </p>
+                  </div>
+                )}
+
+                {!loadingImpact && deletionImpact && !deletionImpact.isBlocked && deletionImpact.canHardDelete && (
+                  <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 space-y-2">
+                    <p className="text-sm font-semibold text-red-900 flex items-center gap-2">
+                      <Trash2 className="w-4 h-4" />
+                      Eliminación permanente
+                    </p>
+                    <p className="text-xs text-red-800">
+                      Este usuario no tiene historial registrado (sin órdenes, pagos ni audit log).
+                      Será <strong>borrado físicamente</strong> de la base de datos.
+                    </p>
+                    <p className="text-xs text-red-700">
+                      Su correo <code className="bg-white px-1 rounded">{getEmail(deletingUser)}</code> quedará libre para reusarse.
+                    </p>
+                  </div>
+                )}
+
+                {!loadingImpact && deletionImpact && !deletionImpact.isBlocked && deletionImpact.willSoftDelete && (
+                  <>
+                    <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4 space-y-2">
+                      <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+                        <ShieldAlert className="w-4 h-4" />
+                        Desactivación (no borrado)
+                      </p>
+                      <p className="text-xs text-amber-800">
+                        Este usuario tiene historial registrado que <strong>no se puede borrar</strong> por
+                        requisitos fiscales DGII. Se hará lo siguiente:
+                      </p>
+                      <ul className="text-xs text-amber-800 space-y-1 ml-4 list-disc">
+                        <li>Se marca como <strong>inactivo</strong> (no podrá iniciar sesión)</li>
+                        <li>Se libera su correo electrónico para que pueda reusarse</li>
+                        <li>Se conservan sus órdenes, pagos y auditoría</li>
+                        <li>Se revoca su PIN y sesiones activas</li>
+                      </ul>
+                    </div>
+
+                    {/* Resumen de dependencias */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-[11px] uppercase tracking-wider font-bold text-gray-500 mb-2">
+                        Historial que se conserva
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {deletionImpact.dependencies.orders > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Órdenes</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.orders}</span>
+                          </div>
+                        )}
+                        {deletionImpact.dependencies.payments > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Pagos</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.payments}</span>
+                          </div>
+                        )}
+                        {deletionImpact.dependencies.tableSessions > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Sesiones mesa</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.tableSessions}</span>
+                          </div>
+                        )}
+                        {deletionImpact.dependencies.reservations > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Reservas</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.reservations}</span>
+                          </div>
+                        )}
+                        {deletionImpact.dependencies.auditEvents > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Audit log</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.auditEvents}</span>
+                          </div>
+                        )}
+                        {deletionImpact.dependencies.tableClaimRequests > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Claims mesa</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.tableClaimRequests}</span>
+                          </div>
+                        )}
+                        {deletionImpact.dependencies.virtualTables > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Mesas virtuales</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.virtualTables}</span>
+                          </div>
+                        )}
+                        {deletionImpact.dependencies.tableTransfers > 0 && (
+                          <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
+                            <span className="text-gray-600">Transfers</span>
+                            <span className="font-semibold">{deletionImpact.dependencies.tableTransfers}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setShowUserModal(false)}>Cancelar</Button>
-                <Button className="flex-1" onClick={saveUser} disabled={!formUser.email || (!editingUser && !formUser.password)}>Guardar</Button>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={closeDeleteModal}
+                  disabled={confirmingDelete}
+                  className="min-w-[100px]"
+                >
+                  {deletionImpact?.isBlocked ? 'Cerrar' : 'Cancelar'}
+                </Button>
+                <div className="flex-1"></div>
+                {!loadingImpact && deletionImpact && !deletionImpact.isBlocked && (
+                  <Button
+                    onClick={confirmDelete}
+                    disabled={confirmingDelete}
+                    className={cn(
+                      'min-w-[140px] text-white',
+                      deletionImpact.willSoftDelete
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : 'bg-red-600 hover:bg-red-700'
+                    )}
+                  >
+                    {confirmingDelete ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Procesando…
+                      </span>
+                    ) : deletionImpact.willSoftDelete ? (
+                      'Sí, desactivar'
+                    ) : (
+                      'Sí, eliminar definitivamente'
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

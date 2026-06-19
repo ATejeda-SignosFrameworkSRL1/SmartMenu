@@ -1,0 +1,12 @@
+{
+  "name": "smartmenu-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Workspaces de los frontends SmartMenu + design system compartido (@smartmenu/ui).",
+  "workspaces": [
+    "packages/*",
+    "admin-panel",
+    "waiter-app",
+    "host-app"
+  ]
+}

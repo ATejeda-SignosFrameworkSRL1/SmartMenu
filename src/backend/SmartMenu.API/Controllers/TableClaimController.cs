@@ -25,9 +25,22 @@ public class TableClaimController : ControllerBase
     }
 
     /// <summary>
+    /// Extrae el userId del JWT (claim 'sub' o NameIdentifier).
+    /// Devuelve null si no se puede parsear o es 0.
+    /// </summary>
+    private int? GetUserIdFromJwt()
+    {
+        var sub = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
+                  ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(sub, out var id) && id > 0) return id;
+        return null;
+    }
+
+    /// <summary>
     /// Mesero solicita quedarse con una mesa. El admin recibirá notificación por SignalR.
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> RequestClaim([FromBody] RequestClaimDto dto)
     {
         try
@@ -83,12 +96,20 @@ public class TableClaimController : ControllerBase
 
     /// <summary>
     /// Admin aprueba la solicitud. Se asigna el mesero a la sesión de mesa y se notifica al mesero.
+    /// Solo Admin/Manager. El AdminId se extrae del JWT (no del body) para evitar spoofing.
     /// </summary>
     [HttpPut("{id}/approve")]
-    public async Task<IActionResult> Approve(int id, [FromBody] RespondClaimDto dto)
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> Approve(int id, [FromBody] RespondClaimDto? dto)
     {
         try
         {
+            // CLAIM-FIX.1 — extraer adminId del JWT, NO del body.
+            // El body anterior aceptaba adminId=0 → FK constraint violation → 500.
+            var adminId = GetUserIdFromJwt();
+            if (adminId == null)
+                return Unauthorized(new { error = "No se pudo identificar al admin desde el token" });
+
             var request = await _context.TableClaimRequests
                 .Include(r => r.Waiter)
                 .Include(r => r.Table)
@@ -100,9 +121,9 @@ public class TableClaimController : ControllerBase
                 return BadRequest(new { error = "La solicitud ya fue respondida" });
 
             request.Status = ClaimRequestStatus.Approved;
-            request.RespondedByAdminId = dto.AdminId;
+            request.RespondedByAdminId = adminId.Value;
             request.RespondedAt = DateTime.UtcNow;
-            request.AdminNote = dto.Note;
+            request.AdminNote = dto?.Note;
             request.UpdatedAt = DateTime.UtcNow;
 
             // Asignar el mesero a la sesión activa de la mesa (o crearla si no existe)
@@ -149,11 +170,11 @@ public class TableClaimController : ControllerBase
                 tableId = request.TableId,
                 tableNumber = request.Table.TableNumber,
                 message = $"¡Solicitud aprobada! La Mesa {request.Table.TableNumber} es tuya.",
-                adminNote = dto.Note,
+                adminNote = dto?.Note,
                 timestamp = DateTime.UtcNow
             });
 
-            _logger.LogInformation("TableClaimRequest {RequestId} approved for waiter {WaiterId}", id, request.WaiterId);
+            _logger.LogInformation("TableClaimRequest {RequestId} approved by admin {AdminId} for waiter {WaiterId}", id, adminId, request.WaiterId);
             return Ok(new { message = $"Solicitud aprobada. Mesa {request.Table.TableNumber} asignada a {request.Waiter.FirstName}." });
         }
         catch (Exception ex)
@@ -165,12 +186,18 @@ public class TableClaimController : ControllerBase
 
     /// <summary>
     /// Admin rechaza la solicitud. El mesero recibe notificación de rechazo.
+    /// Solo Admin/Manager. El AdminId se extrae del JWT (no del body).
     /// </summary>
     [HttpPut("{id}/reject")]
-    public async Task<IActionResult> Reject(int id, [FromBody] RespondClaimDto dto)
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> Reject(int id, [FromBody] RespondClaimDto? dto)
     {
         try
         {
+            var adminId = GetUserIdFromJwt();
+            if (adminId == null)
+                return Unauthorized(new { error = "No se pudo identificar al admin desde el token" });
+
             var request = await _context.TableClaimRequests
                 .Include(r => r.Waiter)
                 .Include(r => r.Table)
@@ -182,9 +209,9 @@ public class TableClaimController : ControllerBase
                 return BadRequest(new { error = "La solicitud ya fue respondida" });
 
             request.Status = ClaimRequestStatus.Rejected;
-            request.RespondedByAdminId = dto.AdminId;
+            request.RespondedByAdminId = adminId.Value;
             request.RespondedAt = DateTime.UtcNow;
-            request.AdminNote = dto.Note;
+            request.AdminNote = dto?.Note;
             request.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
@@ -195,11 +222,11 @@ public class TableClaimController : ControllerBase
                 tableId = request.TableId,
                 tableNumber = request.Table.TableNumber,
                 message = $"El admin no aprobó tu solicitud para la Mesa {request.Table.TableNumber}.",
-                adminNote = dto.Note,
+                adminNote = dto?.Note,
                 timestamp = DateTime.UtcNow
             });
 
-            _logger.LogInformation("TableClaimRequest {RequestId} rejected for waiter {WaiterId}", id, request.WaiterId);
+            _logger.LogInformation("TableClaimRequest {RequestId} rejected by admin {AdminId} for waiter {WaiterId}", id, adminId, request.WaiterId);
             return Ok(new { message = "Solicitud rechazada." });
         }
         catch (Exception ex)
@@ -213,6 +240,7 @@ public class TableClaimController : ControllerBase
     /// Admin lista todas las solicitudes pendientes.
     /// </summary>
     [HttpGet("pending")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetPending()
     {
         var requests = await _context.TableClaimRequests
@@ -239,6 +267,7 @@ public class TableClaimController : ControllerBase
     /// Historial de solicitudes (todas, para admin).
     /// </summary>
     [HttpGet("history")]
+    [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetHistory([FromQuery] int? waiterId)
     {
         var q = _context.TableClaimRequests

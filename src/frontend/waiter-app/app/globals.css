@@ -2,8 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
+/* DSEG7 Classic — fuente 7-segment auténtica para reloj digital LCD */
+@font-face {
+  font-family: 'DSEG7Classic';
+  src: url('https://cdn.jsdelivr.net/npm/dseg@0.46.0/fonts/DSEG7-Classic/DSEG7Classic-Bold.woff2') format('woff2'),
+       url('https://cdn.jsdelivr.net/npm/dseg@0.46.0/fonts/DSEG7-Classic/DSEG7Classic-Bold.woff') format('woff');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   @apply bg-gray-50 text-gray-900;
+}
+
+@layer utilities {
+  .font-7seg {
+    font-family: 'DSEG7Classic', 'Courier New', monospace;
+    letter-spacing: 0.05em;
+  }
+  .clock-glow {
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.5), 0 0 12px rgba(255, 255, 255, 0.2);
+  }
 }
 
 @layer utilities {

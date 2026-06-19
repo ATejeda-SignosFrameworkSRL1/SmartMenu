@@ -35,12 +35,18 @@ builder.Host.UseSerilog((ctx, services, lc) => lc
         retainedFileCountLimit: 14,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
 
-// HTTP 5041 + HTTPS 5042. Para evitar ERR_CERT_COMMON_NAME_INVALID en https://TU_IP:5042, ejecuta: .\scripts\create-dev-cert.ps1
+// HTTP 5041 + HTTPS 5042 (dev local). En contenedor (QA/prod) ASPNETCORE_URLS define
+// los binds y un reverse proxy (Caddy/nginx) termina TLS — no hardcodeamos los puertos
+// ni intentamos cargar dev-cert.pfx.
 var devCertPath = Path.Combine(Directory.GetCurrentDirectory(), "dev-cert.pfx");
 var devCertPassword = builder.Configuration["DevCert:Password"] ?? "SmartMenuDev";
+var inContainer = string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase);
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
     serverOptions.Limits.MaxRequestBodySize = 20_971_520; // 20 MB
+
+    if (inContainer) return; // honra ASPNETCORE_URLS — Kestrel hace HTTP plano detrás del proxy
+
     serverOptions.ListenAnyIP(5041); // HTTP
     serverOptions.ListenAnyIP(5042, listenOptions =>
     {
@@ -91,12 +97,12 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["Secret"];
 
-// Reject default placeholder in any non-Development environment
-if (!builder.Environment.IsDevelopment() &&
-    (string.IsNullOrWhiteSpace(secretKey) || secretKey.StartsWith("your-super-secret")))
+// Rechazar el placeholder conocido o un secreto vacío en TODOS los entornos (QA corre como
+// Development). Un secreto real debe venir de env var / user-secrets / appsettings.Development.json.
+if (string.IsNullOrWhiteSpace(secretKey) || secretKey.StartsWith("your-super-secret"))
 {
     throw new InvalidOperationException(
-        "JWT secret is missing or is the default placeholder. Set JwtSettings:Secret via environment variable or user-secrets before running outside Development.");
+        "JWT secret is missing or is the default placeholder. Set JwtSettings:Secret via environment variable, user-secrets, or appsettings.Development.json.");
 }
 
 builder.Services.AddAuthentication(options =>
@@ -188,10 +194,22 @@ builder.Services.AddScoped<SmartMenu.Application.Repositories.IOrderRepository, 
 // ===== SETTINGS =====
 builder.Services.Configure<SmartMenu.Application.Settings.BillingSettings>(
     builder.Configuration.GetSection(SmartMenu.Application.Settings.BillingSettings.SectionName));
+builder.Services.Configure<SmartMenu.Application.Settings.ReservationSettings>(
+    builder.Configuration.GetSection(SmartMenu.Application.Settings.ReservationSettings.SectionName));
 
 // ===== SERVICES =====
 builder.Services.AddScoped<SmartMenu.Application.Services.IAuthService, SmartMenu.Infrastructure.Services.AuthService>();
+// Sprint 4.2 — Audit log de acciones sensibles (DGII trazabilidad)
+builder.Services.AddScoped<SmartMenu.Application.Services.IAuditService, SmartMenu.Infrastructure.Services.AuditService>();
+builder.Services.AddSingleton<SmartMenu.Application.Services.ITableRealtimeNotifier, SmartMenu.API.Hubs.TableRealtimeNotifier>();
 builder.Services.AddScoped<SmartMenu.Application.Services.IOrderService, SmartMenu.Infrastructure.Services.OrderService>();
+// Reservas — capacidad dinámica por intervalo: seams de comunicaciones y depósitos (stubs en MVP).
+builder.Services.AddScoped<SmartMenu.Application.Services.INotificationService, SmartMenu.Infrastructure.Services.LoggingNotificationService>();
+builder.Services.AddScoped<SmartMenu.Application.Services.IDepositService, SmartMenu.Infrastructure.Services.NoopDepositService>();
+builder.Services.AddScoped<SmartMenu.Application.Services.IReservationAvailabilityService, SmartMenu.Infrastructure.Services.ReservationAvailabilityService>();
+builder.Services.AddScoped<SmartMenu.Application.Services.IReservationService, SmartMenu.Infrastructure.Services.ReservationService>();
+// Reservas — barrido de ciclo de vida (expira holds, no-show automático, recordatorios, auto-complete).
+builder.Services.AddHostedService<SmartMenu.API.BackgroundServices.ReservationLifecycleService>();
 
 // ===== HEALTH CHECKS =====
 // /health/live   → liveness probe (sin checks, solo confirma que el proceso responde).
@@ -417,6 +435,12 @@ if (app.Environment.IsDevelopment())
     //    en SmartMenu.Infrastructure/Data/Migrations/.
     await context.Database.MigrateAsync();
 
+    // 1b. Audit DB (DbNewMenuAudit) — contexto separado con su propio historial
+    //     (__AuditMigrationsHistory). Sin este migrate la tabla AuditLogs nunca se crea
+    //     y AuditInterceptor falla en silencio en cada cambio. Idempotente.
+    var auditContext = scope.ServiceProvider.GetRequiredService<SmartMenu.Infrastructure.Data.AuditDbContext>();
+    await auditContext.Database.MigrateAsync();
+
     // 2. Seed inicial.
     await SmartMenu.Infrastructure.Data.DbInitializer.SeedAsync(context);
 
@@ -425,7 +449,36 @@ if (app.Environment.IsDevelopment())
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureExtraWaiterAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCashierAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishTagsSeedAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBarUserAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBartenderRoleAsync(context);
+
+    // 4. Sprint 2 — Schema PIN del waiter (idempotente). Cubre el período de
+    //    transición hasta que se genere una migration EF formal.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureWaiterPinColumnsAsync(context);
+
+    // 5. Sprint 4.2 — Tabla AuditEvents para trazabilidad DGII.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureAuditEventsTableAsync(context);
+
+    // 6. VT-PAY — columna PayerTableId para el cobro unificado de mesa virtual.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureVirtualTablePayerColumnAsync(context);
+
+    // 7. Reservas — turnos (ServicePeriods) por defecto para la capacidad dinámica por intervalo.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDefaultServicePeriodsAsync(context);
+
+    // 8. ZONA-EXCL — columnas IsZoneExclusive/HostResponseMessage para reservas de zona completa.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureZoneExclusiveColumnsAsync(context);
+
+    // 9. SHARED-TABLE-ORDER — columna CustomerName en OrderItems (varios comensales del mismo QR, una sola orden por mesa).
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureOrderItemCustomerNameColumnAsync(context);
+
+    // 10. PLANO (Gestión de Salón) — columnas de layout en Tables (PositionX/Y, Shape, Width/Height, Server)
+    //     + tabla FloorStructures. Idempotentes/transitorios hasta una migration EF formal.
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorPlanColumnsAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureRestaurantPaletteColumnAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorStructureTableAsync(context);
 }
 
 app.Run();
+
+// Hace que la clase implícita Program sea pública y referenciable desde
+// WebApplicationFactory<Program> en SmartMenu.IntegrationTests.
+public partial class Program { }

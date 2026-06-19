@@ -14,18 +14,20 @@ public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
-    private readonly IHostEnvironment _env;
+    // Exponer el stack/detalle en el response SOLO si DetailedErrors=true. Desacoplado del
+    // entorno: QA corre como Development pero NO debe filtrar internals. Default: false.
+    private readonly bool _detailedErrors;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger, IHostEnvironment env)
+    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger, IConfiguration configuration)
     {
         _next = next;
         _logger = logger;
-        _env = env;
+        _detailedErrors = configuration.GetValue<bool>("DetailedErrors");
     }
 
     public async Task Invoke(HttpContext ctx)
@@ -93,7 +95,7 @@ public class ExceptionHandlingMiddleware
 
             default:
                 // No filtrar detalles internos en respuesta — el logger ya tiene el stack.
-                var safeMessage = _env.IsDevelopment() ? ex.ToString() : "Error interno del servidor.";
+                var safeMessage = _detailedErrors ? ex.ToString() : "Error interno del servidor.";
                 return (StatusCodes.Status500InternalServerError, new { error = safeMessage });
         }
     }
