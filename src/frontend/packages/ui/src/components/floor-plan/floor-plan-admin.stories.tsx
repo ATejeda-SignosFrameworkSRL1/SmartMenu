@@ -206,13 +206,16 @@ export const DentroDelAdmin: Story = {
   render: () => {
     const Demo = () => {
       const [data, setData] = useState<FloorPlanData>(MULTI_ZONE_FLOOR_PLAN);
+      const [vis, setVis] = useState({ host: true, waiter: true });
       return (
         <AdminShell>
           <FloorPlanModule
             data={data}
             reservations={RESERVATIONS}
             onDataChange={setData}
-            lastPublished="hace 5 min"
+            hostEnabled={vis.host}
+            waiterEnabled={vis.waiter}
+            onToggleChannel={(target, enabled) => setVis((v) => ({ ...v, [target]: enabled }))}
           />
         </AdminShell>
       );

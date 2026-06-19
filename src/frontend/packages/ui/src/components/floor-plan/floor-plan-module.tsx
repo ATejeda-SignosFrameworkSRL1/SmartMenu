@@ -1,16 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Activity,
   CalendarClock,
-  Check,
   Clock,
   LayoutGrid,
   type LucideIcon,
   Monitor,
   Radio,
-  Send,
   Smartphone,
 } from "lucide-react";
 
@@ -18,18 +16,20 @@ import { FloorPlanDashboard, type Reservation } from "./floor-plan-dashboard";
 import type { FloorPlanData } from "./types";
 import type { StatusPaletteOverride } from "./status-colors";
 
-/** App destino al publicar el plano. */
-export type ExportTarget = "host" | "waiter" | "all";
+/** Canal (app) cuyo plano se muestra/oculta con el switch. */
+export type FloorPlanChannel = "host" | "waiter";
 
 export interface FloorPlanModuleProps {
   data: FloorPlanData;
   reservations: Reservation[];
   /** Cambios de layout en Modo Diseñador (drag de mesas/estructuras). */
   onDataChange?: (data: FloorPlanData) => void;
-  /** Publicar el plano a una app destino (Host / Mesero / ambas). */
-  onExport?: (target: ExportTarget) => void;
-  /** Última publicación, ej. "hace 5 min". */
-  lastPublished?: string;
+  /** Visibilidad del plano en la host-app (switch del admin). Default true. */
+  hostEnabled?: boolean;
+  /** Visibilidad del plano en la waiter-app (switch del admin). Default true. */
+  waiterEnabled?: boolean;
+  /** Encender/apagar el plano de un canal (host/waiter) → reflejo en su app. */
+  onToggleChannel?: (target: FloorPlanChannel, enabled: boolean) => void;
   /** Alto del dashboard interno en px. Default 620. */
   dashboardHeight?: number;
   /** Paleta de estados (override por restaurante). */
@@ -50,35 +50,24 @@ function timeToMinutes(t: string): number {
 }
 
 /**
- * Módulo "Plano de Planta" tal como viviría dentro del admin-panel (debajo del
- * Header de la app): tira de KPIs + barra de publicación —exportar la
- * distribución a Host y Mesero— sobre el `FloorPlanDashboard` multi-zona.
+ * Módulo "Plano de Planta" del admin-panel (debajo del Header): tira de KPIs +
+ * barra de visibilidad —switches Host / Mesero que muestran u ocultan el plano en
+ * cada app— sobre el `FloorPlanDashboard` multi-zona.
  *
- * En producción `onExport` haría POST del layout al backend, que lo difunde por
- * SignalR a host/waiter; aquí refleja el estado de sincronización visualmente.
+ * `onToggleChannel` persiste el switch en el backend (PUT /api/floorplan/visibility),
+ * que difunde `FloorPlanVisibilityChanged` por SignalR para reflejo en vivo en host/waiter.
  */
 export function FloorPlanModule({
   data,
   reservations,
   onDataChange,
-  onExport,
-  lastPublished,
+  hostEnabled = true,
+  waiterEnabled = true,
+  onToggleChannel,
   dashboardHeight = 620,
   palette,
   onPaletteChange,
 }: FloorPlanModuleProps) {
-  const [synced, setSynced] = useState<{ host: boolean; waiter: boolean }>({ host: false, waiter: false });
-  const [lastSync, setLastSync] = useState<string | undefined>(lastPublished);
-
-  const publish = (target: ExportTarget) => {
-    setSynced((s) => ({
-      host: target === "waiter" ? s.host : true,
-      waiter: target === "host" ? s.waiter : true,
-    }));
-    setLastSync("hace un momento");
-    onExport?.(target);
-  };
-
   // ── KPIs (resumen global de todas las zonas) ──
   const stats = useMemo(() => {
     const tables = data.zones.flatMap((z) => z.tables);
@@ -105,32 +94,40 @@ export function FloorPlanModule({
     },
   ];
 
-  const bothSynced = synced.host && synced.waiter;
-  const anySynced = synced.host || synced.waiter;
+  const bothOn = hostEnabled && waiterEnabled;
+  const anyOn = hostEnabled || waiterEnabled;
 
-  const stateLabel = bothSynced ? "Publicado" : anySynced ? "Parcial" : "Borrador";
-  const stateClass = bothSynced
+  const stateLabel = bothOn ? "Visible" : anyOn ? "Parcial" : "Oculto";
+  const stateClass = bothOn
     ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-    : "bg-amber-50 text-amber-700 ring-amber-200";
-  const stateDot = bothSynced ? "bg-emerald-500" : "bg-amber-500";
-  const lastLine = lastSync ? `Última publicación: ${lastSync} · Admin System` : "Aún sin publicar";
+    : anyOn
+      ? "bg-amber-50 text-amber-700 ring-amber-200"
+      : "bg-slate-100 text-slate-500 ring-slate-200";
+  const stateDot = bothOn ? "bg-emerald-500" : anyOn ? "bg-amber-500" : "bg-slate-400";
+  const lastLine = "Activa cada switch para mostrar el plano en su app";
 
-  /** Indicador-acción por canal: muestra estado de sincronización y publica al hacer clic. */
-  const channelChip = (label: string, Icon: LucideIcon, active: boolean, onClick: () => void) => (
-    <button
-      type="button"
-      onClick={onClick}
-      title={active ? `${label}: sincronizado` : `Publicar a ${label}`}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-      }`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {label}
-      {active ? <Check className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />}
-    </button>
+  /** Switch por canal: enciende/apaga la visibilidad del plano en esa app (reflejo en vivo). */
+  const channelSwitch = (label: string, Icon: LucideIcon, on: boolean, target: FloorPlanChannel) => (
+    <div className="inline-flex items-center gap-2">
+      <Icon className={`h-4 w-4 ${on ? "text-slate-700" : "text-slate-400"}`} />
+      <span className={`text-sm font-medium ${on ? "text-slate-700" : "text-slate-400"}`}>{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={`${on ? "Ocultar" : "Mostrar"} el plano en ${label}`}
+        title={on ? `Plano visible en ${label}` : `Plano oculto en ${label}`}
+        onClick={() => onToggleChannel?.(target, !on)}
+        className="relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors"
+        style={{ backgroundColor: on ? BRAND : "#cbd5e1" }}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+            on ? "translate-x-6" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
   );
 
   return (
@@ -177,21 +174,10 @@ export function FloorPlanModule({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 sm:flex">
-            {channelChip("Host", Monitor, synced.host, () => publish("host"))}
-            {channelChip("Mesero", Smartphone, synced.waiter, () => publish("waiter"))}
-          </div>
-          <span className="hidden h-8 w-px bg-slate-200 sm:block" />
-          <button
-            type="button"
-            onClick={() => publish("all")}
-            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-            style={{ backgroundColor: BRAND }}
-          >
-            <Send className="h-4 w-4" />
-            Publicar a todos
-          </button>
+        <div className="flex items-center gap-4">
+          {channelSwitch("Host", Monitor, hostEnabled, "host")}
+          <span className="h-8 w-px bg-slate-200" />
+          {channelSwitch("Mesero", Smartphone, waiterEnabled, "waiter")}
         </div>
       </div>
 

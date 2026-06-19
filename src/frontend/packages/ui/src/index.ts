@@ -120,7 +120,7 @@ export {
 export {
   FloorPlanModule,
   type FloorPlanModuleProps,
-  type ExportTarget,
+  type FloorPlanChannel,
 } from "./components/floor-plan/floor-plan-module";
 export {
   STATUS_COLORS,
