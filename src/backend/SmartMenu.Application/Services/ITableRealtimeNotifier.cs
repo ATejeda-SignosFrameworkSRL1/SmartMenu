@@ -16,4 +16,10 @@ public interface ITableRealtimeNotifier
     /// cuando ya no hay mesero (mesa liberada o sin asignar) → el badge del plano se limpia.
     /// </summary>
     Task TableWaiterChangedAsync(int tableId, string? waiterInitials, string? waiterName);
+
+    /// <summary>
+    /// Notifica que el admin cambió la visibilidad del plano de salón por app (switches Host/Mesero),
+    /// para que host-app y waiter-app muestren/oculten el plano al instante.
+    /// </summary>
+    Task FloorPlanVisibilityChangedAsync(bool hostEnabled, bool waiterEnabled);
 }

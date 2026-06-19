@@ -921,6 +921,24 @@ public static class DbInitializer
         }
     }
 
+    public static async Task EnsureFloorPlanVisibilityColumnsAsync(ApplicationDbContext context)
+    {
+        try
+        {
+            Console.WriteLine("📦 Aplicando columnas de visibilidad del plano (Host/Mesero) en Restaurants...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'FloorPlanHostEnabled')
+                    ALTER TABLE Restaurants ADD FloorPlanHostEnabled bit NOT NULL DEFAULT 1;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'FloorPlanWaiterEnabled')
+                    ALTER TABLE Restaurants ADD FloorPlanWaiterEnabled bit NOT NULL DEFAULT 1;");
+            Console.WriteLine("✅ Columnas de visibilidad del plano listas.");
+        }
+        catch (Exception ex)
+        {
+            try { Console.WriteLine("⚠️ EnsureFloorPlanVisibilityColumns: " + ex.Message); } catch { }
+        }
+    }
+
     public static async Task EnsureFloorStructureTableAsync(ApplicationDbContext context)
     {
         try

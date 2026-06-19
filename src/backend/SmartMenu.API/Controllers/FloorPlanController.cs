@@ -5,6 +5,7 @@ using SmartMenu.Infrastructure.Data;
 using SmartMenu.Domain.Entities;
 using SmartMenu.Domain.Enums;
 using SmartMenu.Application.Common;
+using SmartMenu.Application.Services;
 using System.Text.Json;
 
 namespace SmartMenu.API.Controllers;
@@ -21,11 +22,13 @@ public class FloorPlanController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<FloorPlanController> _logger;
+    private readonly ITableRealtimeNotifier _notifier;
 
-    public FloorPlanController(ApplicationDbContext context, ILogger<FloorPlanController> logger)
+    public FloorPlanController(ApplicationDbContext context, ILogger<FloorPlanController> logger, ITableRealtimeNotifier notifier)
     {
         _context = context;
         _logger = logger;
+        _notifier = notifier;
     }
 
     /// <summary>Zona de salón (no cocina/bar) — igual criterio que host-app.</summary>
@@ -116,19 +119,21 @@ public class FloorPlanController : ControllerBase
                 kv => (Initials: NameFormatting.Initials(kv.Value.First, kv.Value.Last),
                        Name: NameFormatting.FullName(kv.Value.First, kv.Value.Last)));
 
-            var paletteJson = await _context.Restaurants
+            var restaurantCfg = await _context.Restaurants
                 .Where(r => r.IsActive)
-                .Select(r => r.FloorPlanPaletteJson)
+                .Select(r => new { r.FloorPlanPaletteJson, r.FloorPlanHostEnabled, r.FloorPlanWaiterEnabled })
                 .FirstOrDefaultAsync();
             Dictionary<string, string>? palette = null;
-            if (!string.IsNullOrWhiteSpace(paletteJson))
+            if (!string.IsNullOrWhiteSpace(restaurantCfg?.FloorPlanPaletteJson))
             {
-                try { palette = JsonSerializer.Deserialize<Dictionary<string, string>>(paletteJson); } catch { }
+                try { palette = JsonSerializer.Deserialize<Dictionary<string, string>>(restaurantCfg.FloorPlanPaletteJson); } catch { }
             }
 
             var result = new
             {
                 palette,
+                hostEnabled = restaurantCfg?.FloorPlanHostEnabled ?? true,
+                waiterEnabled = restaurantCfg?.FloorPlanWaiterEnabled ?? true,
                 zones = diningZones.Select(z => new
                 {
                     zoneId = z.Id.ToString(),
@@ -262,6 +267,34 @@ public class FloorPlanController : ControllerBase
         }
     }
 
+    // PUT /api/floorplan/visibility → switches del admin: muestra/oculta el plano por app (host/waiter).
+    // Persiste en Restaurant y difunde FloorPlanVisibilityChanged por /hubs/tables para reflejo en vivo.
+    [HttpPut("visibility")]
+    [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SaveVisibility([FromBody] VisibilityDto body)
+    {
+        try
+        {
+            var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.IsActive)
+                             ?? await _context.Restaurants.FirstOrDefaultAsync();
+            if (restaurant == null) return NotFound(new { error = "Restaurante no encontrado" });
+
+            if (body?.Host.HasValue == true) restaurant.FloorPlanHostEnabled = body.Host.Value;
+            if (body?.Waiter.HasValue == true) restaurant.FloorPlanWaiterEnabled = body.Waiter.Value;
+            restaurant.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            await _notifier.FloorPlanVisibilityChangedAsync(restaurant.FloorPlanHostEnabled, restaurant.FloorPlanWaiterEnabled);
+            return Ok(new { hostEnabled = restaurant.FloorPlanHostEnabled, waiterEnabled = restaurant.FloorPlanWaiterEnabled });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving floor plan visibility");
+            return StatusCode(500, new { error = "Error al guardar la visibilidad" });
+        }
+    }
+
     // ── DTOs del PUT (espejo de FloorPlanData de @smartmenu/ui) ──
     public class FloorPlanDto
     {
@@ -302,5 +335,11 @@ public class FloorPlanController : ControllerBase
     public class PaletteDto
     {
         public Dictionary<string, string>? StatusColors { get; set; }
+    }
+
+    public class VisibilityDto
+    {
+        public bool? Host { get; set; }
+        public bool? Waiter { get; set; }
     }
 }

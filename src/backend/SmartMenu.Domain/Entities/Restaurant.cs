@@ -22,6 +22,12 @@ public class Restaurant : BaseEntity
     /// <summary>Paleta de colores de estado del plano (JSON, ej. {"occupied":"#..","reserved":"#.."}). Null = defaults del front.</summary>
     public string? FloorPlanPaletteJson { get; set; }
 
+    /// <summary>Switch del admin: muestra/oculta el plano de salón en la host-app. Default true.</summary>
+    public bool FloorPlanHostEnabled { get; set; } = true;
+
+    /// <summary>Switch del admin: muestra/oculta el plano de salón en la waiter-app. Default true.</summary>
+    public bool FloorPlanWaiterEnabled { get; set; } = true;
+
     // Navigation properties
     public ICollection<User> Staff { get; set; } = new List<User>();
     public ICollection<Table> Tables { get; set; } = new List<Table>();

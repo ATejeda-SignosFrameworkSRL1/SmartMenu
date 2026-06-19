@@ -474,6 +474,7 @@ if (app.Environment.IsDevelopment())
     //     + tabla FloorStructures. Idempotentes/transitorios hasta una migration EF formal.
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorPlanColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureRestaurantPaletteColumnAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorPlanVisibilityColumnsAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorStructureTableAsync(context);
 }
 
