@@ -136,7 +136,12 @@ public class ReservationService : IReservationService
         res.CustomerEmail = dto.CustomerEmail?.Trim();
         res.OccasionType = (OccasionType)dto.OccasionType;
         res.SpecialRequests = dto.SpecialRequests;
-        res.Status = ReservationStatus.Confirmed;
+        // El cliente completa sus datos por el portal, pero la reserva queda PENDIENTE de
+        // aprobación del host (flujo "Aceptar" en host-app). HoldExpiresAt=null → el barrido
+        // de ciclo de vida no la expira (solo expira Pending con hold vencido). Si el host ya
+        // la aprobó (Confirmed) entre reintentos, no la revertimos a Pending.
+        if (res.Status != ReservationStatus.Confirmed)
+            res.Status = ReservationStatus.Pending;
         res.HoldExpiresAt = null;
         SyncLegacyFlags(res);
         await _context.SaveChangesAsync(ct);
