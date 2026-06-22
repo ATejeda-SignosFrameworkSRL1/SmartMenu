@@ -44,9 +44,9 @@ const AREA_TIMES: string[] = (() => {
   return out;
 })();
 
-export default function BookingEngineWarm() {
+export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 'area' } = {}) {
   const [step, setStep] = useState<Step>(1);
-  const [mode, setMode] = useState<'mesa' | 'area'>('mesa');   // 'area' = reservar zona completa (exclusiva)
+  const [mode, setMode] = useState<'mesa' | 'area'>(forceMode ?? 'mesa');   // 'area' = reservar zona completa (exclusiva)
   const [areaTime, setAreaTime] = useState('19:00');           // hora elegida en modo área (no hay grid de slots)
   const [date, setDate] = useState(tomorrowStr());
   const [calMonth, setCalMonth] = useState<Date>(() => { const t = new Date(); t.setDate(t.getDate() + 1); return new Date(t.getFullYear(), t.getMonth(), 1); });
@@ -72,6 +72,17 @@ export default function BookingEngineWarm() {
   useEffect(() => {
     (async () => { setZones(await getZones()); })();
   }, []);
+
+  // Mínimo de comensales para "Área completa": 50% de la capacidad real de la zona (piso 4).
+  // Escala por zona (VIP pide menos que el Salón) y nunca supera la capacidad de la zona.
+  const selectedZone = zones.find((z) => z.id === zoneId);
+  const areaMin = Math.max(4, Math.ceil((selectedZone?.capacity ?? 0) * 0.5));
+  const minGuests = mode === 'area' && selectedZone ? areaMin : 1;
+
+  // Al elegir zona en modo área, sube los comensales al mínimo si están por debajo.
+  useEffect(() => {
+    if (mode === 'area' && zoneId != null) setGuests((g) => Math.max(g, areaMin));
+  }, [mode, zoneId, areaMin]);
 
   const fetchSlots = useCallback(async () => {
     setLoadingSlots(true); setSlotsError(null);
@@ -259,7 +270,8 @@ export default function BookingEngineWarm() {
       {/* Paso 1 — fecha + party */}
       {step === 1 && (
         <div className="space-y-5">
-          {/* Toggle de modo — el MISMO form sirve para reservar una mesa o una zona completa */}
+          {/* Toggle de modo — solo cuando el widget NO está fijado a un modo (en /area-completa va sin toggle). */}
+          {!forceMode && (
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-warm-700 bg-warm-800/40 p-1">
             <button type="button" onClick={() => setMode('mesa')}
               className={['flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-semibold transition min-h-[44px]', mode === 'mesa' ? 'bg-primary text-warm-950 shadow' : 'text-warm-300 hover:text-white'].join(' ')}>
@@ -270,6 +282,7 @@ export default function BookingEngineWarm() {
               🏛 Área completa
             </button>
           </div>
+          )}
           {mode === 'area' && (
             <p className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-warm-300">
               Reservás <b className="text-warm-100">toda una zona</b> en exclusiva para tu evento. El restaurante confirma si es posible para tu fecha y horario.
@@ -360,12 +373,15 @@ export default function BookingEngineWarm() {
               <Users className="h-4 w-4 text-primary-light" /> Comensales *
             </span>
             <div className="flex items-center justify-between rounded-xl border border-warm-700 bg-warm-800/50 p-2">
-              <button onClick={() => setGuests((g) => Math.max(1, g - 1))} disabled={guests <= 1}
+              <button onClick={() => setGuests((g) => Math.max(minGuests, g - 1))} disabled={guests <= minGuests}
                 className="h-12 w-12 rounded-lg bg-warm-800 text-2xl font-bold text-white hover:bg-warm-700 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Menos comensales">−</button>
               <span className="text-2xl font-semibold tabular-nums text-white">{guests}</span>
               <button onClick={() => setGuests((g) => Math.min(20, g + 1))} disabled={guests >= 20}
                 className="h-12 w-12 rounded-lg bg-warm-800 text-2xl font-bold text-white hover:bg-warm-700 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Más comensales">+</button>
             </div>
+            {mode === 'area' && selectedZone && (
+              <p className="mt-1.5 text-xs text-primary-light">Mínimo para {selectedZone.name}: {areaMin} personas (reservás la zona completa).</p>
+            )}
           </div>
 
           {/* Selector de zona — preferencia (mesa) u obligatoria + completa (área). */}
@@ -420,7 +436,7 @@ export default function BookingEngineWarm() {
           )}
           <button
             onClick={() => setStep(mode === 'area' ? 3 : 2)}
-            disabled={mode === 'area' && zoneId == null}
+            disabled={mode === 'area' && (zoneId == null || guests < areaMin)}
             className="btn-primary-lg mt-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
           >
             {mode === 'area'

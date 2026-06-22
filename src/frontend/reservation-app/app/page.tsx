@@ -661,7 +661,15 @@ function ReservationSection() {
             Capacidad dinámica por intervalo — elige tu horario en vivo y te confirmamos en segundos.
           </p>
         </div>
-        <BookingEngineWarm />
+        <BookingEngineWarm forceMode="mesa" />
+        <div className="mx-auto mt-6 max-w-md text-center">
+          <a
+            href="/area-completa"
+            className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-semibold text-primary-light transition hover:bg-primary/20"
+          >
+            🏛 ¿Evento privado? Reservá un área completa
+          </a>
+        </div>
       </div>
     </section>
   );
