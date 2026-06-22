@@ -32,7 +32,7 @@ public class ZoneController : ControllerBase
             .AsNoTracking()
             .Where(z => z.IsActive && z.Type == "Dining")
             .OrderBy(z => z.Id)
-            .Select(z => new { id = z.Id, name = z.Name, capacity = z.Tables.Sum(t => (int?)t.Capacity) ?? 0 })
+            .Select(z => new { id = z.Id, name = z.Name })
             .ToListAsync();
         return Ok(zones);
     }

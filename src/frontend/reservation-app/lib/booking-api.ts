@@ -35,7 +35,7 @@ export interface BookingResult {
   reservationDateTime?: string | null;
 }
 
-export interface ZoneOption { id: number; name: string; capacity?: number; }
+export interface ZoneOption { id: number; name: string; }
 
 function extractError(e: unknown, fallback: string): { message: string; code?: string } {
   if (axios.isAxiosError(e) && e.response?.data) {
