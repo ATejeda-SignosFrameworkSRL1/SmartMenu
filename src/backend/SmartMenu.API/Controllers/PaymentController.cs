@@ -300,7 +300,9 @@ public class PaymentController : ControllerBase
                     PaymentMethod = p.Method,
                     p.Amount,
                     Status = p.Status.ToString(),
-                    ProcessedAt = p.CompletedAt
+                    ProcessedAt = p.CompletedAt,
+                    p.BillSplitType,
+                    p.SplitPartIndex
                 })
                 .ToListAsync();
 
@@ -447,6 +449,25 @@ public class PaymentController : ControllerBase
                 .Where(p => p.OrderId == dto.OrderId && p.Status != Domain.Enums.PaymentStatus.Completed);
             _context.Payments.RemoveRange(existingPending);
 
+            // Pagos por partes (división de cuenta): suma de partes YA cobradas (solo COMPLETED).
+            // Se suma Amount (no TotalAmount) para reconciliar contra order.Total, que incluye ITBIS
+            // + propina legal pero NO la propina extra del mesero (esa va aparte en TipAmount).
+            decimal alreadyPaid = await _context.Payments
+                .Where(p => p.OrderId == dto.OrderId && p.Status == Domain.Enums.PaymentStatus.Completed)
+                .SumAsync(p => p.Amount);
+
+            // Guard anti-doble-cobro de la misma parte en división por comensal.
+            if (dto.BillSplitType == "ByComensal" && dto.SplitPartIndex is int partIdx)
+            {
+                bool yaPagada = await _context.Payments.AnyAsync(p =>
+                    p.OrderId == dto.OrderId &&
+                    p.Status == Domain.Enums.PaymentStatus.Completed &&
+                    p.BillSplitType == "ByComensal" &&
+                    p.SplitPartIndex == partIdx);
+                if (yaPagada)
+                    throw new InvalidOperationException($"La parte {partIdx} ya fue cobrada.");
+            }
+
             decimal totalPaid = 0;
 
             if (dto.SubPayments != null && dto.SubPayments.Count > 0)
@@ -506,37 +527,47 @@ public class PaymentController : ControllerBase
                 totalPaid = baseAmount;
             }
 
-            // S4.6 — Split bill validation: la suma de subPayments debe igualar order.Total.
-            // Tolerancia de 1 centavo para rounding. Sin esto, una orden podía marcarse
-            // Completed con deuda silenciosa (frontend mete totales mal cuadrados).
-            if (Math.Abs(totalPaid - order.Total) > 0.01m)
+            // S4.6bis — Pago acumulativo por partes (división por comensal): reconciliar contra
+            // order.Total usando la suma de partes ya cobradas (Completed) + esta llamada.
+            decimal grandPaid = alreadyPaid + totalPaid;
+
+            // Rechazar SOBREPAGO (tolerancia 1 centavo).
+            if (grandPaid > order.Total + 0.01m)
             {
                 throw new InvalidOperationException(
-                    $"El monto cobrado ({totalPaid:0.00}) no coincide con el total de la orden ({order.Total:0.00}). Diferencia: {(order.Total - totalPaid):0.00}.");
+                    $"El cobro excede el total de la orden. Ya cobrado: {alreadyPaid:0.00}, este cobro: {totalPaid:0.00}, total: {order.Total:0.00}.");
             }
 
-            // Completar la orden
-            if (order.Status != Domain.Enums.OrderStatus.Completed)
-            {
-                order.Status = Domain.Enums.OrderStatus.Completed;
-                order.CompletedAt = DateTime.UtcNow;
-                order.UpdatedAt = DateTime.UtcNow;
-            }
+            // ¿Esta llamada SALDA la orden? (>= total - tolerancia). Si no, es un pago PARCIAL:
+            // se persiste la parte cobrada pero NO se completa la orden ni se libera la mesa.
+            bool ordenSaldada = grandPaid >= order.Total - 0.01m;
 
-            // Mesa a Cleaning
             int? cleaningTableId = null;
-            if (order.Table != null)
+
+            if (ordenSaldada)
             {
-                order.Table.Status = Domain.Enums.TableStatus.Cleaning;
-                cleaningTableId = order.Table.Id;
-                // Cerrar la sesión activa de la mesa al cobrar: evita sesiones huérfanas y
-                // destraba el auto-complete de la reserva Seated (que espera IsActive=false).
-                var activeSession = await _context.TableSessions
-                    .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
-                if (activeSession != null)
+                // Completar la orden
+                if (order.Status != Domain.Enums.OrderStatus.Completed)
                 {
-                    activeSession.IsActive = false;
-                    activeSession.EndTime = DateTime.UtcNow;
+                    order.Status = Domain.Enums.OrderStatus.Completed;
+                    order.CompletedAt = DateTime.UtcNow;
+                    order.UpdatedAt = DateTime.UtcNow;
+                }
+
+                // Mesa a Cleaning
+                if (order.Table != null)
+                {
+                    order.Table.Status = Domain.Enums.TableStatus.Cleaning;
+                    cleaningTableId = order.Table.Id;
+                    // Cerrar la sesión activa de la mesa al cobrar: evita sesiones huérfanas y
+                    // destraba el auto-complete de la reserva Seated (que espera IsActive=false).
+                    var activeSession = await _context.TableSessions
+                        .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
+                    if (activeSession != null)
+                    {
+                        activeSession.IsActive = false;
+                        activeSession.EndTime = DateTime.UtcNow;
+                    }
                 }
             }
 
@@ -549,8 +580,15 @@ public class PaymentController : ControllerBase
                 await _tableNotifier.TableWaiterChangedAsync(cleaningTableId.Value, null, null);
             }
 
-            _logger.LogInformation("Payment collected by processor {ProcessorId} for order {OrderId}, table set to Cleaning", processorId, dto.OrderId);
-            return Ok(new { message = "Cobro registrado. Mesa en limpieza.", tableId = order.TableId });
+            if (ordenSaldada)
+            {
+                _logger.LogInformation("Payment collected by processor {ProcessorId} for order {OrderId}, table set to Cleaning", processorId, dto.OrderId);
+                return Ok(new { message = "Cobro registrado. Mesa en limpieza.", completed = true, remaining = 0m, tableId = order.TableId });
+            }
+
+            decimal remaining = Math.Round(order.Total - grandPaid, 2);
+            _logger.LogInformation("Partial payment by processor {ProcessorId} for order {OrderId}: paid {Paid}, remaining {Remaining}", processorId, dto.OrderId, grandPaid, remaining);
+            return Ok(new { message = $"Parte cobrada. Faltan RD$ {remaining:0.00}.", completed = false, remaining, tableId = order.TableId });
         }
         catch (InvalidOperationException ex)
         {
