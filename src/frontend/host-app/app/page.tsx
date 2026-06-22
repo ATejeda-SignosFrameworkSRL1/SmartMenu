@@ -828,7 +828,10 @@ export default function HostApp() {
     });
   });
   const sortedDateKeys = Object.keys(groupedByDate).sort((a, b) => {
-    // HOY (rank 0) siempre primero; futuras (rank 1) cronológico; pasadas (rank 2) al final, más reciente arriba.
+    // Vista "Pendientes": orden 100% ASCENDENTE por fecha (y por hora dentro de cada fecha),
+    // así las pendientes —vencidas y próximas— fluyen cronológicamente, la más antigua arriba.
+    if (reservationFilter === 'pending') return a.localeCompare(b);
+    // Otras vistas: HOY (rank 0) primero; futuras (rank 1) cronológico; pasadas (rank 2) más reciente arriba.
     const ra = a === today ? 0 : (a > today ? 1 : 2);
     const rb = b === today ? 0 : (b > today ? 1 : 2);
     if (ra !== rb) return ra - rb;
