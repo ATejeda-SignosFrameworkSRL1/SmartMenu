@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import { useTranslations, useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
 import {
   CalendarDays, Users, Clock, ChevronLeft, CheckCircle2, Loader2,
   Phone, Mail, User as UserIcon, PartyPopper, ArrowRight,
@@ -35,6 +37,9 @@ function tomorrowStr(): string {
 }
 
 export default function BookPage() {
+  const t = useTranslations('booking');
+  const to = useTranslations('occasions');
+  const dl = dateLocale(useLocale());
   const [step, setStep] = useState<Step>(1);
   const [date, setDate] = useState(tomorrowStr());
   const [guests, setGuests] = useState(2);
@@ -71,16 +76,16 @@ export default function BookPage() {
       const data = await getSlots(date, guests);
       setAvailability(data);
     } catch {
-      setSlotsError('No pudimos cargar la disponibilidad. Reintenta.');
+      setSlotsError(t('toastLoadFailed'));
     } finally {
       setLoadingSlots(false);
     }
-  }, [date, guests]);
+  }, [date, guests, t]);
 
   useEffect(() => {
     if (step !== 2) return;
-    const t = setTimeout(fetchSlots, 250);
-    return () => clearTimeout(t);
+    const tm = setTimeout(fetchSlots, 250);
+    return () => clearTimeout(tm);
   }, [step, fetchSlots]);
 
   // ─── Polling de disponibilidad mientras se ve la rejilla (grey-out en vivo) ───
@@ -100,7 +105,7 @@ export default function BookPage() {
       const s = Math.round((expiry - Date.now()) / 1000);
       setSecondsLeft(s);
       if (s <= 0 && step === 3) {
-        toast.error('El tiempo de reserva expiró, elige otro horario');
+        toast.error(t('toastHoldExpired'));
         setHold(null);
         setSelectedTime(null);
         setStep(2);
@@ -109,7 +114,7 @@ export default function BookPage() {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [hold, step]);
+  }, [hold, step, t]);
 
   const windowsWithSlots = useMemo(() => {
     if (!availability) return [];
@@ -134,7 +139,7 @@ export default function BookPage() {
       setStep(3);
     } catch (e) {
       const err = e as Error & { code?: string };
-      toast.error(err.message || 'Ese horario ya no está disponible');
+      toast.error(err.message || t('toastSlotTaken'));
       setSelectedTime(null);
       fetchSlots();
     } finally {
@@ -145,7 +150,7 @@ export default function BookPage() {
   async function submit() {
     if (!hold) return;
     if (!name.trim() || !phone.trim()) {
-      toast.error('Nombre y teléfono son obligatorios');
+      toast.error(t('toastNamePhone'));
       return;
     }
     setSubmitting(true);
@@ -163,10 +168,10 @@ export default function BookPage() {
     } catch (e) {
       const err = e as Error & { code?: string };
       if (err.code === 'EXPIRED') {
-        toast.error('El tiempo de reserva expiró, elige otro horario');
+        toast.error(t('toastHoldExpired'));
         setHold(null); setSelectedTime(null); setStep(2);
       } else {
-        toast.error(err.message || 'No se pudo confirmar la reserva');
+        toast.error(err.message || t('toastConfirmFailed'));
       }
     } finally {
       setSubmitting(false);
@@ -200,14 +205,14 @@ export default function BookPage() {
             <button
               onClick={() => setStep((s) => (s - 1) as Step)}
               className="p-2 -ml-2 rounded-lg hover:bg-slate-800"
-              aria-label="Atrás"
+              aria-label={t('back')}
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
           )}
           <div>
-            <h1 className="text-lg font-semibold leading-tight">Reservar mesa</h1>
-            <p className="text-xs text-amber-400/80">Paso {step} de 4</p>
+            <h1 className="text-lg font-semibold leading-tight">{t('bookTitle')}</h1>
+            <p className="text-xs text-amber-400/80">{t('stepOf', { current: step, total: 4 })}</p>
           </div>
         </div>
         <div className="h-1 bg-slate-800">
@@ -221,7 +226,7 @@ export default function BookPage() {
           <section className="space-y-6">
             <div>
               <label className="flex items-center gap-2 text-sm font-medium mb-2">
-                <CalendarDays className="w-4 h-4 text-amber-400" /> Fecha
+                <CalendarDays className="w-4 h-4 text-amber-400" /> {t('dateLabel')}
               </label>
               <input
                 type="date"
@@ -233,21 +238,21 @@ export default function BookPage() {
             </div>
             <div>
               <label className="flex items-center gap-2 text-sm font-medium mb-2">
-                <Users className="w-4 h-4 text-amber-400" /> Comensales
+                <Users className="w-4 h-4 text-amber-400" /> {t('guestsLabel')}
               </label>
               <div className="flex items-center justify-between rounded-xl bg-slate-900 border border-slate-700 p-2">
                 <button
                   onClick={() => setGuests((g) => Math.max(1, g - 1))}
                   className="h-12 w-12 rounded-lg bg-slate-800 text-2xl font-bold disabled:opacity-40"
                   disabled={guests <= 1}
-                  aria-label="Menos comensales"
+                  aria-label={t('lessGuests')}
                 >−</button>
                 <span className="text-2xl font-semibold tabular-nums">{guests}</span>
                 <button
                   onClick={() => setGuests((g) => Math.min(20, g + 1))}
                   className="h-12 w-12 rounded-lg bg-slate-800 text-2xl font-bold disabled:opacity-40"
                   disabled={guests >= 20}
-                  aria-label="Más comensales"
+                  aria-label={t('moreGuests')}
                 >+</button>
               </div>
             </div>
@@ -258,7 +263,7 @@ export default function BookPage() {
         {step === 2 && (
           <section className="space-y-5">
             <p className="text-sm text-slate-400">
-              {new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })} · {guests} {guests === 1 ? 'persona' : 'personas'}
+              {new Date(date + 'T00:00:00').toLocaleDateString(dl, { weekday: 'long', day: 'numeric', month: 'long' })} · {t('persons', { count: guests })}
             </p>
             {loadingSlots && !availability && (
               <div className="grid grid-cols-3 gap-2">
@@ -270,13 +275,13 @@ export default function BookPage() {
             {slotsError && (
               <div className="text-center py-8">
                 <p className="text-slate-400 mb-3">{slotsError}</p>
-                <button onClick={fetchSlots} className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-semibold">Reintentar</button>
+                <button onClick={fetchSlots} className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-semibold">{t('retry')}</button>
               </div>
             )}
             {availability && !anyBookable && !loadingSlots && (
               <div className="text-center py-10 text-slate-400">
                 <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                No hay horarios disponibles para esta fecha. Prueba otro día.
+                {t('noSlots')}
               </div>
             )}
             {windowsWithSlots.map((w) => (
@@ -306,7 +311,7 @@ export default function BookPage() {
                           ].join(' ')}
                         >
                           <span className="text-base font-semibold tabular-nums">{to12h(s.time)}</span>
-                          {s.status === 'limited' && !disabled && <span className="text-[10px]">Pocos</span>}
+                          {s.status === 'limited' && !disabled && <span className="text-[10px]">{t('few')}</span>}
                         </button>
                       );
                     })}
@@ -323,26 +328,26 @@ export default function BookPage() {
             {selectedTime && (
               <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm">
                 <Clock className="w-4 h-4 text-amber-400" />
-                <span>Mesa reservada para las <b>{to12h(selectedTime)}</b> · {guests} pers.</span>
+                <span>{t('tableHeldForShort', { time: to12h(selectedTime) })} · {t('personsShort', { count: guests })}</span>
                 {secondsLeft != null && <span className="ml-auto font-mono text-amber-400">{mmss}</span>}
               </div>
             )}
-            <Field icon={<UserIcon className="w-4 h-4" />} label="Nombre" required>
-              <input value={name} onChange={(e) => setName(e.target.value)} className="inp" placeholder="Tu nombre" />
+            <Field icon={<UserIcon className="w-4 h-4" />} label={t('nameLabelShort')} required>
+              <input value={name} onChange={(e) => setName(e.target.value)} className="inp" placeholder={t('namePh')} />
             </Field>
-            <Field icon={<Phone className="w-4 h-4" />} label="Teléfono" required>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className="inp" placeholder="809-000-0000" />
+            <Field icon={<Phone className="w-4 h-4" />} label={t('phoneLabel')} required>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className="inp" placeholder={t('phonePhAlt')} />
             </Field>
-            <Field icon={<Mail className="w-4 h-4" />} label="Email (opcional)">
-              <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" className="inp" placeholder="tu@email.com" />
+            <Field icon={<Mail className="w-4 h-4" />} label={t('emailLabel')}>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" className="inp" placeholder={t('emailPh')} />
             </Field>
-            <Field icon={<PartyPopper className="w-4 h-4" />} label="Ocasión">
+            <Field icon={<PartyPopper className="w-4 h-4" />} label={t('occasionLabel')}>
               <select value={occasion} onChange={(e) => setOccasion(Number(e.target.value))} className="inp">
-                {OCCASIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {OCCASIONS.map((o) => <option key={o.value} value={o.value}>{to(o.key)}</option>)}
               </select>
             </Field>
-            <Field label="Notas (opcional)">
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="inp" placeholder="Alergias, silla de bebé, etc." />
+            <Field label={t('notesLabel')}>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="inp" placeholder={t('notesPh')} />
             </Field>
             <style>{`.inp{width:100%;height:3rem;border-radius:0.75rem;background:#0f172a;border:1px solid #334155;padding:0 0.9rem;color:#e2e8f0}.inp:focus{outline:none;border-color:#f59e0b}textarea.inp{height:auto;padding:0.6rem 0.9rem}`}</style>
           </section>
@@ -352,14 +357,19 @@ export default function BookPage() {
         {step === 4 && result && (
           <section className="text-center py-8 space-y-4">
             <CheckCircle2 className="w-16 h-16 mx-auto text-emerald-400" />
-            <h2 className="text-2xl font-bold">{result.status === 'Confirmed' ? '¡Reserva confirmada!' : '¡Reserva recibida!'}</h2>
-            <p className="text-slate-400">{result.status === 'Confirmed' ? 'Te esperamos el ' : 'Solicitaste el '}{new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'long' })} a las {to12h(selectedTime)}.{result.status !== 'Confirmed' && ' El restaurante debe aprobarla; te avisaremos al confirmarla.'}</p>
+            <h2 className="text-2xl font-bold">{result.status === 'Confirmed' ? t('confirmedTitle') : t('receivedTitle')}</h2>
+            <p className="text-slate-400">
+              {result.status === 'Confirmed'
+                ? t('weWaitYou', { date: new Date(date + 'T00:00:00').toLocaleDateString(dl, { day: 'numeric', month: 'long' }), time: to12h(selectedTime) })
+                : t('youRequested', { date: new Date(date + 'T00:00:00').toLocaleDateString(dl, { day: 'numeric', month: 'long' }), time: to12h(selectedTime) })}
+              {result.status !== 'Confirmed' && t('needsApproval')}
+            </p>
             <div className="inline-block rounded-xl bg-slate-900 border border-slate-700 px-6 py-4">
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Código de confirmación</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wide">{t('confirmationCode')}</p>
               <p className="text-2xl font-mono font-bold text-amber-400">{result.confirmationCode}</p>
             </div>
-            <p className="text-sm text-slate-400">{guests} {guests === 1 ? 'persona' : 'personas'} · Estado: {result.status === 'Confirmed' ? 'Confirmada' : 'Pendiente de aprobación'}</p>
-            <button onClick={reset} className="mt-4 px-5 py-3 rounded-xl bg-slate-800 font-semibold">Hacer otra reserva</button>
+            <p className="text-sm text-slate-400">{t('persons', { count: guests })} · {t('statusLabel')} {result.status === 'Confirmed' ? t('statusConfirmed') : t('statusPending')}</p>
+            <button onClick={reset} className="mt-4 px-5 py-3 rounded-xl bg-slate-800 font-semibold">{t('anotherBooking')}</button>
           </section>
         )}
       </main>
@@ -370,17 +380,17 @@ export default function BookPage() {
           <div className="mx-auto max-w-lg">
             {step === 1 && (
               <button onClick={() => setStep(2)} className="w-full h-14 rounded-xl bg-amber-500 text-slate-950 font-bold text-lg flex items-center justify-center gap-2">
-                Ver horarios <ArrowRight className="w-5 h-5" />
+                {t('seeSlotsShort')} <ArrowRight className="w-5 h-5" />
               </button>
             )}
             {step === 2 && (
               <p className="text-center text-sm text-slate-400 flex items-center justify-center gap-2">
-                {holding ? (<><Loader2 className="w-4 h-4 animate-spin" /> Reservando…</>) : 'Toca un horario disponible'}
+                {holding ? (<><Loader2 className="w-4 h-4 animate-spin" /> {t('reserving')}</>) : t('pickSlotHint')}
               </p>
             )}
             {step === 3 && (
               <button onClick={submit} disabled={submitting} className="w-full h-14 rounded-xl bg-amber-500 text-slate-950 font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-60">
-                {submitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Confirmando…</> : 'Confirmar reserva'}
+                {submitting ? <><Loader2 className="w-5 h-5 animate-spin" /> {t('confirming')}</> : t('submitTable')}
               </button>
             )}
           </div>

@@ -129,12 +129,13 @@ export async function getTrack(code: string): Promise<ReservationTrack | null> {
   }
 }
 
-export const OCCASIONS: { value: number; label: string }[] = [
-  { value: 0, label: 'Sin ocasión especial' },
-  { value: 1, label: '🎂 Cumpleaños' },
-  { value: 2, label: '💍 Aniversario' },
-  { value: 3, label: '💼 Negocios' },
-  { value: 4, label: '❤️ Romántica' },
-  { value: 5, label: '🎉 Celebración familiar' },
-  { value: 99, label: 'Otra' },
+// Las etiquetas se traducen en la UI vía t(`occasions.${key}`); el value va al backend.
+export const OCCASIONS: { value: number; key: string }[] = [
+  { value: 0, key: 'none' },
+  { value: 1, key: 'birthday' },
+  { value: 2, key: 'anniversary' },
+  { value: 3, key: 'business' },
+  { value: 4, key: 'romantic' },
+  { value: 5, key: 'family' },
+  { value: 99, key: 'other' },
 ];

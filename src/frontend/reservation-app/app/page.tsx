@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
 import {
   ChefHat,
   Leaf,
@@ -20,9 +19,11 @@ import {
   UtensilsCrossed,
   Wine,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 import dynamic from 'next/dynamic';
 import { createAuthApi } from '@/lib/auth-client';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 // Client-only: BookingEngineWarm calcula fechas con `new Date()` en el render
 // inicial; al prerenderizar (SSG) la fecha queda congelada a la hora de build y
@@ -43,18 +44,6 @@ interface Dish {
   categoryName?: string;
 }
 
-interface AvailableTable {
-  id: number;
-  tableNumber: number;
-  capacity: number;
-  zoneName?: string;
-}
-
-interface ZoneOption {
-  id: number;
-  name: string;
-}
-
 /* ───────── Helpers ───────── */
 function formatPrice(n: number) {
   return `RD$ ${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
@@ -68,6 +57,7 @@ function cn(...classes: (string | false | undefined | null)[]) {
    PAGE COMPONENT
    ═══════════════════════════════════════════════════════ */
 export default function ReservationPage() {
+  const t = useTranslations();
   const [scrolled, setScrolled] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
 
@@ -83,6 +73,13 @@ export default function ReservationPage() {
     setMobileNav(false);
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const navItems: [string, string][] = [
+    ['nosotros', t('nav.about')],
+    ['menu', t('nav.menu')],
+    ['reservar', t('nav.reserve')],
+    ['contacto', t('nav.contact')],
+  ];
 
   return (
     <>
@@ -103,12 +100,7 @@ export default function ReservationPage() {
 
           {/* Desktop nav */}
           <nav className="hidden items-center gap-8 md:flex">
-            {[
-              ['nosotros', 'Nosotros'],
-              ['menu', 'Menú'],
-              ['reservar', 'Reservar'],
-              ['contacto', 'Contacto'],
-            ].map(([id, label]) => (
+            {navItems.map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => scrollTo(id)}
@@ -117,34 +109,33 @@ export default function ReservationPage() {
                 {label}
               </button>
             ))}
+            <LanguageSwitcher />
             <button
               onClick={() => scrollTo('reservar')}
               className="btn-primary text-sm"
             >
-              Reservar Ahora
+              {t('nav.reserveNow')}
             </button>
           </nav>
 
           {/* Mobile toggle */}
-          <button
-            className="text-white md:hidden"
-            onClick={() => setMobileNav(!mobileNav)}
-            aria-label="Menú"
-          >
-            {mobileNav ? <X className="h-7 w-7" /> : <MenuIcon className="h-7 w-7" />}
-          </button>
+          <div className="flex items-center gap-3 md:hidden">
+            <LanguageSwitcher />
+            <button
+              className="text-white"
+              onClick={() => setMobileNav(!mobileNav)}
+              aria-label={t('nav.menuAria')}
+            >
+              {mobileNav ? <X className="h-7 w-7" /> : <MenuIcon className="h-7 w-7" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile nav */}
         {mobileNav && (
           <div className="border-t border-warm-800 bg-warm-950/98 backdrop-blur-md md:hidden">
             <div className="container-narrow flex flex-col gap-1 py-4">
-              {[
-                ['nosotros', 'Nosotros'],
-                ['menu', 'Menú'],
-                ['reservar', 'Reservar'],
-                ['contacto', 'Contacto'],
-              ].map(([id, label]) => (
+              {navItems.map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => scrollTo(id)}
@@ -157,7 +148,7 @@ export default function ReservationPage() {
                 onClick={() => scrollTo('reservar')}
                 className="btn-primary mt-2 w-full text-center"
               >
-                Reservar Ahora
+                {t('nav.reserveNow')}
               </button>
             </div>
           </div>
@@ -175,29 +166,29 @@ export default function ReservationPage() {
 
           <div className="container-narrow relative z-10 px-4 text-center">
             <span className="mb-6 inline-block rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-primary-light">
-              Experiencia Gastronómica
+              {t('hero.badge')}
             </span>
             <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
-              Una Experiencia
+              {t('hero.titleLine1')}
               <br />
-              <span className="text-primary-light">Gastronómica Única</span>
+              <span className="text-primary-light">{t('hero.titleHighlight')}</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg text-warm-400 sm:text-xl">
-              Reserva tu mesa y disfruta de la mejor cocina en un ambiente excepcional
+              {t('hero.subtitle')}
             </p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <button
                 onClick={() => scrollTo('reservar')}
                 className="btn-primary-lg group"
               >
-                Reservar Mi Mesa
+                {t('hero.ctaReserve')}
                 <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
               </button>
               <button
                 onClick={() => scrollTo('menu')}
                 className="btn-outline border-warm-600 text-warm-300 hover:border-primary hover:bg-primary hover:text-white"
               >
-                Ver Menú
+                {t('hero.ctaMenu')}
               </button>
             </div>
 
@@ -206,18 +197,18 @@ export default function ReservationPage() {
               <div className="flex items-center gap-2 text-warm-400">
                 <Star className="h-5 w-5 fill-primary-light text-primary-light" />
                 <span className="text-sm font-medium">
-                  <strong className="text-white">4.9</strong> en Google
+                  <strong className="text-white">4.9</strong> {t('hero.ratingGoogle')}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-warm-400">
                 <Users className="h-5 w-5 text-primary-light" />
                 <span className="text-sm font-medium">
-                  <strong className="text-white">500+</strong> Reseñas
+                  <strong className="text-white">500+</strong> {t('hero.reviews')}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-warm-400">
                 <ChefHat className="h-5 w-5 text-primary-light" />
-                <span className="text-sm font-medium text-white">Chef Premiado</span>
+                <span className="text-sm font-medium text-white">{t('hero.awardedChef')}</span>
               </div>
             </div>
           </div>
@@ -236,25 +227,19 @@ export default function ReservationPage() {
             <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
               <div>
                 <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary">
-                  Nuestra Historia
+                  {t('about.kicker')}
                 </span>
                 <h2 className="font-display text-3xl font-bold text-warm-900 sm:text-4xl lg:text-5xl">
-                  Donde el Arte Culinario{' '}
-                  <span className="text-primary">Cobra Vida</span>
+                  {t('about.titleA')}{' '}
+                  <span className="text-primary">{t('about.titleHighlight')}</span>
                 </h2>
                 <p className="mt-6 text-lg leading-relaxed text-warm-600">
-                  Nacimos de la pasión por la buena mesa y el deseo de crear momentos
-                  inolvidables. Cada plato es una obra maestra que combina los sabores
-                  más auténticos con técnicas innovadoras, todo servido en un ambiente
-                  cuidadosamente diseñado para despertar tus sentidos.
+                  {t('about.p1')}
                 </p>
                 <p className="mt-4 text-lg leading-relaxed text-warm-600">
-                  Con{' '}
-                  <strong className="text-warm-800">
-                    más de 10 años de excelencia culinaria
-                  </strong>
-                  , hemos construido una reputación basada en la calidad, la frescura y
-                  un servicio excepcional.
+                  {t('about.p2a')}
+                  <strong className="text-warm-800">{t('about.p2bold')}</strong>
+                  {t('about.p2b')}
                 </p>
                 <button
                   onClick={() =>
@@ -264,7 +249,7 @@ export default function ReservationPage() {
                   }
                   className="btn-primary mt-8"
                 >
-                  Reservar una Experiencia
+                  {t('about.cta')}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
@@ -275,7 +260,7 @@ export default function ReservationPage() {
                   <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
                     <Wine className="h-20 w-20 text-primary/40" />
                     <p className="font-display text-xl text-warm-500">
-                      Imagen del Restaurante
+                      {t('about.imagePlaceholder')}
                     </p>
                   </div>
                 </div>
@@ -283,7 +268,7 @@ export default function ReservationPage() {
                   <span className="block font-display text-3xl font-bold text-white">
                     10+
                   </span>
-                  <span className="text-sm text-primary-50">Años</span>
+                  <span className="text-sm text-primary-50">{t('about.yearsLabel')}</span>
                 </div>
               </div>
             </div>
@@ -294,29 +279,17 @@ export default function ReservationPage() {
         <section className="section-padding bg-warm-100/60">
           <div className="container-narrow text-center">
             <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary">
-              Por Qué Elegirnos
+              {t('pillars.kicker')}
             </span>
             <h2 className="font-display text-3xl font-bold text-warm-900 sm:text-4xl">
-              Una Experiencia Incomparable
+              {t('pillars.title')}
             </h2>
 
             <div className="mt-14 grid gap-8 sm:grid-cols-3">
               {[
-                {
-                  icon: Leaf,
-                  title: 'Ingredientes Frescos',
-                  text: 'Seleccionamos diariamente los mejores ingredientes de productores locales para garantizar la frescura y calidad en cada plato.',
-                },
-                {
-                  icon: Sparkles,
-                  title: 'Ambiente Exclusivo',
-                  text: 'Un espacio diseñado para crear la atmósfera perfecta, donde cada detalle ha sido pensado para tu comodidad y disfrute.',
-                },
-                {
-                  icon: ChefHat,
-                  title: 'Chef de Clase Mundial',
-                  text: 'Nuestro chef ejecutivo trae consigo años de experiencia internacional y una visión creativa que transforma cada cena en arte.',
-                },
+                { icon: Leaf, title: t('pillars.freshTitle'), text: t('pillars.freshText') },
+                { icon: Sparkles, title: t('pillars.ambienceTitle'), text: t('pillars.ambienceText') },
+                { icon: ChefHat, title: t('pillars.chefTitle'), text: t('pillars.chefText') },
               ].map((item) => (
                 <div
                   key={item.title}
@@ -348,10 +321,10 @@ export default function ReservationPage() {
           <div className="container-narrow">
             <div className="text-center">
               <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary">
-                Visítanos
+                {t('contact.kicker')}
               </span>
               <h2 className="font-display text-3xl font-bold text-warm-900 sm:text-4xl">
-                Horario &amp; Ubicación
+                {t('contact.title')}
               </h2>
             </div>
 
@@ -360,17 +333,17 @@ export default function ReservationPage() {
               <div className="rounded-2xl border border-warm-200 bg-white p-8 text-center shadow-sm">
                 <Clock className="mx-auto h-10 w-10 text-primary" />
                 <h3 className="mt-4 font-display text-xl font-bold text-warm-900">
-                  Horario
+                  {t('contact.hoursTitle')}
                 </h3>
                 <div className="mt-4 space-y-2 text-sm text-warm-600">
                   <p>
-                    <strong className="text-warm-800">Lun – Jue:</strong> 12:00 pm – 10:00 pm
+                    <strong className="text-warm-800">{t('contact.hoursMonThuDays')}</strong> {t('contact.hoursMonThuTime')}
                   </p>
                   <p>
-                    <strong className="text-warm-800">Vie – Sáb:</strong> 12:00 pm – 11:00 pm
+                    <strong className="text-warm-800">{t('contact.hoursFriSatDays')}</strong> {t('contact.hoursFriSatTime')}
                   </p>
                   <p>
-                    <strong className="text-warm-800">Domingo:</strong> 12:00 pm – 9:00 pm
+                    <strong className="text-warm-800">{t('contact.hoursSunDays')}</strong> {t('contact.hoursSunTime')}
                   </p>
                 </div>
               </div>
@@ -379,12 +352,12 @@ export default function ReservationPage() {
               <div className="rounded-2xl border border-warm-200 bg-white p-8 text-center shadow-sm">
                 <MapPin className="mx-auto h-10 w-10 text-primary" />
                 <h3 className="mt-4 font-display text-xl font-bold text-warm-900">
-                  Dirección
+                  {t('contact.addressTitle')}
                 </h3>
                 <p className="mt-4 text-sm leading-relaxed text-warm-600">
-                  Calle Principal #123
+                  {t('contact.addressLine1')}
                   <br />
-                  Santo Domingo, RD
+                  {t('contact.addressLine2')}
                 </p>
               </div>
 
@@ -392,7 +365,7 @@ export default function ReservationPage() {
               <div className="rounded-2xl border border-warm-200 bg-white p-8 text-center shadow-sm">
                 <Phone className="mx-auto h-10 w-10 text-primary" />
                 <h3 className="mt-4 font-display text-xl font-bold text-warm-900">
-                  Contacto
+                  {t('contact.contactTitle')}
                 </h3>
                 <div className="mt-4 space-y-2 text-sm text-warm-600">
                   <p>(809) 555-0100</p>
@@ -407,39 +380,24 @@ export default function ReservationPage() {
         <section className="section-padding bg-warm-50">
           <div className="container-narrow text-center">
             <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary">
-              Testimonios
+              {t('testimonials.kicker')}
             </span>
             <h2 className="font-display text-3xl font-bold text-warm-900 sm:text-4xl">
-              Lo Que Dicen Nuestros Clientes
+              {t('testimonials.title')}
             </h2>
 
             <div className="mt-14 grid gap-8 sm:grid-cols-3">
               {[
-                {
-                  name: 'María García',
-                  quote:
-                    'Una experiencia inolvidable. La comida estaba espectacular y el servicio fue impecable. Sin duda, el mejor restaurante de la ciudad.',
-                  stars: 5,
-                },
-                {
-                  name: 'Carlos Rodríguez',
-                  quote:
-                    'Celebramos nuestro aniversario aquí y fue perfecto. El ambiente es elegante y acogedor, y cada plato fue una delicia.',
-                  stars: 5,
-                },
-                {
-                  name: 'Ana Martínez',
-                  quote:
-                    'Los ingredientes frescos realmente hacen la diferencia. Se nota la pasión del chef en cada bocado. Volveremos pronto.',
-                  stars: 5,
-                },
-              ].map((t) => (
+                { name: 'María García', quote: t('testimonials.quote1'), stars: 5 },
+                { name: 'Carlos Rodríguez', quote: t('testimonials.quote2'), stars: 5 },
+                { name: 'Ana Martínez', quote: t('testimonials.quote3'), stars: 5 },
+              ].map((tm) => (
                 <div
-                  key={t.name}
+                  key={tm.name}
                   className="rounded-2xl border border-warm-200 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
                 >
                   <div className="flex justify-center gap-1">
-                    {Array.from({ length: t.stars }).map((_, i) => (
+                    {Array.from({ length: tm.stars }).map((_, i) => (
                       <Star
                         key={i}
                         className="h-5 w-5 fill-primary-light text-primary-light"
@@ -447,10 +405,10 @@ export default function ReservationPage() {
                     ))}
                   </div>
                   <p className="mt-5 text-sm italic leading-relaxed text-warm-600">
-                    &ldquo;{t.quote}&rdquo;
+                    &ldquo;{tm.quote}&rdquo;
                   </p>
                   <p className="mt-5 font-display text-lg font-semibold text-warm-900">
-                    {t.name}
+                    {tm.name}
                   </p>
                 </div>
               ))}
@@ -463,12 +421,11 @@ export default function ReservationPage() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(218,165,32,0.1),transparent_70%)]" />
           <div className="container-narrow relative z-10 text-center">
             <h2 className="font-display text-3xl font-bold text-white sm:text-4xl">
-              ¿Listo para una Experiencia
-              <span className="text-primary-light"> Inolvidable</span>?
+              {t('ctaBanner.titleA')}
+              <span className="text-primary-light"> {t('ctaBanner.titleHighlight')}</span>?
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-warm-400">
-              Reserva tu mesa ahora y déjanos sorprenderte con lo mejor de nuestra
-              cocina.
+              {t('ctaBanner.subtitle')}
             </p>
             <button
               onClick={() =>
@@ -478,7 +435,7 @@ export default function ReservationPage() {
               }
               className="btn-primary-lg mt-8"
             >
-              Reservar Ahora
+              {t('ctaBanner.button')}
               <ArrowRight className="h-5 w-5" />
             </button>
           </div>
@@ -503,28 +460,28 @@ export default function ReservationPage() {
               <a
                 href="#"
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-warm-700 text-warm-400 transition-all hover:border-primary hover:bg-primary hover:text-white"
-                aria-label="Instagram"
+                aria-label={t('footer.instagram')}
               >
                 <Instagram className="h-5 w-5" />
               </a>
               <a
                 href="#"
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-warm-700 text-warm-400 transition-all hover:border-primary hover:bg-primary hover:text-white"
-                aria-label="Facebook"
+                aria-label={t('footer.facebook')}
               >
                 <Facebook className="h-5 w-5" />
               </a>
               <a
                 href="#"
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-warm-700 text-warm-400 transition-all hover:border-primary hover:bg-primary hover:text-white"
-                aria-label="WhatsApp"
+                aria-label={t('footer.whatsapp')}
               >
                 <MessageCircle className="h-5 w-5" />
               </a>
             </div>
           </div>
           <p className="pt-8 text-center text-sm text-warm-600">
-            &copy; 2026 SmartMenu. Todos los derechos reservados.
+            {t('footer.rights')}
           </p>
         </div>
       </footer>
@@ -536,6 +493,7 @@ export default function ReservationPage() {
    MENU HIGHLIGHTS
    ═══════════════════════════════════════════════════════ */
 function MenuHighlights() {
+  const t = useTranslations('menuHighlights');
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -557,14 +515,13 @@ function MenuHighlights() {
       <div className="container-narrow">
         <div className="text-center">
           <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary">
-            Gastronomía
+            {t('kicker')}
           </span>
           <h2 className="font-display text-3xl font-bold text-warm-900 sm:text-4xl">
-            Nuestro Menú Destacado
+            {t('title')}
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-warm-600">
-            Descubre algunos de nuestros platos más populares, elaborados con los
-            ingredientes más frescos y la creatividad de nuestro chef.
+            {t('subtitle')}
           </p>
         </div>
 
@@ -630,13 +587,12 @@ function MenuHighlights() {
           </div>
         ) : (
           <p className="mt-14 text-center text-warm-500">
-            Menú no disponible en este momento. ¡Visítanos para descubrir nuestras
-            delicias!
+            {t('unavailable')}
           </p>
         )}
 
         <div className="mt-12 text-center">
-          <button className="btn-outline">Ver Menú Completo</button>
+          <button className="btn-outline">{t('viewFull')}</button>
         </div>
       </div>
     </section>
@@ -647,18 +603,19 @@ function MenuHighlights() {
    RESERVATION SECTION
    ═══════════════════════════════════════════════════════ */
 function ReservationSection() {
+  const t = useTranslations('reservation');
   return (
     <section id="reservar" className="section-padding bg-warm-950">
       <div className="container-narrow">
         <div className="text-center mb-10 sm:mb-12">
           <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary-light">
-            Reservaciones
+            {t('kicker')}
           </span>
           <h2 className="font-display text-3xl font-bold text-white sm:text-4xl">
-            Reserva tu mesa
+            {t('title')}
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-warm-400">
-            Capacidad dinámica por intervalo — elige tu horario en vivo y te confirmamos en segundos.
+            {t('subtitle')}
           </p>
         </div>
         <BookingEngineWarm forceMode="mesa" />
@@ -667,7 +624,7 @@ function ReservationSection() {
             href="/area-completa"
             className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-semibold text-primary-light transition hover:bg-primary/20"
           >
-            🏛 ¿Evento privado? Reservá un área completa
+            {t('areaButton')}
           </a>
         </div>
       </div>
