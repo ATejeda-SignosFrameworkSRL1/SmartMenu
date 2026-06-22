@@ -185,7 +185,7 @@ export default function OrderStatusPage() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Tu Orden
             </h1>
-            <p className="text-2xl font-bold text-primary-600">#{order.orderNumber}</p>
+            <p className="text-2xl font-bold text-primary-600">Pedido #{(order.orderNumber ?? '').split('-').pop()?.toUpperCase()}</p>
             <p className="text-gray-600 mt-2">Mesa {order.tableId}</p>
 
             {/* Cancelar orden — solo antes de que la cocina empiece (Pending o Confirmed) */}

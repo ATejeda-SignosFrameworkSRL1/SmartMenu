@@ -238,8 +238,8 @@ export default function PaymentPage() {
           <p className="text-gray-600 mb-6">El mesero procesará tu pago en breve</p>
           <div className="bg-gray-50 rounded-xl p-5 mb-6 space-y-3 text-left">
             <div className="flex justify-between text-gray-700">
-              <span>Orden</span>
-              <span className="font-bold">#{(order as any).orderNumber ?? (order as any).OrderNumber}</span>
+              <span>Pedido</span>
+              <span className="font-bold">#{(String((order as any).orderNumber ?? (order as any).OrderNumber ?? '')).split('-').pop()?.toUpperCase()}</span>
             </div>
             <div className="flex justify-between text-gray-700">
               <span>Total</span>
@@ -281,7 +281,7 @@ export default function PaymentPage() {
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">Solicitar Cuenta</h1>
-          <p className="text-gray-600 text-center">Orden #{(order as any).orderNumber ?? (order as any).OrderNumber}</p>
+          <p className="text-gray-600 text-center">Pedido #{(String((order as any).orderNumber ?? (order as any).OrderNumber ?? '')).split('-').pop()?.toUpperCase()}</p>
         </div>
 
         {/* Resumen */}

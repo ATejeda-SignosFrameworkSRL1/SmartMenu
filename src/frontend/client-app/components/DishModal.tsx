@@ -173,7 +173,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       : dish.imageUrl ? [{ imageUrl: dish.imageUrl }] : [];
                     if (images.length === 0) return null;
                     return (
-                      <div className="relative h-64 bg-gradient-to-br from-primary-100 to-secondary-100">
+                      <div className="relative h-52 sm:h-64 bg-gradient-to-br from-primary-100 to-secondary-100">
                         <img
                           src={images[activeImageIdx]?.imageUrl ?? images[0]?.imageUrl}
                           alt={dish.name}
@@ -200,10 +200,10 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                     );
                   })()}
 
-                  <div className="p-6">
+                  <div className="p-4 sm:p-6">
                     {/* Header */}
                     <div className="mb-4">
-                      <h2 className="text-3xl font-bold text-gray-900 mb-2">{dish.name}</h2>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{dish.name}</h2>
                       <div className="flex items-center gap-3 flex-wrap">
                         {dish.isVegetarian && (
                           <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">🌱 Vegetariano</span>
@@ -227,7 +227,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                     </div>
 
                     <div className="mb-6">
-                      <p className="text-4xl font-bold text-primary-600">RD$ {dish.price.toFixed(2)}</p>
+                      <p className="text-3xl sm:text-4xl font-bold text-primary-600">RD$ {dish.price.toFixed(2)}</p>
                     </div>
 
                     {/* Cantidad */}

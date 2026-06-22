@@ -10,6 +10,9 @@ import { useMenu, useDishTags } from '@/lib/hooks';
 import Link from 'next/link';
 import { DishModal } from '@/components/DishModal';
 
+// Código corto de la orden (6 chars del OrderNumber) que ve el cliente: "Pedido #6A1305".
+const shortOrder = (on?: string | null) => ((on ?? '').split('-').pop() ?? '').toUpperCase();
+
 const TAG_STYLES: Record<string, { bg: string; text: string; activeBg: string; activeText: string }> = {
   popular:     { bg: 'bg-yellow-50',  text: 'text-yellow-700',  activeBg: 'bg-yellow-400',  activeText: 'text-white' },
   muy_picante: { bg: 'bg-red-50',     text: 'text-red-700',     activeBg: 'bg-red-500',     activeText: 'text-white' },
@@ -39,6 +42,7 @@ function MenuPageInner() {
   const [selectedDishCategory, setSelectedDishCategory] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [activeOrderNumber, setActiveOrderNumber] = useState<string | null>(null);
   const activeOrderParam = searchParams?.get('activeOrder');
 
   const { data: menuData, isLoading, error } = useMenu();
@@ -94,9 +98,11 @@ function MenuPageInner() {
         const isActive = !['completed', 'cancelled', 'paid'].includes(status);
         if (isActive) {
           setActiveOrderId(String(candidateId));
+          setActiveOrderNumber(order.orderNumber ?? order.OrderNumber ?? null);
           localStorage.setItem('current_order_id', String(candidateId));
         } else {
           setActiveOrderId(null);
+          setActiveOrderNumber(null);
           localStorage.removeItem('current_order_id');
         }
       })
@@ -156,17 +162,20 @@ function MenuPageInner() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">SmartMenu</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">SmartMenu</h1>
               <p className="text-sm text-gray-600">{addToOrderId ? '🍰 Elige tus postres' : 'Menú Digital'}</p>
             </div>
             <div className="flex items-center gap-2">
               {activeOrderId && !addToOrderId && (
                 <button
                   onClick={() => router.push(`/order-status/${activeOrderId}`)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg transition-colors text-sm font-semibold"
+                  className="flex flex-col items-center px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-lg transition-colors font-semibold"
+                  title="Ver mi orden"
                 >
-                  <ClipboardList className="w-4 h-4" />
-                  Ver mi orden
+                  <span className="flex items-center gap-1.5 text-sm"><ClipboardList className="w-4 h-4" /> Ver mi orden</span>
+                  {activeOrderNumber && (
+                    <span className="text-[11px] font-bold leading-none mt-0.5 opacity-95">Pedido #{shortOrder(activeOrderNumber)}</span>
+                  )}
                 </button>
               )}
               <Link href={addToOrderId ? `/cart?orderId=${addToOrderId}` : '/cart'}>
