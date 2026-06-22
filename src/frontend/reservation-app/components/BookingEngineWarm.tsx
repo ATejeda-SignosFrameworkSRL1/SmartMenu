@@ -37,6 +37,10 @@ function to12h(t?: string | null): string {
   return `${h}:${m.padStart(2, '0')} ${ap}`;
 }
 
+// Mínimo FIJO de comensales para reservar un área completa. El host confirma la capacidad
+// real de cada zona contactando al cliente; el usuario puede subir desde este piso.
+const AREA_MIN_GUESTS = 7;
+
 // Horas para el modo "Área completa" (no hay grid de slots; el host aprueba). 12:00–22:00 cada 30 min.
 const AREA_TIMES: string[] = (() => {
   const out: string[] = [];
@@ -50,7 +54,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
   const [areaTime, setAreaTime] = useState('19:00');           // hora elegida en modo área (no hay grid de slots)
   const [date, setDate] = useState(tomorrowStr());
   const [calMonth, setCalMonth] = useState<Date>(() => { const t = new Date(); t.setDate(t.getDate() + 1); return new Date(t.getFullYear(), t.getMonth(), 1); });
-  const [guests, setGuests] = useState(2);
+  const [guests, setGuests] = useState(forceMode === 'area' ? AREA_MIN_GUESTS : 2);
   const [zoneId, setZoneId] = useState<number | null>(null);
   const [zones, setZones] = useState<ZoneOption[]>([]);
   const [availability, setAvailability] = useState<Availability | null>(null);
@@ -73,16 +77,13 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
     (async () => { setZones(await getZones()); })();
   }, []);
 
-  // Mínimo de comensales para "Área completa": 50% de la capacidad real de la zona (piso 4).
-  // Escala por zona (VIP pide menos que el Salón) y nunca supera la capacidad de la zona.
-  const selectedZone = zones.find((z) => z.id === zoneId);
-  const areaMin = Math.max(4, Math.ceil((selectedZone?.capacity ?? 0) * 0.5));
-  const minGuests = mode === 'area' && selectedZone ? areaMin : 1;
+  // Mínimo FIJO de comensales para "Área completa" (el host confirma la capacidad real por zona).
+  const minGuests = mode === 'area' ? AREA_MIN_GUESTS : 1;
 
-  // Al elegir zona en modo área, sube los comensales al mínimo si están por debajo.
+  // Al entrar en modo área, asegura que los comensales arranquen en el mínimo.
   useEffect(() => {
-    if (mode === 'area' && zoneId != null) setGuests((g) => Math.max(g, areaMin));
-  }, [mode, zoneId, areaMin]);
+    if (mode === 'area') setGuests((g) => Math.max(g, AREA_MIN_GUESTS));
+  }, [mode]);
 
   const fetchSlots = useCallback(async () => {
     setLoadingSlots(true); setSlotsError(null);
@@ -379,8 +380,8 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
               <button onClick={() => setGuests((g) => Math.min(20, g + 1))} disabled={guests >= 20}
                 className="h-12 w-12 rounded-lg bg-warm-800 text-2xl font-bold text-white hover:bg-warm-700 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Más comensales">+</button>
             </div>
-            {mode === 'area' && selectedZone && (
-              <p className="mt-1.5 text-xs text-primary-light">Mínimo para {selectedZone.name}: {areaMin} personas (reservás la zona completa).</p>
+            {mode === 'area' && (
+              <p className="mt-1.5 text-xs text-primary-light">Mínimo {AREA_MIN_GUESTS} personas para área completa. El restaurante te contactará para confirmar la capacidad de la zona elegida.</p>
             )}
           </div>
 
@@ -436,7 +437,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
           )}
           <button
             onClick={() => setStep(mode === 'area' ? 3 : 2)}
-            disabled={mode === 'area' && (zoneId == null || guests < areaMin)}
+            disabled={mode === 'area' && (zoneId == null || guests < AREA_MIN_GUESTS)}
             className="btn-primary-lg mt-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
           >
             {mode === 'area'
