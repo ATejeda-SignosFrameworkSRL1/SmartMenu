@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Utensils, Clock, DollarSign, CheckCircle, AlertCircle, XCircle, LogOut, Wine, Check, RefreshCw, QrCode, Users, ArrowRightLeft, Share2, Pin, PinOff, Bell, X, ChefHat, Play, Square, Phone, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Search, Plus, Minus, Pencil } from 'lucide-react';
+import { Utensils, Clock, DollarSign, CheckCircle, AlertCircle, XCircle, LogOut, Wine, Check, RefreshCw, QrCode, Users, ArrowRightLeft, Share2, Pin, PinOff, Bell, X, ChefHat, Play, Square, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Search, Plus, Minus, Pencil } from 'lucide-react';
 // Icono de exclamación para alarma en mesas con pedido sin asignar
 const AlertExclamation = () => (
   <span className="inline-flex items-center justify-center text-red-600 font-bold text-xl animate-pulse" style={{ animationDuration: '0.8s' }}>!</span>
@@ -183,6 +183,10 @@ export default function WaiterPage() {
   const [pmMixedCard, setPmMixedCard] = useState('');
   const [pmMixedTransfer, setPmMixedTransfer] = useState('');
   const [pmProcessing, setPmProcessing] = useState(false);
+  // División por comensal: partes ya cobradas + suma cobrada + parte activa a cobrar.
+  const [pmPaidParts, setPmPaidParts] = useState<number[]>([]);
+  const [pmPaidAmount, setPmPaidAmount] = useState(0);
+  const [pmPayPartIndex, setPmPayPartIndex] = useState(1);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [orderModalOrder, setOrderModalOrder] = useState<Order | null>(null);
   const [barOrdersRaw, setBarOrdersRaw] = useState<any[]>([]);
@@ -1264,6 +1268,20 @@ export default function WaiterPage() {
     }
   };
 
+  // Carga las partes YA cobradas (división por comensal) de una orden, desde el backend.
+  const loadPaidParts = async (orderId: number) => {
+    try {
+      const res = await api.get(`/api/payment/order/${orderId}`);
+      const rows: any[] = Array.isArray(res.data) ? res.data : [];
+      const bc = rows.filter(p => p.status === 'Completed' && p.billSplitType === 'ByComensal' && p.splitPartIndex != null);
+      setPmPaidParts(bc.map(p => Number(p.splitPartIndex)));
+      setPmPaidAmount(bc.reduce((s, p) => s + Number(p.amount ?? 0), 0));
+    } catch {
+      setPmPaidParts([]);
+      setPmPaidAmount(0);
+    }
+  };
+
   const openPaymentModal = (order: Order) => {
     setSelectedOrder(order);
     // Pre-cargar preferencias del cliente
@@ -1285,6 +1303,10 @@ export default function WaiterPage() {
     setPmPropAssign({});
     setPmPayAsPerson(1);
     setPmPayCategory('');
+    setPmPaidParts([]);
+    setPmPaidAmount(0);
+    setPmPayPartIndex(1);
+    loadPaidParts(getOrderId(order));
     // Si el cliente pidió Mixto, pre-rellenar el monto completo en efectivo como punto de partida
     if (clientMethod === 'Mixed') {
       setPmMixedCash(orderTotalForModal > 0 ? orderTotalForModal.toFixed(2) : '');
@@ -1319,7 +1341,10 @@ export default function WaiterPage() {
       const taxRate = orderTotal > 0 ? (Number((order as any).tax ?? 0) / (Number((order as any).subtotal ?? 1) || 1)) : 0.18;
       let myPortion = orderTotal;
       if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
-        myPortion = orderTotal / pmSplitParts;
+        const equalShareBC = Math.round((orderTotal / pmSplitParts) * 100) / 100;
+        const unpaidBC = Array.from({ length: pmSplitParts }, (_, i) => i + 1).filter(n => !pmPaidParts.includes(n));
+        // La última parte por cobrar salda el remanente exacto (evita drift de redondeo).
+        myPortion = unpaidBC.length <= 1 ? Math.round((orderTotal - pmPaidAmount) * 100) / 100 : equalShareBC;
       } else if (pmSplitType === 'ByTime') {
         myPortion = pmByTimePayPart === 1 ? (parseFloat(pmByTimePart1) || 0) : (parseFloat(pmByTimePart2) || 0);
         if (myPortion <= 0) myPortion = orderTotal;
@@ -1370,17 +1395,25 @@ export default function WaiterPage() {
           tipAmount: tipAmt,
           tipPercentage: tipPct,
           billSplitType: pmSplitType !== 'None' ? pmSplitType : undefined,
-          splitPartIndex: pmSplitType === 'ByComensal' ? pmSplitParts
+          splitPartIndex: pmSplitType === 'ByComensal' ? pmPayPartIndex
             : pmSplitType === 'ByTime' ? pmByTimePayPart
             : undefined,
         };
       }
 
-      await api.post('/api/payment/collect', body);
-      toast.success('Cobro registrado. Mesa en limpieza.');
-      setShowPaymentModal(false);
-      setSelectedOrder(null);
-      loadData(getUserId(user));
+      const res = await api.post('/api/payment/collect', body);
+      const ordenSaldada = res?.data?.completed !== false;
+      if (pmSplitType === 'ByComensal' && !ordenSaldada) {
+        // Pago parcial por comensal: refrescar partes y MANTENER el modal abierto.
+        toast.success(res?.data?.message ?? 'Parte cobrada.');
+        await loadPaidParts(orderId);
+        loadData(getUserId(user));
+      } else {
+        toast.success('Cobro registrado. Mesa en limpieza.');
+        setShowPaymentModal(false);
+        setSelectedOrder(null);
+        loadData(getUserId(user));
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.error ?? 'Error al registrar cobro';
       toast.error(msg);
@@ -2252,7 +2285,10 @@ export default function WaiterPage() {
                     if (t.status === 'Reserved') { openReservedTableInfo(t.id); return; }
                     if (t.status === 'Available') { setConfirmIdentifyTable({ id: t.id, tableNumber: t.tableNumber, zoneName: t.zoneName }); return; }
                   }
-                  toast('Mesa ocupada — sin pedido asignado a ti', { icon: 'ℹ️' });
+                  const fpTable = floorPlanData?.zones?.flatMap((z: any) => z.tables ?? []).find((x: any) => Number(x.id) === tid);
+                  const attendedBy = fpTable?.waiterName ?? fpTable?.waiter ?? null;
+                  if (attendedBy) toast(`Esta mesa está siendo atendida por ${attendedBy}`, { icon: '🧑‍🍳', duration: 5000 });
+                  else toast('Esta mesa está ocupada', { icon: 'ℹ️' });
                 }}
               />
             </div>
@@ -2800,8 +2836,10 @@ export default function WaiterPage() {
 
         // Porción a cobrar según split
         let myPortion = orderTotal;
+        const equalShareBC = pmSplitParts > 0 ? Math.round((orderTotal / pmSplitParts) * 100) / 100 : orderTotal;
         if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
-          myPortion = orderTotal / pmSplitParts;
+          const unpaidBC = Array.from({ length: pmSplitParts }, (_, i) => i + 1).filter(n => !pmPaidParts.includes(n));
+          myPortion = unpaidBC.length <= 1 ? Math.round((orderTotal - pmPaidAmount) * 100) / 100 : equalShareBC;
         } else if (pmSplitType === 'ByTime') {
           myPortion = pmByTimePayPart === 1 ? (parseFloat(pmByTimePart1) || 0) : (parseFloat(pmByTimePart2) || 0);
           if (myPortion <= 0) myPortion = orderTotal;
@@ -2920,6 +2958,7 @@ export default function WaiterPage() {
                           setPmByTimePart2('');
                           setPmPropAssign({});
                           setPmPayCategory('');
+                          setPmPayPartIndex(1);
                           // Si Mixto, resetear al total completo en efectivo cuando vuelve a None
                           if (pmMethod === 'Mixed' && value === 'None') {
                             setPmMixedCash(orderTotal.toFixed(2));
@@ -2933,12 +2972,27 @@ export default function WaiterPage() {
                   </div>
 
                   {pmSplitType === 'ByComensal' && (
-                    <div className="flex items-center gap-2 flex-wrap text-sm">
-                      <label className="text-gray-600">Entre</label>
-                      <select value={pmSplitParts} onChange={e => setPmSplitParts(parseInt(e.target.value) || 2)} className="border text-gray-900 rounded px-2 py-1">
-                        {[2,3,4,5,6].map(n => <option key={n} value={n}>{n} personas</option>)}
-                      </select>
-                      <span className="text-gray-600">→ Parte: <strong>RD$ {myPortion.toFixed(2)}</strong></span>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <label className="text-gray-600">Entre</label>
+                        <select value={pmSplitParts} onChange={e => { const n = parseInt(e.target.value) || 2; setPmSplitParts(n); const u = Array.from({ length: n }, (_, i) => i + 1).find(x => !pmPaidParts.includes(x)) ?? 1; setPmPayPartIndex(u); }} className="border text-gray-900 rounded px-2 py-1">
+                          {[2,3,4,5,6].map(n => <option key={n} value={n}>{n} personas</option>)}
+                        </select>
+                        <span className="text-gray-600">c/u ≈ RD$ {equalShareBC.toFixed(2)}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from({ length: pmSplitParts }, (_, i) => i + 1).map(n => {
+                          const paid = pmPaidParts.includes(n);
+                          const active = n === pmPayPartIndex && !paid;
+                          return (
+                            <button key={n} type="button" disabled={paid} onClick={() => setPmPayPartIndex(n)}
+                              className={`px-3 py-1.5 rounded-lg border text-sm ${paid ? 'bg-green-50 border-green-500 text-green-700' : active ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold' : 'border-gray-200 text-gray-700'}`}>
+                              Parte {n}{paid ? ' ✓' : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-gray-600">Faltan <strong>{pmSplitParts - pmPaidParts.length}</strong> de {pmSplitParts} · Cobrando parte {pmPayPartIndex}: <strong>RD$ {myPortion.toFixed(2)}</strong></p>
                     </div>
                   )}
 
@@ -4169,26 +4223,8 @@ export default function WaiterPage() {
                     <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">Cliente</p>
                   </div>
                   <p className="text-2xl font-bold text-gray-900 leading-tight">{reservedInfo.customerName}</p>
-                  {/* TAREA 2: teléfono/email del cliente ocultos. Sólo se ofrece "Contactar" (llamada) + comensales. */}
-                  <div className="grid grid-cols-2 gap-2.5 text-sm">
-                    {reservedInfo.customerPhone ? (
-                      <a
-                        href={`tel:${reservedInfo.customerPhone}`}
-                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg p-2.5 transition-colors flex items-center justify-center gap-1.5 font-semibold"
-                        aria-label="Contactar al cliente por teléfono"
-                      >
-                        <Phone className="w-4 h-4" />Contactar
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled
-                        className="bg-gray-100 text-gray-400 rounded-lg p-2.5 flex items-center justify-center gap-1.5 font-semibold cursor-not-allowed"
-                        title="Sin teléfono registrado"
-                      >
-                        <Phone className="w-4 h-4" />Contactar
-                      </button>
-                    )}
+                  {/* "Contactar" (llamada al cliente) eliminado a pedido. Solo se muestran comensales. */}
+                  <div className="text-sm">
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5 flex items-center gap-1">
                         <Users className="w-3 h-3" />Comensales
