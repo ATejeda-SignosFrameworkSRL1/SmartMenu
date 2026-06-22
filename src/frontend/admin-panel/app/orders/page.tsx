@@ -253,7 +253,7 @@ export default function OrdersPage() {
               const total = (order as any).total ?? (order as any).Total ?? 0;
               const items = order.items ?? [];
               const isUpdating = updatingId === order.id;
-              const shortCode = String(orderNumber).slice(-8).toUpperCase();
+              const shortCode = (String(orderNumber).split('-').pop() ?? '').toUpperCase();
 
               return (
                 <div

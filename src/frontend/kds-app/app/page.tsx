@@ -473,7 +473,7 @@ export default function KDSPage() {
                         <span className="text-xl font-bold">{elapsed} min</span>
                       </div>
                     </div>
-                    <p className="text-sm opacity-90 mt-1">Orden #{order.orderNumber}</p>
+                    <p className="text-sm opacity-90 mt-1">Pedido #{(order.orderNumber ?? '').split('-').pop()?.toUpperCase()}</p>
                   </div>
 
                   {/* Bloque de alergias destacado */}

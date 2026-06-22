@@ -278,7 +278,7 @@ export default function KitchenPage() {
                     )}>
                       <div>
                         <span className="text-2xl font-bold">Mesa {order.tableNumber ?? order.TableNumber ?? '-'}</span>
-                        <p className="text-xs text-muted-foreground">Orden #{order.orderNumber ?? order.OrderNumber ?? '-'}</p>
+                        <p className="text-xs text-muted-foreground">Pedido #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-'}</p>
                         {hasAllergies && (
                           <div className="flex items-center gap-1 text-destructive mt-1">
                             <AlertCircle className="h-4 w-4" />

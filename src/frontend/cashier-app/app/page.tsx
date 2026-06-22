@@ -261,7 +261,7 @@ function CajaTab({ user }: { user: any }) {
                       <td className="px-4 py-3 text-gray-500">
                         {p.completedAt ? new Date(p.completedAt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }) : '-'}
                       </td>
-                      <td className="px-4 py-3 font-mono text-gray-700">{p.orderNumber || '-'}</td>
+                      <td className="px-4 py-3 font-mono text-gray-700">{p.orderNumber ? `Pedido #${(p.orderNumber.split('-').pop() ?? '').toUpperCase()}` : '-'}</td>
                       <td className="px-4 py-3 font-medium">{p.tableNumber || 'Mostrador'}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{p.waiterName || '-'}</td>
                       <td className="px-4 py-3">
@@ -465,7 +465,7 @@ function NuevaVentaTab({ user }: { user: any }) {
       }
 
       const res = await api.post('/api/order/pos', body);
-      setSuccessMsg(`✓ Venta registrada — Orden ${res.data.orderNumber} | Total cobrado: RD$ ${fmt(res.data.paid)}`);
+      setSuccessMsg(`✓ Venta registrada — Pedido #${(String(res.data.orderNumber ?? '').split('-').pop() ?? '').toUpperCase()} | Total cobrado: RD$ ${fmt(res.data.paid)}`);
       setCart([]); setCustomerName(''); setTipAmount(0); setTipPct(0);
       setRequiresFiscal(false); setFiscalRnc(''); setFiscalBusinessName(''); setFiscalValidated(false);
       setPaymentMethod('Cash');

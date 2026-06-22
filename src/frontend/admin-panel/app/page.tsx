@@ -319,7 +319,7 @@ function AdminDashboardInner() {
                           <div className={cn('rounded-full h-3 w-3', getStatusColor(status))} />
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{order.orderNumber ?? order.OrderNumber}</p>
+                          <p className="font-medium text-sm">Pedido #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase()}</p>
                           <p className="text-xs text-muted-foreground">Mesa {order.tableNumber ?? order.TableNumber ?? order.tableId ?? order.TableId}</p>
                         </div>
                       </div>

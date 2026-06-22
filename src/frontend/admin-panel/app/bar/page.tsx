@@ -241,7 +241,7 @@ export default function BarPage() {
                     <div className="flex items-center justify-between mb-4 pb-2 border-b">
                       <div>
                         <span className="text-xl font-bold">Mesa {order.tableNumber ?? order.TableNumber ?? '-'}</span>
-                        <p className="text-xs text-muted-foreground">Orden #{order.orderNumber ?? order.OrderNumber ?? '-'}</p>
+                        <p className="text-xs text-muted-foreground">Pedido #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-'}</p>
                       </div>
                       <span className={cn(
                         'font-mono font-bold px-2 py-1 rounded text-sm',
