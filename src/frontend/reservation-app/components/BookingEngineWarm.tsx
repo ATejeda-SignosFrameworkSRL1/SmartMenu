@@ -212,17 +212,19 @@ export default function BookingEngineWarm() {
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-primary/20 bg-warm-900/50 p-12 text-center shadow-2xl">
         <CheckCircle2 className="mx-auto h-20 w-20 text-primary-light" />
-        <h2 className="mt-6 font-display text-3xl font-bold text-white">¡Reserva confirmada!</h2>
+        <h2 className="mt-6 font-display text-3xl font-bold text-white">{result.status === 'Confirmed' ? '¡Reserva confirmada!' : '¡Reserva recibida!'}</h2>
         <p className="mt-3 text-warm-400">
-          Te esperamos el {new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {result.status === 'Confirmed' ? 'Te esperamos el ' : 'Solicitaste el '}
+          {new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}
           {' '}a las {to12h(selectedTime)}.
+          {result.status !== 'Confirmed' && ' El restaurante debe aprobarla; te avisaremos al confirmarla.'}
         </p>
         <div className="mt-6 inline-block rounded-xl border border-primary/30 bg-warm-900 px-6 py-4">
           <p className="text-xs text-warm-500 uppercase tracking-wide">Código de confirmación</p>
           <p className="text-2xl font-mono font-bold text-primary-light">{result.confirmationCode}</p>
         </div>
         <p className="mt-4 text-sm text-warm-400">
-          {guests} {guests === 1 ? 'persona' : 'personas'} · Estado: <span className="text-white">{result.status}</span>
+          {guests} {guests === 1 ? 'persona' : 'personas'} · Estado: <span className="text-white">{result.status === 'Confirmed' ? 'Confirmada' : 'Pendiente de aprobación'}</span>
         </p>
         <button onClick={reset} className="btn-primary mt-8">Hacer otra reserva</button>
       </div>

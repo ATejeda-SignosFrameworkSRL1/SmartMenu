@@ -352,13 +352,13 @@ export default function BookPage() {
         {step === 4 && result && (
           <section className="text-center py-8 space-y-4">
             <CheckCircle2 className="w-16 h-16 mx-auto text-emerald-400" />
-            <h2 className="text-2xl font-bold">¡Reserva confirmada!</h2>
-            <p className="text-slate-400">Te esperamos el {new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'long' })} a las {to12h(selectedTime)}.</p>
+            <h2 className="text-2xl font-bold">{result.status === 'Confirmed' ? '¡Reserva confirmada!' : '¡Reserva recibida!'}</h2>
+            <p className="text-slate-400">{result.status === 'Confirmed' ? 'Te esperamos el ' : 'Solicitaste el '}{new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'long' })} a las {to12h(selectedTime)}.{result.status !== 'Confirmed' && ' El restaurante debe aprobarla; te avisaremos al confirmarla.'}</p>
             <div className="inline-block rounded-xl bg-slate-900 border border-slate-700 px-6 py-4">
               <p className="text-xs text-slate-500 uppercase tracking-wide">Código de confirmación</p>
               <p className="text-2xl font-mono font-bold text-amber-400">{result.confirmationCode}</p>
             </div>
-            <p className="text-sm text-slate-400">{guests} {guests === 1 ? 'persona' : 'personas'} · Estado: {result.status}</p>
+            <p className="text-sm text-slate-400">{guests} {guests === 1 ? 'persona' : 'personas'} · Estado: {result.status === 'Confirmed' ? 'Confirmada' : 'Pendiente de aprobación'}</p>
             <button onClick={reset} className="mt-4 px-5 py-3 rounded-xl bg-slate-800 font-semibold">Hacer otra reserva</button>
           </section>
         )}
