@@ -1,3 +1,9 @@
+import createNextIntlPlugin from 'next-intl/plugin';
+
+// next-intl en modo "sin ruteo por URL": el plugin sólo enlaza la config por-request.
+// rewrites/headers/env quedan intactos; no se agrega middleware ni segmento [locale].
+const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -32,4 +38,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

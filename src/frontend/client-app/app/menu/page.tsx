@@ -8,7 +8,9 @@ import { motion } from 'framer-motion';
 import type { Dish, Category } from '@/types';
 import { useMenu, useDishTags } from '@/lib/hooks';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { DishModal } from '@/components/DishModal';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 // Código corto de la orden (6 chars del OrderNumber) que ve el cliente: "Pedido #6A1305".
 const shortOrder = (on?: string | null) => ((on ?? '').split('-').pop() ?? '').toUpperCase();
@@ -35,6 +37,8 @@ function MenuPageInner() {
   const { getItemCount, setAddToOrderId } = useCartStore();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const tm = useTranslations('menu');
+  const tc = useTranslations('common');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
@@ -124,7 +128,7 @@ function MenuPageInner() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <ChefHat className="w-16 h-16 text-primary-600 animate-bounce mx-auto mb-4" />
-          <p className="text-xl text-gray-700">Cargando menú...</p>
+          <p className="text-xl text-gray-700">{tc('loadingMenu')}</p>
         </div>
       </div>
     );
@@ -134,8 +138,8 @@ function MenuPageInner() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-xl text-red-600">Error al cargar el menú</p>
-          <p className="text-sm text-gray-600 mt-2">Por favor, intenta de nuevo más tarde</p>
+          <p className="text-xl text-red-600">{tm('loadError')}</p>
+          <p className="text-sm text-gray-600 mt-2">{tm('loadErrorHint')}</p>
         </div>
       </div>
     );
@@ -146,13 +150,13 @@ function MenuPageInner() {
       {/* Banner modo "agregar a orden existente" */}
       {addToOrderId && (
         <div className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-4 py-2 flex items-center justify-between gap-3">
-          <span className="text-sm font-medium">🍰 Agregando postres a tu orden #{addToOrderParam}</span>
+          <span className="text-sm font-medium">{tm('addingDessertsBanner', { orderNum: addToOrderParam })}</span>
           <button
             onClick={() => router.push(`/order-served/${addToOrderId}`)}
             className="flex items-center gap-1 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded-full transition-colors"
           >
             <ArrowLeft className="w-3 h-3" />
-            Volver
+            {tc('back')}
           </button>
         </div>
       )}
@@ -163,18 +167,19 @@ function MenuPageInner() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900">SmartMenu</h1>
-              <p className="text-sm text-gray-600">{addToOrderId ? '🍰 Elige tus postres' : 'Menú Digital'}</p>
+              <p className="text-sm text-gray-600">{addToOrderId ? tm('chooseDesserts') : tm('subtitle')}</p>
             </div>
             <div className="flex items-center gap-2">
+              <LanguageSwitcher />
               {activeOrderId && !addToOrderId && (
                 <button
                   onClick={() => router.push(`/order-status/${activeOrderId}`)}
                   className="flex flex-col items-center px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-lg transition-colors font-semibold"
-                  title="Ver mi orden"
+                  title={tm('viewMyOrder')}
                 >
-                  <span className="flex items-center gap-1.5 text-sm"><ClipboardList className="w-4 h-4" /> Ver mi orden</span>
+                  <span className="flex items-center gap-1.5 text-sm"><ClipboardList className="w-4 h-4" /> {tm('viewMyOrder')}</span>
                   {activeOrderNumber && (
-                    <span className="text-[11px] font-bold leading-none mt-0.5 opacity-95">Pedido #{shortOrder(activeOrderNumber)}</span>
+                    <span className="text-[11px] font-bold leading-none mt-0.5 opacity-95">{tc('orderNumber', { code: shortOrder(activeOrderNumber) })}</span>
                   )}
                 </button>
               )}
@@ -201,7 +206,7 @@ function MenuPageInner() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Buscar platos..."
+              placeholder={tm('searchPlaceholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -233,7 +238,7 @@ function MenuPageInner() {
                 onClick={() => setActiveTags(new Set())}
                 className="flex items-center gap-1 px-3 py-2 rounded-full text-xs text-gray-400 hover:text-red-500 whitespace-nowrap border border-gray-200 hover:border-red-200 transition-colors"
               >
-                ✕ Limpiar
+                {tm('clearFilters')}
               </button>
             )}
           </div>
@@ -252,7 +257,7 @@ function MenuPageInner() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Todos
+              {tm('all')}
             </button>
             {categories.map((category: Category) => (
               <button
@@ -292,7 +297,7 @@ function MenuPageInner() {
                 )}
 
                 {visibleDishes.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">No se encontraron platos con los filtros seleccionados</p>
+                  <p className="text-center text-gray-500 py-8">{tm('noDishesFiltered')}</p>
                 ) : (
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {visibleDishes.map((dish: Dish) => (
@@ -323,9 +328,9 @@ function MenuPageInner() {
                             const tagList = dish.tags && dish.tags.length > 0
                               ? dish.tags
                               : [
-                                  ...(dish.isVegetarian ? [{ code: 'vegetariano', label: 'Vegetariano', icon: '🥬' }] : []),
-                                  ...(dish.isVegan      ? [{ code: 'vegano',      label: 'Vegano',      icon: '🌱' }] : []),
-                                  ...(dish.isGlutenFree ? [{ code: 'sin_gluten',  label: 'Sin gluten',  icon: '🌾' }] : []),
+                                  ...(dish.isVegetarian ? [{ code: 'vegetariano', label: tm('vegetarian'), icon: '🥬' }] : []),
+                                  ...(dish.isVegan      ? [{ code: 'vegano',      label: tm('vegan'),      icon: '🌱' }] : []),
+                                  ...(dish.isGlutenFree ? [{ code: 'sin_gluten',  label: tm('glutenFree'), icon: '🌾' }] : []),
                                 ];
                             return tagList.length > 0 ? (
                               <div className="flex gap-1.5 mb-2 flex-wrap">
@@ -351,7 +356,7 @@ function MenuPageInner() {
                               </p>
                               <p className="text-xs text-gray-500 flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {dish.preparationTimeMinutes} min
+                                {dish.preparationTimeMinutes} {tc('minutesShort')}
                               </p>
                             </div>
                             <button
@@ -359,7 +364,7 @@ function MenuPageInner() {
                               disabled={!dish.isAvailable}
                               className="shrink-0 bg-primary-600 text-white px-4 py-2 rounded-full hover:bg-primary-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
                             >
-                              {dish.isAvailable ? 'Agregar' : 'No disponible'}
+                              {dish.isAvailable ? tm('add') : tm('unavailable')}
                             </button>
                           </div>
                         </div>
@@ -374,7 +379,7 @@ function MenuPageInner() {
         {categories.filter((cat: Category) => !selectedCategory || cat.id === selectedCategory).length === 0 && (
           <div className="text-center py-12">
             <ChefHat className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-xl text-gray-600">No hay platos disponibles en este momento</p>
+            <p className="text-xl text-gray-600">{tm('noDishesAvailable')}</p>
           </div>
         )}
       </div>
@@ -397,7 +402,7 @@ export default function MenuPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <ChefHat className="w-16 h-16 text-primary-600 animate-bounce mx-auto mb-4" />
-          <p className="text-xl text-gray-700">Cargando menú...</p>
+          <p className="text-xl text-gray-700">Cargando…</p>
         </div>
       </div>
     }>

@@ -47,7 +47,23 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        // Inter (vía variable de next/font) + fallbacks CJK del sistema para zh/ja/ko.
+        // Aplica al preflight de Tailwind (html) y a cualquier utilidad `font-sans`.
+        sans: [
+          'var(--font-inter)',
+          'system-ui',
+          '-apple-system',
+          '"Segoe UI"',
+          'Roboto',
+          '"PingFang SC"',
+          '"Hiragino Sans GB"',
+          '"Microsoft YaHei"',
+          '"Noto Sans CJK SC"',
+          '"Malgun Gothic"',
+          '"Noto Sans JP"',
+          '"Noto Sans KR"',
+          'sans-serif',
+        ],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in',

@@ -4,6 +4,7 @@ import { X, Plus, Minus, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslations } from 'next-intl';
 import { useCartStore } from '@/lib/stores/cartStore';
 import type { Dish } from '@/types';
 
@@ -21,22 +22,24 @@ function detectHasMeat(name: string): boolean {
   return MEAT_KEYWORDS.some((k) => lower.includes(k));
 }
 
+// value/icon estables; el texto visible se traduce vía dishModal.course.*
 const COURSE_OPTIONS = [
-  { value: 0, label: 'Entrada',      icon: '🥗', desc: 'Sirve primero' },
-  { value: 1, label: 'Plato Fuerte', icon: '🍖', desc: 'Plato principal' },
-  { value: 2, label: 'Postre',       icon: '🍰', desc: 'Al final' },
+  { value: 0, key: 'starter', icon: '🥗' },
+  { value: 1, key: 'main',    icon: '🍖' },
+  { value: 2, key: 'dessert', icon: '🍰' },
 ];
 
+// El `value` se envía al backend (no se traduce); el texto sale de dishModal.mixer.*
 const LIGA_OPTIONS = [
-  { value: '', label: 'Solo / Sin liga' },
-  { value: 'Soda',             label: '🫧 Soda' },
-  { value: 'Agua Tónica',      label: '💧 Agua Tónica' },
-  { value: 'Jugo de Naranja',  label: '🍊 Jugo de Naranja' },
-  { value: 'Jugo de Piña',     label: '🍍 Jugo de Piña' },
-  { value: 'Refresco Cola',    label: '🥤 Refresco Cola' },
-  { value: 'Agua Natural',     label: '💦 Agua Natural' },
-  { value: 'Ginger Ale',       label: '🫙 Ginger Ale' },
-  { value: 'Jugo de Tomate',   label: '🍅 Jugo de Tomate' },
+  { value: '',                key: 'none' },
+  { value: 'Soda',            key: 'soda' },
+  { value: 'Agua Tónica',     key: 'tonic' },
+  { value: 'Jugo de Naranja', key: 'orange' },
+  { value: 'Jugo de Piña',    key: 'pineapple' },
+  { value: 'Refresco Cola',   key: 'cola' },
+  { value: 'Agua Natural',    key: 'water' },
+  { value: 'Ginger Ale',      key: 'ginger' },
+  { value: 'Jugo de Tomate',  key: 'tomato' },
 ];
 
 interface DishModalProps {
@@ -50,6 +53,9 @@ const DESSERT_CATEGORY_KEYWORDS = ['postre', 'dulce', 'dessert', 'helado', 'repo
 const STARTER_CATEGORY_KEYWORDS = ['entrada', 'aperitivo', 'starter'];
 
 export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProps) {
+  const t = useTranslations('dishModal');
+  const tc = useTranslations('common');
+  const tt = useTranslations('toast');
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const [activeImageIdx, setActiveImageIdx] = useState(0);
@@ -119,7 +125,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
       notes: notes || undefined,
       ...preferences,
     });
-    toast.success(`${quantity}x ${dish.name} agregado al carrito`);
+    toast.success(tt('addedToCart', { quantity, name: dish.name }));
     onClose();
     // Reset
     setQuantity(1);
@@ -206,13 +212,13 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{dish.name}</h2>
                       <div className="flex items-center gap-3 flex-wrap">
                         {dish.isVegetarian && (
-                          <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">🌱 Vegetariano</span>
+                          <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">{t('vegetarian')}</span>
                         )}
                         {dish.isVegan && (
-                          <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">🌾 Vegano</span>
+                          <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">{t('vegan')}</span>
                         )}
                         {dish.isGlutenFree && (
-                          <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">🚫 Sin Gluten</span>
+                          <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">{t('glutenFree')}</span>
                         )}
                       </div>
                     </div>
@@ -222,7 +228,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                     <div className="grid grid-cols-2 gap-4 mb-6">
                       <div className="flex items-center gap-2 text-gray-600">
                         <Clock className="w-5 h-5 text-primary-600" />
-                        <span>{dish.preparationTimeMinutes} minutos</span>
+                        <span>{t('minutes', { count: dish.preparationTimeMinutes })}</span>
                       </div>
                     </div>
 
@@ -232,7 +238,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
 
                     {/* Cantidad */}
                     <div className="mb-6">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Cantidad</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('quantity')}</label>
                       <div className="flex items-center gap-4">
                         <button
                           onClick={() => setQuantity(Math.max(1, quantity - 1))}
@@ -257,19 +263,19 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       <>
                         {/* ¿Con o sin alcohol? */}
                         <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">¿Con o sin alcohol?</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('withOrWithoutAlcohol')}</label>
                           <div className="grid grid-cols-2 gap-2">
                             <button
                               onClick={() => setWithAlcohol(true)}
                               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors text-gray-700 ${withAlcohol === true ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
                             >
-                              🍹 Con Alcohol
+                              {t('withAlcohol')}
                             </button>
                             <button
                               onClick={() => setWithAlcohol(false)}
                               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors text-gray-700 ${withAlcohol === false ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
                             >
-                              🥤 Sin Alcohol
+                              {t('withoutAlcohol')}
                             </button>
                           </div>
                         </div>
@@ -277,7 +283,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                         {/* Liga (solo si con alcohol) */}
                         {isAlcoholic && (
                           <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">¿Con qué liga?</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">{t('whichMixer')}</label>
                             <div className="grid grid-cols-2 gap-2">
                               {LIGA_OPTIONS.map((opt) => (
                                 <button
@@ -285,7 +291,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                                   onClick={() => setLiga(opt.value)}
                                   className={`px-3 py-2 rounded-lg text-sm text-left transition-colors text-gray-700 ${liga === opt.value ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
                                 >
-                                  {opt.label}
+                                  {t(`mixer.${opt.key}`)}
                                 </button>
                               ))}
                             </div>
@@ -294,19 +300,19 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
 
                         {/* ¿Cuándo quieres tu bebida? */}
                         <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">¿Cuándo deseas tu bebida?</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('whenDrink')}</label>
                           <div className="grid grid-cols-3 gap-2 text-gray-700">
                             {[
-                              { key: 'Before', label: '🥗 Con la entrada' },
-                              { key: 'During', label: '🍖 Con el plato fuerte' },
-                              { key: 'After',  label: '🍰 Con el postre' },
+                              { key: 'Before', tk: 'before' },
+                              { key: 'During', tk: 'during' },
+                              { key: 'After',  tk: 'after' },
                             ].map((opt) => (
                               <button
                                 key={opt.key}
                                 onClick={() => setDrinkTiming(opt.key)}
                                 className={`px-2 py-2 rounded-lg text-xs font-medium text-center transition-colors ${drinkTiming === opt.key ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
                               >
-                                {opt.label}
+                                {t(`drinkTiming.${opt.tk}`)}
                               </button>
                             ))}
                           </div>
@@ -314,11 +320,11 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
 
                         {/* Notas para bebida */}
                         <div className="mb-6">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Notas (opcional)</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('notesOptional')}</label>
                           <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Ej: Con hielo, sin hielo, temperatura..."
+                            placeholder={t('drinkNotesPlaceholder')}
                             rows={2}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 text-gray-700 focus:ring-primary-500 focus:border-transparent resize-none"
                           />
@@ -331,7 +337,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       <>
                         {/* ¿Cuándo quieres este plato? */}
                         <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">¿Cuándo lo quieres servir?</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('whenServe')}</label>
                           <div className="grid grid-cols-3 gap-2">
                             {COURSE_OPTIONS.map((opt) => (
                               <button
@@ -340,8 +346,8 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                                 className={`flex flex-col items-center px-2 py-3 rounded-lg text-sm font-medium transition-colors ${courseTiming === opt.value ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
                               >
                                 <span className="text-xl mb-1">{opt.icon}</span>
-                                <span className="font-semibold text-xs">{opt.label}</span>
-                                <span className={`text-xs mt-0.5 ${courseTiming === opt.value ? 'text-white/70' : 'text-gray-400'}`}>{opt.desc}</span>
+                                <span className="font-semibold text-xs">{t(`course.${opt.key}`)}</span>
+                                <span className={`text-xs mt-0.5 ${courseTiming === opt.value ? 'text-white/70' : 'text-gray-400'}`}>{t(`course.${opt.key}Desc`)}</span>
                               </button>
                             ))}
                           </div>
@@ -350,19 +356,19 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                         {/* Nivel de cocción (si tiene carne) */}
                         {hasMeat && (
                           <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Nivel de cocción</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">{t('cookingLevel')}</label>
                             <div className="grid grid-cols-3 gap-2 text-gray-700">
                               {[
-                                { key: 'Rare',     label: '🩸 Poco' },
-                                { key: 'Medium',   label: '🔥 Medio' },
-                                { key: 'WellDone', label: '✅ Bien cocido' },
+                                { key: 'Rare',     tk: 'rare' },
+                                { key: 'Medium',   tk: 'medium' },
+                                { key: 'WellDone', tk: 'wellDone' },
                               ].map((opt) => (
                                 <button
                                   key={opt.key}
                                   onClick={() => setMeatCooking(opt.key)}
                                   className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${meatCooking === opt.key ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
                                 >
-                                  {opt.label}
+                                  {t(`cooking.${opt.tk}`)}
                                 </button>
                               ))}
                             </div>
@@ -371,52 +377,52 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
 
                         {/* Guarnición — no aplica para postres */}
                         {!isDessert && <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Guarnición</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('sideDish')}</label>
                           <select
                             value={sideDish}
                             onChange={(e) => setSideDish(e.target.value)}
                             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600 text-gray-700"
                           >
-                            <option value="">Sin preferencia</option>
-                            <option value="Arroz">Arroz</option>
-                            <option value="Papas Fritas">Papas Fritas</option>
-                            <option value="Ensalada">Ensalada</option>
-                            <option value="Vegetales">Vegetales al Vapor</option>
-                            <option value="Puré">Puré de Papa</option>
+                            <option value="">{t('noPreference')}</option>
+                            <option value="Arroz">{t('side.rice')}</option>
+                            <option value="Papas Fritas">{t('side.fries')}</option>
+                            <option value="Ensalada">{t('side.salad')}</option>
+                            <option value="Vegetales">{t('side.steamedVeggies')}</option>
+                            <option value="Puré">{t('side.mashedPotato')}</option>
                           </select>
                         </div>}
 
                         {/* Personalizaciones */}
                         <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Personalizaciones (opcional)</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('customizationsOptional')}</label>
                           <input
                             type="text"
                             value={customizations}
                             onChange={(e) => setCustomizations(e.target.value)}
-                            placeholder="Ej: sin cebolla, extra queso"
+                            placeholder={t('customizationsPlaceholder')}
                             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600 text-gray-700"
                           />
                         </div>
 
                         {/* Alergias */}
                         <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">¿Alergias? (importante)</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('allergiesLabel')}</label>
                           <input
                             type="text"
                             value={allergies}
                             onChange={(e) => setAllergies(e.target.value)}
-                            placeholder="Ej: alérgico a mariscos, nueces"
+                            placeholder={t('allergiesPlaceholder')}
                             className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50 text-gray-700"
                           />
                         </div>
 
                         {/* Notas adicionales */}
                         <div className="mb-6">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Notas adicionales (opcional)</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t('additionalNotesOptional')}</label>
                           <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Ej: Sin sal, extra salsa, término medio..."
+                            placeholder={t('foodNotesPlaceholder')}
                             rows={3}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 text-gray-700 focus:ring-primary-500 focus:border-transparent resize-none"
                           />
@@ -430,13 +436,13 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                         onClick={onClose}
                         className="flex-1 px-6 py-4 border-2 border-gray-300 rounded-xl font-semibold hover:bg-gray-50 text-gray-700 transition-colors"
                       >
-                        Cancelar
+                        {tc('cancel')}
                       </button>
                       <button
                         onClick={handleAddToCart}
                         className="flex-1 px-6 py-4 bg-gradient-to-r from-primary-600 to-secondary-600 text-white rounded-xl font-semibold hover:from-primary-700 hover:to-secondary-700 transition-all shadow-lg hover:shadow-xl"
                       >
-                        Agregar RD$ {(dish.price * quantity).toFixed(2)}
+                        {t('addToCartWithPrice', { price: `RD$ ${(dish.price * quantity).toFixed(2)}` })}
                       </button>
                     </div>
                   </div>

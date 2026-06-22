@@ -1,9 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { Providers } from "./providers";
+import { dirFor } from "@/i18n/config";
 
-const inter = Inter({ subsets: ["latin"] });
+// Inter como variable CSS (no className directo): el font-stack de Tailwind antepone
+// Inter y cae a fuentes CJK del sistema para zh/ja/ko.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
   title: "SmartMenu - Menú Digital Inteligente",
@@ -23,17 +28,22 @@ export const viewport: Viewport = {
   themeColor: "#0ea5e9",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="es">
-      <body className={inter.className}>
-        <Providers>
-          {children}
-        </Providers>
+    <html lang={locale} dir={dirFor(locale)} className={inter.variable}>
+      <body>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <Providers>
+            {children}
+          </Providers>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

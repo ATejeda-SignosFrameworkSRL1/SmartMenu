@@ -7,11 +7,15 @@ import { ShoppingCart, Search, Leaf, ChefHat } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Dish, Category } from '@/types';
 import { useMenu } from '@/lib/hooks';
+import { useTranslations } from 'next-intl';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 export default function MenuPage() {
   const params = useParams();
   const restaurantId = parseInt(params?.restaurantId as string);
   const { addItem, getItemCount } = useCartStore();
+  const tm = useTranslations('menu');
+  const tc = useTranslations('common');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -40,7 +44,7 @@ export default function MenuPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <ChefHat className="w-16 h-16 text-primary-600 animate-bounce mx-auto mb-4" />
-          <p className="text-xl text-gray-700">Cargando menú...</p>
+          <p className="text-xl text-gray-700">{tc('loadingMenu')}</p>
         </div>
       </div>
     );
@@ -54,21 +58,24 @@ export default function MenuPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">SmartMenu</h1>
-              <p className="text-sm text-gray-600">Menú Digital</p>
+              <p className="text-sm text-gray-600">{tm('subtitle')}</p>
             </div>
-            
-            {/* Cart Button */}
-            <button
-              onClick={() => window.location.href = '/cart'}
-              className="relative bg-primary-600 text-white p-3 rounded-full shadow-lg hover:bg-primary-700 transition-colors"
-            >
-              <ShoppingCart className="w-6 h-6" />
-              {cartItemCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-accent-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
-                  {cartItemCount}
-                </span>
-              )}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <LanguageSwitcher />
+              {/* Cart Button */}
+              <button
+                onClick={() => window.location.href = '/cart'}
+                className="relative bg-primary-600 text-white p-3 rounded-full shadow-lg hover:bg-primary-700 transition-colors"
+              >
+                <ShoppingCart className="w-6 h-6" />
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-accent-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+                    {cartItemCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -80,7 +87,7 @@ export default function MenuPage() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Buscar platos..."
+              placeholder={tm('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -98,7 +105,7 @@ export default function MenuPage() {
               }`}
             >
               <Leaf className="w-4 h-4" />
-              Vegetariano
+              {tm('vegetarian')}
             </button>
             <button
               onClick={() => setFilters(prev => ({ ...prev, vegan: !prev.vegan }))}
@@ -109,7 +116,7 @@ export default function MenuPage() {
               }`}
             >
               <Leaf className="w-4 h-4" />
-              Vegano
+              {tm('vegan')}
             </button>
             <button
               onClick={() => setFilters(prev => ({ ...prev, glutenFree: !prev.glutenFree }))}
@@ -119,7 +126,7 @@ export default function MenuPage() {
                   : 'bg-gray-100 text-gray-700'
               }`}
             >
-              Sin Gluten
+              {tm('glutenFree')}
             </button>
           </div>
         </div>
@@ -137,7 +144,7 @@ export default function MenuPage() {
                   : 'bg-gray-100 text-gray-700'
               }`}
             >
-              Todos
+              {tm('all')}
             </button>
             {categories.map((category: Category) => (
               <button
@@ -163,7 +170,7 @@ export default function MenuPage() {
           .map((category: Category) => (
             <div key={category.id} className="mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">{category.name}</h2>
-              
+
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {category.dishes
                   .filter((dish: Dish) => {
@@ -202,7 +209,7 @@ export default function MenuPage() {
                           {dish.isVegetarian && (
                             <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center gap-1">
                               <Leaf className="w-3 h-3" />
-                              Vegetariano
+                              {tm('vegetarian')}
                             </span>
                           )}
                         </div>
@@ -215,7 +222,7 @@ export default function MenuPage() {
                             <p className="text-2xl font-bold text-primary-600">
                               ${dish.price.toFixed(2)}
                             </p>
-                            <p className="text-xs text-gray-500">{dish.preparationTimeMinutes} min</p>
+                            <p className="text-xs text-gray-500">{dish.preparationTimeMinutes} {tc('minutesShort')}</p>
                           </div>
 
                           <button
@@ -223,7 +230,7 @@ export default function MenuPage() {
                             disabled={!dish.isAvailable}
                             className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                           >
-                            {dish.isAvailable ? 'Agregar' : 'No disponible'}
+                            {dish.isAvailable ? tm('add') : tm('unavailable')}
                           </button>
                         </div>
                       </div>

@@ -8,11 +8,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Receipt } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useState, Suspense } from 'react';
+import { useTranslations } from 'next-intl';
 
 function CartPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const t = useTranslations('cart');
+  const tc = useTranslations('common');
+  const tt = useTranslations('toast');
   const {
     items,
     tableId,
@@ -40,15 +44,15 @@ function CartPageInner() {
     onSuccess: (response: any) => {
       const order = response?.data;
       const orderId = order?.id ?? order?.Id;
-      if (!orderId) { toast.error('No se recibió el ID de la orden'); return; }
-      toast.success('¡Orden creada exitosamente!');
+      if (!orderId) { toast.error(tt('noOrderId')); return; }
+      toast.success(tt('orderCreated'));
       localStorage.setItem('current_order_id', String(orderId));
       clearCart();
       router.push(`/order-status/${orderId}`);
     },
     onError: (error: any) => {
       const data = error?.response?.data;
-      toast.error(data?.error ?? data?.message ?? 'Error al crear la orden');
+      toast.error(data?.error ?? data?.message ?? tt('createOrderError'));
     },
   });
 
@@ -56,7 +60,7 @@ function CartPageInner() {
   const addItemsMutation = useMutation({
     mutationFn: (items: any[]) => apiClient.addItemsToOrder(addToOrderId!, items),
     onSuccess: (response: any) => {
-      toast.success('¡Ítems agregados a tu orden!');
+      toast.success(tt('itemsAdded'));
       // Actualizar el cache de React Query con la respuesta actualizada del backend
       // (que ya tiene status='Confirmed'), evitando que order-status redirija a order-served
       if (addToOrderId) {
@@ -67,14 +71,14 @@ function CartPageInner() {
     },
     onError: (error: any) => {
       const data = (error as any)?.response?.data;
-      toast.error(data?.error ?? data?.message ?? 'Error al agregar ítems');
+      toast.error(data?.error ?? data?.message ?? tt('addItemsError'));
     },
   });
 
   const isPending = createOrderMutation.isPending || addItemsMutation.isPending;
 
   const handleCheckout = () => {
-    if (items.length === 0) { toast.error('El carrito está vacío'); return; }
+    if (items.length === 0) { toast.error(tt('cartEmpty')); return; }
 
     const mappedItems = items.map(item => ({
       dishId: item.dishId,
@@ -111,17 +115,17 @@ function CartPageInner() {
         <div className="text-center p-8">
           <ShoppingBag className="w-24 h-24 text-gray-300 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-700 mb-2">
-            Tu carrito está vacío
+            {t('emptyTitle')}
           </h2>
           <p className="text-gray-500 mb-6">
-            Agrega algunos platos deliciosos de nuestro menú
+            {t('emptyHint')}
           </p>
           <Link
             href="/menu"
             className="bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors inline-flex items-center gap-2"
           >
             <ArrowLeft className="w-5 h-5" />
-            Volver al Menú
+            {t('backToMenuButton')}
           </Link>
         </div>
       </div>
@@ -143,16 +147,16 @@ function CartPageInner() {
               <button
                 onClick={() => router.back()}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                aria-label="Atrás"
+                aria-label={tc('back')}
               >
                 <ArrowLeft className="w-6 h-6" />
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  {isAddingToOrder ? '✨ Agregar a mi Orden' : 'Tu Orden'}
+                  {isAddingToOrder ? t('addToMyOrderTitle') : t('yourOrder')}
                 </h1>
                 <p className="text-sm text-gray-600">
-                  {isAddingToOrder ? `Se sumará a tu orden existente` : `${items.length} ${items.length === 1 ? 'plato' : 'platos'}`}
+                  {isAddingToOrder ? t('willAddToExisting') : t('dishCount', { count: items.length })}
                 </p>
               </div>
             </div>
@@ -161,7 +165,7 @@ function CartPageInner() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors font-medium"
             >
               <ArrowLeft className="w-4 h-4" />
-              Volver al menú
+              {tc('backToMenu')}
             </Link>
           </div>
         </div>
@@ -171,8 +175,8 @@ function CartPageInner() {
       <div className="container mx-auto px-4 py-6 max-w-4xl">
         {/* Items List */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Tus Platos</h2>
-          
+          <h2 className="text-xl font-bold text-gray-900 mb-4">{t('yourDishes')}</h2>
+
           <div className="space-y-4">
             {items.map((item) => (
               <div
@@ -183,11 +187,11 @@ function CartPageInner() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">{item.dishName}</h3>
                   <p className="text-sm text-gray-600">
-                    RD${item.unitPrice.toFixed(2)} c/u
+                    RD${item.unitPrice.toFixed(2)} {t('eachAbbr')}
                   </p>
                   {item.specialInstructions && (
                     <p className="text-xs text-gray-500 mt-1">
-                      Nota: {item.specialInstructions}
+                      {t('noteInline', { note: item.specialInstructions })}
                     </p>
                   )}
                 </div>
@@ -231,12 +235,12 @@ function CartPageInner() {
         {/* Special Instructions */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Instrucciones Especiales
+            {t('specialInstructions')}
           </h2>
           <textarea
             value={specialInstructions}
             onChange={(e) => setSpecialInstructions(e.target.value)}
-            placeholder="¿Alguna instrucción especial para tu orden? (opcional)"
+            placeholder={t('specialInstructionsPlaceholder')}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
             rows={3}
           />
@@ -244,9 +248,9 @@ function CartPageInner() {
 
         {/* Tu orden detallada - Revisa antes de confirmar */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6 border-2 border-primary-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Tu orden detallada</h2>
-          <p className="text-sm text-gray-500 mb-4">Revisa que todo esté correcto antes de confirmar</p>
-          
+          <h2 className="text-xl font-bold text-gray-900 mb-1">{t('detailedOrder')}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t('reviewBeforeConfirm')}</p>
+
           <div className="space-y-3">
             {items.map((item) => {
               const hasDetails = item.notes || item.specialInstructions || item.customizations || item.allergies || item.meatCooking || item.sideDish || item.drinkTiming;
@@ -257,21 +261,21 @@ function CartPageInner() {
                       <p className="font-semibold text-gray-900">
                         <span className="text-primary-600">{item.quantity}x</span> {item.dishName}
                       </p>
-                      <p className="text-sm text-gray-600">RD$ {item.unitPrice.toFixed(2)} c/u</p>
+                      <p className="text-sm text-gray-600">RD$ {item.unitPrice.toFixed(2)} {t('eachAbbr')}</p>
                     </div>
                     <p className="font-bold text-gray-900">RD$ {(item.unitPrice * item.quantity).toFixed(2)}</p>
                   </div>
                   {hasDetails && (
                     <div className="mt-3 pt-3 border-t border-gray-200 space-y-1.5 text-sm">
-                      {item.notes && <div className="text-gray-700"><span className="font-medium">Notas:</span> {item.notes}</div>}
-                      {item.specialInstructions && <div className="text-gray-700"><span className="font-medium">Instrucciones:</span> {item.specialInstructions}</div>}
-                      {item.meatCooking && <div className="text-gray-700">🔥 <span className="font-medium">Término:</span> {item.meatCooking}</div>}
-                      {item.sideDish && <div className="text-gray-700"><span className="font-medium">Guarnición:</span> {item.sideDish}</div>}
-                      {item.drinkTiming && <div className="text-gray-700"><span className="font-medium">Momento de la bebida:</span> {item.drinkTiming}</div>}
-                      {item.customizations && <div className="text-gray-700"><span className="font-medium">Personalización:</span> {item.customizations}</div>}
+                      {item.notes && <div className="text-gray-700"><span className="font-medium">{t('labelNotes')}</span> {item.notes}</div>}
+                      {item.specialInstructions && <div className="text-gray-700"><span className="font-medium">{t('labelInstructions')}</span> {item.specialInstructions}</div>}
+                      {item.meatCooking && <div className="text-gray-700">🔥 <span className="font-medium">{t('labelCooking')}</span> {item.meatCooking}</div>}
+                      {item.sideDish && <div className="text-gray-700"><span className="font-medium">{t('labelSide')}</span> {item.sideDish}</div>}
+                      {item.drinkTiming && <div className="text-gray-700"><span className="font-medium">{t('labelDrinkTiming')}</span> {item.drinkTiming}</div>}
+                      {item.customizations && <div className="text-gray-700"><span className="font-medium">{t('labelCustomization')}</span> {item.customizations}</div>}
                       {item.allergies && (
                         <div className="flex items-center gap-1.5 text-red-700 font-medium bg-red-50 px-2 py-1 rounded">
-                          <span>⚠</span> <span>Alergia:</span> {item.allergies}
+                          <span>⚠</span> <span>{t('labelAllergy')}</span> {item.allergies}
                         </div>
                       )}
                     </div>
@@ -284,33 +288,33 @@ function CartPageInner() {
 
         {/* Summary */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Resumen</h2>
-          
+          <h2 className="text-xl font-bold text-gray-900 mb-4">{t('summary')}</h2>
+
           <div className="space-y-3">
             <div className="flex justify-between text-gray-700">
-              <span>Subtotal</span>
+              <span>{t('subtotal')}</span>
               <span>RD${subtotal.toFixed(2)}</span>
             </div>
-            
+
             <div className="flex justify-between text-gray-700">
-              <span>ITBIS (18%)</span>
+              <span>{t('itbis')}</span>
               <span>RD${tax.toFixed(2)}</span>
             </div>
-            
+
             <div className="flex justify-between text-gray-700">
-              <span>Propina Legal (10%)</span>
+              <span>{t('legalTip')}</span>
               <span>RD${tip.toFixed(2)}</span>
             </div>
-            
+
             <div className="border-t pt-3 flex justify-between text-xl font-bold text-gray-900">
-              <span>Total</span>
+              <span>{t('total')}</span>
               <span>RD${total.toFixed(2)}</span>
             </div>
           </div>
 
           <div className="mt-4 p-3 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-800">
-              <strong>Nota:</strong> La propina legal del 10% es obligatoria según la Ley 13-07 de RD 🇩🇴
+              {t.rich('legalTipNote', { strong: (chunks) => <strong>{chunks}</strong> })}
             </p>
           </div>
         </div>
@@ -325,17 +329,17 @@ function CartPageInner() {
             {isPending ? (
               <>
                 <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Procesando...
+                {t('processing')}
               </>
             ) : isAddingToOrder ? (
               <>
                 <Receipt className="w-6 h-6" />
-                Agregar a mi Orden
+                {t('addToMyOrderButton')}
               </>
             ) : (
               <>
                 <Receipt className="w-6 h-6" />
-                Confirmar Orden
+                {t('confirmOrder')}
               </>
             )}
           </button>
