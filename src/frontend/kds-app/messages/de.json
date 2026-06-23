@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 Kitchen Display System",
+    "barTitle": "🍹 Bar Display System",
+    "activeOrders": "Aktive Bestellungen",
+    "logout": "Abmelden",
+    "all": "Alle",
+    "allDone": "Alles fertig! Keine offenen Bestellungen",
+    "noOrdersIn": "Keine Bestellungen in {category}",
+    "noItemsInFilter": "Du hast {count, plural, one {# aktive Bestellung} other {# aktive Bestellungen}}, aber kein Artikel passt zu diesem Filter. Wechsle den Tab zum Anzeigen.",
+    "viewAll": "Alle anzeigen",
+    "unknownCategory": "diese Kategorie",
+    "table": "Tisch {number}",
+    "orderNumber": "Bestellung #{code}",
+    "minAbbr": "min",
+    "allergy": "ALLERGIE: {text}",
+    "preference": "🔥 Präferenz / Garpunkt: {value}",
+    "sideDish": "🍽️ Beilage: {value}",
+    "customization": "🍴 Anpassung: {value}",
+    "served": "✓ Serviert",
+    "readyWaiting": "✓ Fertig — warte auf Kellner",
+    "markReady": "✅ Bereit zum Servieren",
+    "markPreparing": "In Zubereitung",
+    "loading": "Laden...",
+    "toastNewOrder": "Neue Bestellung für die Küche",
+    "toastPreparing": "Als In Zubereitung markiert",
+    "toastReady": "Als Bereit zum Servieren markiert",
+    "toastUpdateError": "Fehler beim Aktualisieren",
+    "course": {
+      "starter": "Vorspeise",
+      "main": "Hauptgang",
+      "dessert": "Dessert"
+    },
+    "drinkTiming": {
+      "before": "Zur Vorspeise",
+      "during": "Zum Hauptgang",
+      "after": "Zum Dessert"
+    }
+  }
+}

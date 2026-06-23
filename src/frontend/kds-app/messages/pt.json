@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 Kitchen Display System",
+    "barTitle": "🍹 Bar Display System",
+    "activeOrders": "Pedidos Ativos",
+    "logout": "Sair",
+    "all": "Todos",
+    "allDone": "Tudo pronto! Não há pedidos pendentes",
+    "noOrdersIn": "Sem pedidos em {category}",
+    "noItemsInFilter": "Você tem {count, plural, one {# pedido ativo} other {# pedidos ativos}}, mas nenhum item está neste filtro. Mude de aba para visualizá-los.",
+    "viewAll": "Ver todos",
+    "unknownCategory": "esta categoria",
+    "table": "Mesa {number}",
+    "orderNumber": "Pedido #{code}",
+    "minAbbr": "min",
+    "allergy": "ALERGIA: {text}",
+    "preference": "🔥 Preferência / Ponto: {value}",
+    "sideDish": "🍽️ Acompanhamento: {value}",
+    "customization": "🍴 Personalização: {value}",
+    "served": "✓ Servido",
+    "readyWaiting": "✓ Pronto — aguardando garçom",
+    "markReady": "✅ Pronto para Servir",
+    "markPreparing": "Preparando",
+    "loading": "Carregando...",
+    "toastNewOrder": "Novo pedido para a cozinha",
+    "toastPreparing": "Marcado como Preparando",
+    "toastReady": "Marcado como Pronto para servir",
+    "toastUpdateError": "Erro ao atualizar",
+    "course": {
+      "starter": "Entrada",
+      "main": "Prato Principal",
+      "dessert": "Sobremesa"
+    },
+    "drinkTiming": {
+      "before": "Com a Entrada",
+      "during": "Com o Prato Principal",
+      "after": "Com a Sobremesa"
+    }
+  }
+}

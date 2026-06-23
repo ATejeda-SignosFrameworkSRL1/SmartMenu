@@ -22,6 +22,23 @@ const config: Config = {
           900: '#7f1d1d',
         },
       },
+      fontFamily: {
+        // Inter (vía variable de next/font) + fallbacks CJK del sistema (zh/ja/ko).
+        sans: [
+          'var(--font-inter)',
+          'system-ui',
+          '-apple-system',
+          '"Segoe UI"',
+          '"PingFang SC"',
+          '"Hiragino Sans GB"',
+          '"Microsoft YaHei"',
+          '"Noto Sans CJK SC"',
+          '"Malgun Gothic"',
+          '"Noto Sans JP"',
+          '"Noto Sans KR"',
+          'sans-serif',
+        ],
+      },
     },
   },
   plugins: [],

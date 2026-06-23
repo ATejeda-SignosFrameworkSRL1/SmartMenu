@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 Kitchen Display System",
+    "barTitle": "🍹 Bar Display System",
+    "activeOrders": "Active Orders",
+    "logout": "Log Out",
+    "all": "All",
+    "allDone": "All clear! No pending orders",
+    "noOrdersIn": "No orders in {category}",
+    "noItemsInFilter": "You have {count, plural, one {# active order} other {# active orders}}, but no items match this filter. Switch tabs to view them.",
+    "viewAll": "View all",
+    "unknownCategory": "this category",
+    "table": "Table {number}",
+    "orderNumber": "Order #{code}",
+    "minAbbr": "min",
+    "allergy": "ALLERGY: {text}",
+    "preference": "🔥 Preference / Doneness: {value}",
+    "sideDish": "🍽️ Side: {value}",
+    "customization": "🍴 Customization: {value}",
+    "served": "✓ Served",
+    "readyWaiting": "✓ Ready — waiting for server",
+    "markReady": "✅ Ready to Serve",
+    "markPreparing": "Preparing",
+    "loading": "Loading...",
+    "toastNewOrder": "New order for kitchen",
+    "toastPreparing": "Marked as Preparing",
+    "toastReady": "Marked as Ready to Serve",
+    "toastUpdateError": "Update failed",
+    "course": {
+      "starter": "Starter",
+      "main": "Main Course",
+      "dessert": "Dessert"
+    },
+    "drinkTiming": {
+      "before": "With Starter",
+      "during": "With Main Course",
+      "after": "With Dessert"
+    }
+  }
+}

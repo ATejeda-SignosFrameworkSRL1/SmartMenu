@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 Kitchen Display System",
+    "barTitle": "🍹 Bar Display System",
+    "activeOrders": "Активные заказы",
+    "logout": "Выйти",
+    "all": "Все",
+    "allDone": "Всё готово! Нет ожидающих заказов",
+    "noOrdersIn": "Нет заказов в {category}",
+    "noItemsInFilter": "У вас {count, plural, one {# активный заказ} few {# активных заказа} many {# активных заказов} other {# активных заказа}}, но ни один элемент не относится к этому фильтру. Переключите вкладку для просмотра.",
+    "viewAll": "Показать все",
+    "unknownCategory": "эта категория",
+    "table": "Стол {number}",
+    "orderNumber": "Заказ #{code}",
+    "minAbbr": "мин",
+    "allergy": "АЛЛЕРГИЯ: {text}",
+    "preference": "🔥 Предпочтение / Степень прожарки: {value}",
+    "sideDish": "🍽️ Гарнир: {value}",
+    "customization": "🍴 Персонализация: {value}",
+    "served": "✓ Подано",
+    "readyWaiting": "✓ Готово — ожидает официанта",
+    "markReady": "✅ Готово к подаче",
+    "markPreparing": "Готовится",
+    "loading": "Загрузка...",
+    "toastNewOrder": "Новый заказ на кухню",
+    "toastPreparing": "Отмечено как Готовится",
+    "toastReady": "Отмечено как Готово к подаче",
+    "toastUpdateError": "Ошибка обновления",
+    "course": {
+      "starter": "Закуска",
+      "main": "Основное блюдо",
+      "dessert": "Десерт"
+    },
+    "drinkTiming": {
+      "before": "С закуской",
+      "during": "С основным блюдом",
+      "after": "С десертом"
+    }
+  }
+}

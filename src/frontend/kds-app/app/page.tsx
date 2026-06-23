@@ -5,7 +5,9 @@ import { Clock, Check, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
+import { useTranslations } from 'next-intl';
 import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 // F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('kds');
@@ -23,16 +25,18 @@ const DRINK_TIMING_TO_COURSE: Record<number, string> = {
   2: 'Postre',
 };
 
-const COURSE_META: Record<string, { label: string; icon: string; order: number; color: string; badge: string }> = {
-  Entrada:     { label: 'Entrada',      icon: '🥗', order: 0, color: 'border-green-500',  badge: 'bg-green-800/60 text-green-200' },
-  PlatoFuerte: { label: 'Plato Fuerte', icon: '🍖', order: 1, color: 'border-orange-500', badge: 'bg-orange-800/60 text-orange-200' },
-  Postre:      { label: 'Postre',       icon: '🍰', order: 2, color: 'border-pink-500',   badge: 'bg-pink-800/60 text-pink-200' },
+// icon/color/badge estables; el texto se traduce vía kds.course.<tk>.
+const COURSE_META: Record<string, { tk: string; icon: string; order: number; color: string; badge: string }> = {
+  Entrada:     { tk: 'starter', icon: '🥗', order: 0, color: 'border-green-500',  badge: 'bg-green-800/60 text-green-200' },
+  PlatoFuerte: { tk: 'main',    icon: '🍖', order: 1, color: 'border-orange-500', badge: 'bg-orange-800/60 text-orange-200' },
+  Postre:      { tk: 'dessert', icon: '🍰', order: 2, color: 'border-pink-500',   badge: 'bg-pink-800/60 text-pink-200' },
 };
 
-const DRINK_TIMING_META: Record<string, { label: string; icon: string; badge: string }> = {
-  Before: { label: 'Con la Entrada',      icon: '🥂', badge: 'bg-blue-800/60 text-blue-200' },
-  During: { label: 'Con el Plato Fuerte', icon: '🍷', badge: 'bg-purple-800/60 text-purple-200' },
-  After:  { label: 'Con el Postre',       icon: '🍸', badge: 'bg-amber-800/60 text-amber-200' },
+// icon/badge estables; el texto se traduce vía kds.drinkTiming.<tk>.
+const DRINK_TIMING_META: Record<string, { tk: string; icon: string; badge: string }> = {
+  Before: { tk: 'before', icon: '🥂', badge: 'bg-blue-800/60 text-blue-200' },
+  During: { tk: 'during', icon: '🍷', badge: 'bg-purple-800/60 text-purple-200' },
+  After:  { tk: 'after',  icon: '🍸', badge: 'bg-amber-800/60 text-amber-200' },
 };
 
 function resolveItemCourse(item: any): string {
@@ -95,6 +99,7 @@ function isBarUser(u: any): boolean {
 }
 
 export default function KDSPage() {
+  const t = useTranslations('kds');
   const [user, setUser] = useState<any>(null);
   const userRef = useRef<any>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -155,7 +160,7 @@ export default function KDSPage() {
 
     connection.on('NewKitchenOrder', () => {
       loadOrders();
-      toast.success('Nueva orden para cocina');
+      toast.success(t('toastNewOrder'));
     });
 
     connection.start().catch((err) => console.warn('SignalR kitchen:', err));
@@ -165,13 +170,14 @@ export default function KDSPage() {
       clearInterval(interval);
       connection.stop().catch(() => {});
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadOrders = async () => {
     try {
       const token = localStorage.getItem('kds_token');
       if (!token) return;
-      
+
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       const response = await api.get('/api/order/active');
       const data = response?.data;
@@ -260,10 +266,10 @@ export default function KDSPage() {
     const endpoint = isBar ? `bar-preparing` : `kitchen-preparing`;
     try {
       await api.put(`/api/order/${orderId}/${endpoint}`);
-      toast.success('Marcado como Preparando');
+      toast.success(t('toastPreparing'));
       loadOrders();
     } catch {
-      toast.error('Error al actualizar');
+      toast.error(t('toastUpdateError'));
     }
   };
 
@@ -272,17 +278,17 @@ export default function KDSPage() {
     const endpoint = isBar ? `bar-ready` : `kitchen-ready`;
     try {
       await api.put(`/api/order/${orderId}/${endpoint}`);
-      toast.success('Marcado como Listo para servir');
+      toast.success(t('toastReady'));
       loadOrders();
     } catch {
-      toast.error('Error al actualizar');
+      toast.error(t('toastUpdateError'));
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Cargando...</div>
+        <div className="text-white text-xl">{t('loading')}</div>
       </div>
     );
   }
@@ -297,7 +303,7 @@ export default function KDSPage() {
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
               <h1 className="text-2xl font-bold">
-                {isBar ? '🍹 Bar Display System' : '🍳 Kitchen Display System'}
+                {isBar ? t('barTitle') : t('kitchenTitle')}
               </h1>
               <p className="text-gray-400 text-sm mt-1">
                 {user?.firstName} {user?.lastName}
@@ -309,8 +315,9 @@ export default function KDSPage() {
             <div className="flex items-center gap-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-primary-400">{orders.length}</p>
-                <p className="text-sm text-gray-400">Órdenes Activas</p>
+                <p className="text-sm text-gray-400">{t('activeOrders')}</p>
               </div>
+              <LanguageSwitcher />
               <button
                 onClick={() => {
                   localStorage.clear();
@@ -318,7 +325,7 @@ export default function KDSPage() {
                 }}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
               >
-                Salir
+                {t('logout')}
               </button>
             </div>
           </div>
@@ -331,15 +338,16 @@ export default function KDSPage() {
           {isBar ? (
             // Bar: Todos / Antes / Durante / Después
             ([
-              { key: 'all',    label: 'Todos',   icon: '🍹' },
-              { key: 'Before', label: 'Con la Entrada',      icon: '🥂' },
-              { key: 'During', label: 'Con el Plato Fuerte', icon: '🍷' },
-              { key: 'After',  label: 'Con el Postre',       icon: '🍸' },
+              { key: 'all',    icon: '🍹' },
+              { key: 'Before', icon: '🥂' },
+              { key: 'During', icon: '🍷' },
+              { key: 'After',  icon: '🍸' },
             ] as const).map((tab) => {
               const allItems = orders.flatMap(o => o.items || []);
               const count = tab.key === 'all'
                 ? allItems.length
                 : allItems.filter((i: any) => resolveDrinkTiming(i) === tab.key).length;
+              const label = tab.key === 'all' ? t('all') : t(`drinkTiming.${tab.key.toLowerCase()}`);
               return (
                 <button
                   key={tab.key}
@@ -350,7 +358,7 @@ export default function KDSPage() {
                       : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                   }`}
                 >
-                  {tab.icon} {tab.label}
+                  {tab.icon} {label}
                   <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${drinkTimingFilter === tab.key ? 'bg-white/20' : 'bg-gray-700'}`}>
                     {count}
                   </span>
@@ -360,14 +368,15 @@ export default function KDSPage() {
           ) : (
             // Cocina: Todos / Entrada / Plato Fuerte / Postre
             ([
-              { key: 'all',         label: 'Todos',        icon: '📋' },
-              { key: 'Entrada',     label: 'Entrada',      icon: '🥗' },
-              { key: 'PlatoFuerte', label: 'Plato Fuerte', icon: '🍖' },
-              { key: 'Postre',      label: 'Postre',       icon: '🍰' },
+              { key: 'all',         icon: '📋' },
+              { key: 'Entrada',     icon: '🥗' },
+              { key: 'PlatoFuerte', icon: '🍖' },
+              { key: 'Postre',      icon: '🍰' },
             ] as const).map((tab) => {
               const count = tab.key === 'all'
                 ? orders.reduce((acc, o) => acc + (o.items || []).length, 0)
                 : orders.reduce((acc, o) => acc + (o.items || []).filter((i: any) => resolveItemCourse(i) === tab.key).length, 0);
+              const label = tab.key === 'all' ? t('all') : t(`course.${COURSE_META[tab.key]?.tk}`);
               return (
                 <button
                   key={tab.key}
@@ -378,7 +387,7 @@ export default function KDSPage() {
                       : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                   }`}
                 >
-                  {tab.icon} {tab.label}
+                  {tab.icon} {label}
                   <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${courseFilter === tab.key ? 'bg-white/20' : 'bg-gray-700'}`}>
                     {count}
                   </span>
@@ -394,13 +403,10 @@ export default function KDSPage() {
         {orders.length === 0 ? (
           <div className="text-center py-20">
             <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
-            <p className="text-2xl text-gray-400">¡Todo listo! No hay órdenes pendientes</p>
+            <p className="text-2xl text-gray-400">{t('allDone')}</p>
           </div>
         ) : (() => {
-          // KDS-NAV.1 — antes: cuando un tab filtraba a 0 items, la página quedaba
-          // EN BLANCO (orders.length > 0 → entraba al grid, pero items.length === 0
-          // en cada card devolvía null → nada visible). Ahora computamos el total
-          // filtrado para mostrar un empty state claro por tab vacío.
+          // KDS-NAV.1 — empty state claro por tab vacío (evita pantalla en blanco).
           const matchingItemsTotal = orders.reduce((acc, o) => {
             const all = o.items || [];
             const filtered = isBar
@@ -410,25 +416,25 @@ export default function KDSPage() {
           }, 0);
 
           if (matchingItemsTotal === 0) {
-            const tabLabel = isBar
-              ? (DRINK_TIMING_META[drinkTimingFilter as 'Before'|'During'|'After']?.label ?? 'esta categoría')
-              : (COURSE_META[courseFilter as 'Entrada'|'PlatoFuerte'|'Postre']?.label ?? 'esta categoría');
-            const tabIcon = isBar
-              ? (DRINK_TIMING_META[drinkTimingFilter as 'Before'|'During'|'After']?.icon ?? '🍹')
-              : (COURSE_META[courseFilter as 'Entrada'|'PlatoFuerte'|'Postre']?.icon ?? '📋');
+            const tabMeta = isBar
+              ? DRINK_TIMING_META[drinkTimingFilter as 'Before'|'During'|'After']
+              : COURSE_META[courseFilter as 'Entrada'|'PlatoFuerte'|'Postre'];
+            const tabLabel = tabMeta
+              ? (isBar ? t(`drinkTiming.${tabMeta.tk}`) : t(`course.${tabMeta.tk}`))
+              : t('unknownCategory');
+            const tabIcon = tabMeta?.icon ?? (isBar ? '🍹' : '📋');
             return (
               <div className="text-center py-20">
                 <div className="text-6xl mb-4">{tabIcon}</div>
-                <p className="text-2xl text-gray-300 mb-2">Sin pedidos en <span className="text-primary-400 font-semibold">{tabLabel}</span></p>
+                <p className="text-2xl text-gray-300 mb-2">{t('noOrdersIn', { category: tabLabel })}</p>
                 <p className="text-sm text-gray-500">
-                  Tienes {orders.length} {orders.length === 1 ? 'orden activa' : 'órdenes activas'},
-                  pero ningún ítem está en este filtro. Cambia de tab para verlos.
+                  {t('noItemsInFilter', { count: orders.length })}
                 </p>
                 <button
                   onClick={() => isBar ? setDrinkTimingFilter('all') : setCourseFilter('all')}
                   className="mt-6 px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
                 >
-                  Ver todos
+                  {t('viewAll')}
                 </button>
               </div>
             );
@@ -460,27 +466,21 @@ export default function KDSPage() {
                   <div className={`${alertColor} p-4`}>
                     <div className="flex flex-wrap justify-between items-center gap-2 text-white">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-2xl font-bold">Mesa {order.tableId ?? (order as any).tableNumber ?? '-'}</p>
-{/*                         {hasAllergies && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-600 text-white text-sm font-bold">
-                            <AlertCircle className="w-4 h-4" />
-                            ALERGIA
-                          </span>
-                        )} */}
+                        <p className="text-2xl font-bold">{t('table', { number: order.tableId ?? (order as any).tableNumber ?? '-' })}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock className="w-5 h-5" />
-                        <span className="text-xl font-bold">{elapsed} min</span>
+                        <span className="text-xl font-bold">{elapsed} {t('minAbbr')}</span>
                       </div>
                     </div>
-                    <p className="text-sm opacity-90 mt-1">Pedido #{(order.orderNumber ?? '').split('-').pop()?.toUpperCase()}</p>
+                    <p className="text-sm opacity-90 mt-1">{t('orderNumber', { code: (order.orderNumber ?? '').split('-').pop()?.toUpperCase() ?? '' })}</p>
                   </div>
 
                   {/* Bloque de alergias destacado */}
                   {hasAllergies && allergiesText && (
                     <div className="mx-4 mt-3 rounded-lg bg-red-900/40 border border-red-500 p-3 flex items-center gap-2">
                       <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0" />
-                      <span className="text-red-200 font-semibold uppercase">ALERGIA: {allergiesText}</span>
+                      <span className="text-red-200 font-semibold uppercase">{t('allergy', { text: allergiesText })}</span>
                     </div>
                   )}
 
@@ -489,8 +489,8 @@ export default function KDSPage() {
                     {items.map((item: any, idx: number) => {
                       // Bar: mostrar timing de bebida; Cocina: mostrar curso
                       const badgeMeta = isBar
-                        ? (() => { const tm = DRINK_TIMING_META[resolveDrinkTiming(item)] ?? DRINK_TIMING_META['During']; return { icon: tm.icon, label: tm.label, badge: tm.badge }; })()
-                        : (() => { const cm = COURSE_META[resolveItemCourse(item)] ?? COURSE_META['PlatoFuerte']; return { icon: cm.icon, label: cm.label, badge: cm.badge }; })();
+                        ? (() => { const tm = DRINK_TIMING_META[resolveDrinkTiming(item)] ?? DRINK_TIMING_META['During']; return { icon: tm.icon, label: t(`drinkTiming.${tm.tk}`), badge: tm.badge }; })()
+                        : (() => { const cm = COURSE_META[resolveItemCourse(item)] ?? COURSE_META['PlatoFuerte']; return { icon: cm.icon, label: t(`course.${cm.tk}`), badge: cm.badge }; })();
                       return (
                       <div key={item.id ?? idx} className={`rounded-lg bg-amber-900/20 border border-amber-600/40 p-3`}>
                         <div className="flex justify-between items-start">
@@ -524,17 +524,14 @@ export default function KDSPage() {
                                 </div>
                               ) : null}
                               {preference ? (
-                                <div className="text-orange-300">🔥 Preferencia / Término: {preference}</div>
+                                <div className="text-orange-300">{t('preference', { value: preference })}</div>
                               ) : null}
                               {sideDish ? (
-                                <div className="text-amber-200">🍽️ Guarnición: {sideDish}</div>
+                                <div className="text-amber-200">{t('sideDish', { value: sideDish })}</div>
                               ) : null}
                               {customizations ? (
-                                <div className="text-amber-200">🍴 Personalización: {customizations}</div>
+                                <div className="text-amber-200">{t('customization', { value: customizations })}</div>
                               ) : null}
-{/*                               {allergies ? (
-                                <div className="text-red-400 font-medium">⚠ Alergia: {allergies}</div>
-                              ) : null} */}
                             </div>
                           );
                         })()}
@@ -552,10 +549,10 @@ export default function KDSPage() {
                       const emoji      = isBar ? '🍹' : '👨‍🍳';
 
                       if (isServed) {
-                        return <div className="text-center py-2 text-teal-400 font-medium">✓ Servido</div>;
+                        return <div className="text-center py-2 text-teal-400 font-medium">{t('served')}</div>;
                       }
                       if (isReady) {
-                        return <div className="text-center py-2 text-green-400 font-medium">✓ Listo — esperando al mesero</div>;
+                        return <div className="text-center py-2 text-green-400 font-medium">{t('readyWaiting')}</div>;
                       }
                       if (isPreparing) {
                         return (
@@ -563,7 +560,7 @@ export default function KDSPage() {
                             onClick={() => handleReady(order.id)}
                             className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors"
                           >
-                            ✅ Listo para Servir
+                            {t('markReady')}
                           </button>
                         );
                       }
@@ -572,7 +569,7 @@ export default function KDSPage() {
                           onClick={() => handlePreparing(order.id)}
                           className="w-full px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-lg transition-colors"
                         >
-                          {emoji} Preparando
+                          {emoji} {t('markPreparing')}
                         </button>
                       );
                     })()}

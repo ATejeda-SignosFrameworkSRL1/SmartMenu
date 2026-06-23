@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 Kitchen Display System",
+    "barTitle": "🍹 Bar Display System",
+    "activeOrders": "Commandes Actives",
+    "logout": "Déconnexion",
+    "all": "Tous",
+    "allDone": "Tout est prêt ! Aucune commande en attente",
+    "noOrdersIn": "Aucune commande en {category}",
+    "noItemsInFilter": "Vous avez {count, plural, one {# commande active} other {# commandes actives}}, mais aucun article ne correspond à ce filtre. Changez d'onglet pour les voir.",
+    "viewAll": "Voir tout",
+    "unknownCategory": "cette catégorie",
+    "table": "Table {number}",
+    "orderNumber": "Commande #{code}",
+    "minAbbr": "min",
+    "allergy": "ALLERGIE : {text}",
+    "preference": "🔥 Préférence / Cuisson : {value}",
+    "sideDish": "🍽️ Accompagnement : {value}",
+    "customization": "🍴 Personnalisation : {value}",
+    "served": "✓ Servi",
+    "readyWaiting": "✓ Prêt — en attente du serveur",
+    "markReady": "✅ Prêt à Servir",
+    "markPreparing": "En Préparation",
+    "loading": "Chargement...",
+    "toastNewOrder": "Nouvelle commande en cuisine",
+    "toastPreparing": "Marqué comme En Préparation",
+    "toastReady": "Marqué comme Prêt à servir",
+    "toastUpdateError": "Erreur de mise à jour",
+    "course": {
+      "starter": "Entrée",
+      "main": "Plat Principal",
+      "dessert": "Dessert"
+    },
+    "drinkTiming": {
+      "before": "Avec l'Entrée",
+      "during": "Avec le Plat Principal",
+      "after": "Avec le Dessert"
+    }
+  }
+}

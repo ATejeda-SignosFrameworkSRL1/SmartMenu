@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 주방 디스플레이 시스템",
+    "barTitle": "🍹 바 디스플레이 시스템",
+    "activeOrders": "진행 중인 주문",
+    "logout": "로그아웃",
+    "all": "전체",
+    "allDone": "완료! 대기 중인 주문이 없습니다",
+    "noOrdersIn": "{category}에 주문 없음",
+    "noItemsInFilter": "{count, plural, other {활성 주문 #건}} 있지만 이 필터에 해당하는 항목이 없습니다. 탭을 변경하세요.",
+    "viewAll": "전체 보기",
+    "unknownCategory": "이 카테고리",
+    "table": "{number}번 테이블",
+    "orderNumber": "주문 #{code}",
+    "minAbbr": "분",
+    "allergy": "알레르기: {text}",
+    "preference": "🔥 조리 방식: {value}",
+    "sideDish": "🍽️ 사이드: {value}",
+    "customization": "🍴 맞춤 요청: {value}",
+    "served": "✓ 서빙 완료",
+    "readyWaiting": "✓ 준비 완료 — 서버 대기 중",
+    "markReady": "✅ 서빙 준비 완료",
+    "markPreparing": "조리 중",
+    "loading": "로딩 중...",
+    "toastNewOrder": "새 주방 주문",
+    "toastPreparing": "조리 중으로 표시됨",
+    "toastReady": "서빙 준비 완료로 표시됨",
+    "toastUpdateError": "업데이트 오류",
+    "course": {
+      "starter": "전채",
+      "main": "메인",
+      "dessert": "디저트"
+    },
+    "drinkTiming": {
+      "before": "전채와 함께",
+      "during": "메인과 함께",
+      "after": "디저트와 함께"
+    }
+  }
+}

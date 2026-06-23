@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 厨房显示系统",
+    "barTitle": "🍹 吧台显示系统",
+    "activeOrders": "进行中订单",
+    "logout": "退出",
+    "all": "全部",
+    "allDone": "全部完成！暂无待处理订单",
+    "noOrdersIn": "{category}暂无订单",
+    "noItemsInFilter": "当前有{count, plural, other {# 条活跃订单}}，但没有符合此筛选的菜品。切换标签查看。",
+    "viewAll": "查看全部",
+    "unknownCategory": "此分类",
+    "table": "{number}号桌",
+    "orderNumber": "订单 #{code}",
+    "minAbbr": "分",
+    "allergy": "过敏：{text}",
+    "preference": "🔥 偏好/火候：{value}",
+    "sideDish": "🍽️ 配菜：{value}",
+    "customization": "🍴 定制：{value}",
+    "served": "✓ 已上菜",
+    "readyWaiting": "✓ 已备好 — 等待服务员",
+    "markReady": "✅ 可以上菜",
+    "markPreparing": "备餐中",
+    "loading": "加载中...",
+    "toastNewOrder": "厨房新订单",
+    "toastPreparing": "已标记为备餐中",
+    "toastReady": "已标记为可上菜",
+    "toastUpdateError": "更新失败",
+    "course": {
+      "starter": "前菜",
+      "main": "主菜",
+      "dessert": "甜点"
+    },
+    "drinkTiming": {
+      "before": "随前菜",
+      "during": "随主菜",
+      "after": "随甜点"
+    }
+  }
+}

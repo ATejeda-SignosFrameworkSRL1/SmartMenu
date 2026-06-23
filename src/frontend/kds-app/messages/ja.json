@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 キッチンディスプレイ",
+    "barTitle": "🍹 バーディスプレイ",
+    "activeOrders": "受付中の注文",
+    "logout": "ログアウト",
+    "all": "すべて",
+    "allDone": "完了！未処理の注文はありません",
+    "noOrdersIn": "{category} に注文はありません",
+    "noItemsInFilter": "{count, plural, other {# 件の注文があります}}が、このフィルターに該当するアイテムはありません。タブを切り替えてご確認ください。",
+    "viewAll": "すべて表示",
+    "unknownCategory": "このカテゴリ",
+    "table": "テーブル {number}",
+    "orderNumber": "注文 #{code}",
+    "minAbbr": "分",
+    "allergy": "アレルギー: {text}",
+    "preference": "🔥 好み / 焼き加減: {value}",
+    "sideDish": "🍽️ 付け合わせ: {value}",
+    "customization": "🍴 カスタマイズ: {value}",
+    "served": "✓ 提供済み",
+    "readyWaiting": "✓ 完成 — ウェイター待ち",
+    "markReady": "✅ 提供準備完了",
+    "markPreparing": "調理中",
+    "loading": "読み込み中...",
+    "toastNewOrder": "新しい注文が届きました",
+    "toastPreparing": "調理中にしました",
+    "toastReady": "提供準備完了にしました",
+    "toastUpdateError": "更新エラー",
+    "course": {
+      "starter": "前菜",
+      "main": "メイン",
+      "dessert": "デザート"
+    },
+    "drinkTiming": {
+      "before": "前菜と一緒に",
+      "during": "メインと一緒に",
+      "after": "デザートと一緒に"
+    }
+  }
+}

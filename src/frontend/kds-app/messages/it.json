@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 Kitchen Display System",
+    "barTitle": "🍹 Bar Display System",
+    "activeOrders": "Ordini Attivi",
+    "logout": "Esci",
+    "all": "Tutti",
+    "allDone": "Tutto pronto! Nessun ordine in sospeso",
+    "noOrdersIn": "Nessun ordine in {category}",
+    "noItemsInFilter": "Hai {count, plural, one {# ordine attivo} other {# ordini attivi}}, ma nessun elemento è in questo filtro. Cambia tab per visualizzarli.",
+    "viewAll": "Vedi tutti",
+    "unknownCategory": "questa categoria",
+    "table": "Tavolo {number}",
+    "orderNumber": "Ordine #{code}",
+    "minAbbr": "min",
+    "allergy": "ALLERGIA: {text}",
+    "preference": "🔥 Preferenza / Cottura: {value}",
+    "sideDish": "🍽️ Contorno: {value}",
+    "customization": "🍴 Personalizzazione: {value}",
+    "served": "✓ Servito",
+    "readyWaiting": "✓ Pronto — in attesa del cameriere",
+    "markReady": "✅ Pronto da Servire",
+    "markPreparing": "In Preparazione",
+    "loading": "Caricamento...",
+    "toastNewOrder": "Nuovo ordine in cucina",
+    "toastPreparing": "Segnato come In Preparazione",
+    "toastReady": "Segnato come Pronto da servire",
+    "toastUpdateError": "Errore di aggiornamento",
+    "course": {
+      "starter": "Antipasto",
+      "main": "Secondo",
+      "dessert": "Dessert"
+    },
+    "drinkTiming": {
+      "before": "Con l'Antipasto",
+      "during": "Con il Secondo",
+      "after": "Con il Dessert"
+    }
+  }
+}

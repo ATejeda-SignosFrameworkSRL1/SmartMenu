@@ -1,0 +1,40 @@
+{
+  "kds": {
+    "kitchenTitle": "🍳 Kitchen Display System",
+    "barTitle": "🍹 Bar Display System",
+    "activeOrders": "Órdenes Activas",
+    "logout": "Salir",
+    "all": "Todos",
+    "allDone": "¡Todo listo! No hay órdenes pendientes",
+    "noOrdersIn": "Sin pedidos en {category}",
+    "noItemsInFilter": "Tienes {count, plural, one {# orden activa} other {# órdenes activas}}, pero ningún ítem está en este filtro. Cambia de tab para verlos.",
+    "viewAll": "Ver todos",
+    "unknownCategory": "esta categoría",
+    "table": "Mesa {number}",
+    "orderNumber": "Pedido #{code}",
+    "minAbbr": "min",
+    "allergy": "ALERGIA: {text}",
+    "preference": "🔥 Preferencia / Término: {value}",
+    "sideDish": "🍽️ Guarnición: {value}",
+    "customization": "🍴 Personalización: {value}",
+    "served": "✓ Servido",
+    "readyWaiting": "✓ Listo — esperando al mesero",
+    "markReady": "✅ Listo para Servir",
+    "markPreparing": "Preparando",
+    "loading": "Cargando...",
+    "toastNewOrder": "Nueva orden para cocina",
+    "toastPreparing": "Marcado como Preparando",
+    "toastReady": "Marcado como Listo para servir",
+    "toastUpdateError": "Error al actualizar",
+    "course": {
+      "starter": "Entrada",
+      "main": "Plato Fuerte",
+      "dessert": "Postre"
+    },
+    "drinkTiming": {
+      "before": "Con la Entrada",
+      "during": "Con el Plato Fuerte",
+      "after": "Con el Postre"
+    }
+  }
+}
