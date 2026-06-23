@@ -8,7 +8,10 @@ import {
   ShoppingBag, BarChart3, Search, User, Radio
 } from 'lucide-react';
 import * as signalR from '@microsoft/signalr';
+import { useTranslations, useLocale } from 'next-intl';
 import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
+import { dateLocale } from '@/i18n/config';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 // F3 — auth-client centralizado reemplaza el interceptor JWT inline
 // (refresh transparente con singleton lock, mismo prefijo cashier_*).
@@ -16,9 +19,7 @@ const { api } = createAuthApi('cashier');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const METHOD_LABELS: Record<string, string> = {
-  Cash: 'Efectivo', Card: 'Tarjeta', Transfer: 'Transferencia', Mixed: 'Mixto',
-};
+// Color por método; la etiqueta se traduce vía cashier.method.<lower>.
 const METHOD_COLORS: Record<string, string> = {
   Cash: 'bg-green-100 text-green-700',
   Card: 'bg-blue-100 text-blue-700',
@@ -52,6 +53,8 @@ interface CartItem {
 // ─── Caja del Día ────────────────────────────────────────────────────────────
 
 function CajaTab({ user }: { user: any }) {
+  const t = useTranslations('cashier');
+  const dl = dateLocale(useLocale());
   const [summary, setSummary] = useState<Summary | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +152,7 @@ function CajaTab({ user }: { user: any }) {
       const res = await api.get(`/api/payment/validate-rnc/${fiscalRnc}`);
       setFiscalBusinessName(res.data.businessName ?? ''); setFiscalValidated(true);
     } catch (err: any) {
-      setFiscalError(err?.response?.data?.error ?? 'RNC no encontrado en la DGII');
+      setFiscalError(err?.response?.data?.error ?? t('rncNotFound'));
     } finally { setFiscalValidating(false); }
   };
 
@@ -163,7 +166,7 @@ function CajaTab({ user }: { user: any }) {
         p.id === fiscalPaymentId ? { ...p, requiresFiscalReceipt: true, rnc: fiscalRnc, businessName: fiscalBusinessName } : p
       ));
       if (summary) setSummary({ ...summary, fiscalCount: summary.fiscalCount + 1 });
-    } catch { setFiscalError('Error al guardar. Intente nuevamente.'); }
+    } catch { setFiscalError(t('saveError')); }
     finally { setFiscalSaving(false); }
   };
 
@@ -175,12 +178,12 @@ function CajaTab({ user }: { user: any }) {
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
         <button onClick={loadPayments} disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Actualizar
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} {t('refresh')}
         </button>
-        <span title={liveConnected ? 'Caja en vivo conectada' : 'Caja en vivo desconectada'}
+        <span title={liveConnected ? t('liveOn') : t('liveOff')}
           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${liveConnected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
           <Radio className={`w-3.5 h-3.5 ${liveConnected ? 'animate-pulse' : ''}`} />
-          {liveConnected ? 'Live' : 'Offline'}
+          {liveConnected ? t('live') : t('offline')}
         </span>
       </div>
 
@@ -193,37 +196,37 @@ function CajaTab({ user }: { user: any }) {
           {/* Resumen */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 col-span-2 md:col-span-1">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Total del día</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t('totalDay')}</p>
               <p className="text-2xl font-bold text-gray-900">RD$ {fmt(summary?.totalWithTips ?? 0)}</p>
-              <p className="text-xs text-gray-400 mt-1">{summary?.count ?? 0} transacciones</p>
+              <p className="text-xs text-gray-400 mt-1">{t('transactions', { count: summary?.count ?? 0 })}</p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Propinas</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t('tips')}</p>
               <p className="text-xl font-bold text-blue-600">RD$ {fmt(summary?.totalTips ?? 0)}</p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Ventas netas</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t('netSales')}</p>
               <p className="text-xl font-bold text-green-600">RD$ {fmt(summary?.totalAmount ?? 0)}</p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Con NCF</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t('withNcf')}</p>
               <div className="flex items-end gap-2">
                 <p className="text-xl font-bold text-purple-600">{summary?.fiscalCount ?? 0}</p>
-                <p className="text-xs text-gray-400 mb-0.5">de {summary?.count ?? 0}</p>
+                <p className="text-xs text-gray-400 mb-0.5">{t('ofCount', { count: summary?.count ?? 0 })}</p>
               </div>
             </div>
           </div>
 
           {/* Desglose por método */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Por método de pago</h2>
+            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">{t('byMethod')}</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'Efectivo', key: 'byCash', icon: DollarSign, color: 'bg-green-50 text-green-600 bg-green-100' },
-                { label: 'Tarjeta', key: 'byCard', icon: CreditCard, color: 'bg-blue-50 text-blue-600 bg-blue-100' },
-                { label: 'Transferencia', key: 'byTransfer', icon: ArrowRightLeft, color: 'bg-purple-50 text-purple-600 bg-purple-100' },
-                { label: 'Mixto', key: 'byMixed', icon: Layers, color: 'bg-orange-50 text-orange-600 bg-orange-100' },
-              ].map(({ label, key, icon: Icon, color }) => {
+                { mk: 'cash', key: 'byCash', icon: DollarSign, color: 'bg-green-50 text-green-600 bg-green-100' },
+                { mk: 'card', key: 'byCard', icon: CreditCard, color: 'bg-blue-50 text-blue-600 bg-blue-100' },
+                { mk: 'transfer', key: 'byTransfer', icon: ArrowRightLeft, color: 'bg-purple-50 text-purple-600 bg-purple-100' },
+                { mk: 'mixed', key: 'byMixed', icon: Layers, color: 'bg-orange-50 text-orange-600 bg-orange-100' },
+              ].map(({ mk, key, icon: Icon, color }) => {
                 const [bg, tc, ibg] = color.split(' ');
                 return (
                   <div key={key} className={`flex items-center gap-3 p-3 ${bg} rounded-xl`}>
@@ -231,7 +234,7 @@ function CajaTab({ user }: { user: any }) {
                       <Icon className={`w-5 h-5 ${tc}`} />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 font-medium">{label}</p>
+                      <p className="text-xs text-gray-500 font-medium">{t(`method.${mk}`)}</p>
                       <p className={`text-base font-bold ${tc}`}>RD$ {fmt((summary as any)?.[key] ?? 0)}</p>
                     </div>
                   </div>
@@ -243,15 +246,15 @@ function CajaTab({ user }: { user: any }) {
           {/* Tabla */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="font-bold text-gray-900">Movimientos del día</h2>
-              <span className="text-xs text-gray-400">{payments.length} registros</span>
+              <h2 className="font-bold text-gray-900">{t('dayMovements')}</h2>
+              <span className="text-xs text-gray-400">{t('records', { count: payments.length })}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    {['Hora', 'Orden', 'Mesa', 'Mesero', 'Método', 'Monto', 'Propina', 'Total', 'NCF'].map((h, i) => (
-                      <th key={h} className={`px-4 py-3 font-semibold text-gray-600 ${i >= 5 ? 'text-right' : i === 8 ? 'text-center' : 'text-left'}`}>{h}</th>
+                    {[t('th.time'), t('th.order'), t('th.table'), t('th.waiter'), t('th.method'), t('th.amount'), t('th.tip'), t('th.total'), t('th.ncf')].map((h, i) => (
+                      <th key={i} className={`px-4 py-3 font-semibold text-gray-600 ${i >= 5 ? 'text-right' : i === 8 ? 'text-center' : 'text-left'}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -259,14 +262,14 @@ function CajaTab({ user }: { user: any }) {
                   {payments.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-500">
-                        {p.completedAt ? new Date(p.completedAt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }) : '-'}
+                        {p.completedAt ? new Date(p.completedAt).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true }) : '-'}
                       </td>
-                      <td className="px-4 py-3 font-mono text-gray-700">{p.orderNumber ? `Pedido #${(p.orderNumber.split('-').pop() ?? '').toUpperCase()}` : '-'}</td>
-                      <td className="px-4 py-3 font-medium">{p.tableNumber || 'Mostrador'}</td>
+                      <td className="px-4 py-3 font-mono text-gray-700">{p.orderNumber ? t('orderNumber', { code: (p.orderNumber.split('-').pop() ?? '').toUpperCase() }) : '-'}</td>
+                      <td className="px-4 py-3 font-medium">{p.tableNumber || t('counter')}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{p.waiterName || '-'}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${METHOD_COLORS[p.method] ?? 'bg-gray-100 text-gray-600'}`}>
-                          {METHOD_LABELS[p.method] ?? p.method}
+                          {t(`method.${(p.method ?? '').toLowerCase()}`)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-gray-700">RD$ {fmt(p.amount)}</td>
@@ -291,7 +294,7 @@ function CajaTab({ user }: { user: any }) {
                 </tbody>
               </table>
             </div>
-            {payments.length === 0 && <p className="px-6 py-10 text-gray-400 text-center text-sm">No hay pagos en esta fecha.</p>}
+            {payments.length === 0 && <p className="px-6 py-10 text-gray-400 text-center text-sm">{t('noPayments')}</p>}
           </div>
         </>
       )}
@@ -302,8 +305,8 @@ function CajaTab({ user }: { user: any }) {
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             <div className="bg-gray-900 px-6 py-5 flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Comprobante Fiscal</p>
-                <h2 className="text-lg font-bold text-white">Agregar NCF al pago</h2>
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('fiscalReceipt')}</p>
+                <h2 className="text-lg font-bold text-white">{t('addNcfTitle')}</h2>
               </div>
               <button onClick={() => setShowFiscalModal(false)} className="p-2 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -311,15 +314,15 @@ function CajaTab({ user }: { user: any }) {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">RNC de la empresa</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('companyRnc')}</label>
                 <div className="flex gap-2">
                   <input type="text" value={fiscalRnc}
                     onChange={(e) => { setFiscalRnc(e.target.value.replace(/\D/g, '')); setFiscalValidated(false); setFiscalError(''); }}
-                    placeholder="Ej: 101001018" maxLength={11}
+                    placeholder={t('rncPlaceholder')} maxLength={11}
                     className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
                   <button onClick={validateRnc} disabled={fiscalRnc.length < 9 || fiscalValidating}
                     className="px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 text-sm font-semibold min-w-[90px]">
-                    {fiscalValidating ? <span className="flex items-center gap-1.5 justify-center"><Loader2 className="w-4 h-4 animate-spin" /></span> : 'Validar'}
+                    {fiscalValidating ? <span className="flex items-center gap-1.5 justify-center"><Loader2 className="w-4 h-4 animate-spin" /></span> : t('validate')}
                   </button>
                 </div>
               </div>
@@ -332,17 +335,17 @@ function CajaTab({ user }: { user: any }) {
                 <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
                   <div className="flex items-center gap-2 mb-1">
                     <Building2 className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-semibold text-green-700">Empresa encontrada</span>
+                    <span className="text-sm font-semibold text-green-700">{t('companyFound')}</span>
                   </div>
                   <p className="text-sm text-green-800 font-medium">{fiscalBusinessName}</p>
                   <p className="text-xs text-green-600 mt-0.5">RNC: {fiscalRnc}</p>
                 </div>
               )}
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowFiscalModal(false)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">Cancelar</button>
+                <button onClick={() => setShowFiscalModal(false)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">{t('cancel')}</button>
                 <button onClick={saveFiscalReceipt} disabled={!fiscalValidated || fiscalSaving}
                   className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 text-sm font-semibold">
-                  {fiscalSaving ? <span className="flex items-center gap-1.5 justify-center"><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</span> : 'Guardar NCF'}
+                  {fiscalSaving ? <span className="flex items-center gap-1.5 justify-center"><Loader2 className="w-4 h-4 animate-spin" /> {t('saving')}</span> : t('saveNcf')}
                 </button>
               </div>
             </div>
@@ -356,6 +359,7 @@ function CajaTab({ user }: { user: any }) {
 // ─── Nueva Venta (POS) ────────────────────────────────────────────────────────
 
 function NuevaVentaTab({ user }: { user: any }) {
+  const t = useTranslations('cashier');
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loadingMenu, setLoadingMenu] = useState(true);
   const [search, setSearch] = useState('');
@@ -432,13 +436,13 @@ function NuevaVentaTab({ user }: { user: any }) {
       const res = await api.get(`/api/payment/validate-rnc/${fiscalRnc}`);
       setFiscalBusinessName(res.data.businessName ?? ''); setFiscalValidated(true);
     } catch (err: any) {
-      setFiscalError(err?.response?.data?.error ?? 'RNC no encontrado en la DGII');
+      setFiscalError(err?.response?.data?.error ?? t('rncNotFound'));
     } finally { setFiscalValidating(false); }
   };
 
   const submitSale = async () => {
-    if (cart.length === 0) { setErrorMsg('Agrega al menos un producto al carrito.'); return; }
-    if (requiresFiscal && !fiscalValidated) { setErrorMsg('Valida el RNC antes de continuar.'); return; }
+    if (cart.length === 0) { setErrorMsg(t('cartEmptyError')); return; }
+    if (requiresFiscal && !fiscalValidated) { setErrorMsg(t('validateRncFirst')); return; }
     setProcessing(true); setErrorMsg(''); setSuccessMsg('');
     try {
       const items = cart.map(c => ({
@@ -465,12 +469,15 @@ function NuevaVentaTab({ user }: { user: any }) {
       }
 
       const res = await api.post('/api/order/pos', body);
-      setSuccessMsg(`✓ Venta registrada — Pedido #${(String(res.data.orderNumber ?? '').split('-').pop() ?? '').toUpperCase()} | Total cobrado: RD$ ${fmt(res.data.paid)}`);
+      setSuccessMsg(t('saleRegistered', {
+        code: (String(res.data.orderNumber ?? '').split('-').pop() ?? '').toUpperCase(),
+        total: fmt(res.data.paid),
+      }));
       setCart([]); setCustomerName(''); setTipAmount(0); setTipPct(0);
       setRequiresFiscal(false); setFiscalRnc(''); setFiscalBusinessName(''); setFiscalValidated(false);
       setPaymentMethod('Cash');
     } catch (err: any) {
-      setErrorMsg(err?.response?.data?.error ?? 'Error al procesar la venta.');
+      setErrorMsg(err?.response?.data?.error ?? t('saleError'));
     } finally { setProcessing(false); }
   };
 
@@ -484,7 +491,7 @@ function NuevaVentaTab({ user }: { user: any }) {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar plato..."
+              placeholder={t('searchDish')}
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
@@ -493,7 +500,7 @@ function NuevaVentaTab({ user }: { user: any }) {
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setSelectedCategory('')}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${selectedCategory === '' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            Todo
+            {t('allCategories')}
           </button>
           {categories.map(cat => (
             <button key={cat} onClick={() => setSelectedCategory(cat)}
@@ -524,7 +531,7 @@ function NuevaVentaTab({ user }: { user: any }) {
               );
             })}
             {filtered.length === 0 && (
-              <p className="col-span-3 text-center py-8 text-gray-400 text-sm">No se encontraron platos.</p>
+              <p className="col-span-3 text-center py-8 text-gray-400 text-sm">{t('noDishes')}</p>
             )}
           </div>
         )}
@@ -536,7 +543,7 @@ function NuevaVentaTab({ user }: { user: any }) {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="bg-gray-900 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-white font-semibold text-sm">
-              <ShoppingCart className="w-4 h-4" /> Orden ({cartCount} items)
+              <ShoppingCart className="w-4 h-4" /> {t('cartTitle', { count: cartCount })}
             </div>
             {cart.length > 0 && (
               <button onClick={() => setCart([])} className="text-gray-400 hover:text-red-400 transition-colors">
@@ -549,19 +556,19 @@ function NuevaVentaTab({ user }: { user: any }) {
             <div className="flex items-center gap-2 mb-3">
               <User className="w-4 h-4 text-gray-400 shrink-0" />
               <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Nombre del cliente (opcional)"
+                placeholder={t('customerNamePlaceholder')}
                 className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500" />
             </div>
 
             {cart.length === 0 ? (
-              <p className="text-center text-gray-400 text-xs py-6">Agrega productos del menú</p>
+              <p className="text-center text-gray-400 text-xs py-6">{t('addProducts')}</p>
             ) : (
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {cart.map(c => (
                   <div key={c.dish.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-gray-800 truncate">{c.dish.name}</p>
-                      <p className="text-xs text-gray-500">RD$ {fmt(c.dish.price)} c/u</p>
+                      <p className="text-xs text-gray-500">RD$ {fmt(c.dish.price)} {t('each')}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button onClick={() => updateQty(c.dish.id, -1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-red-100 flex items-center justify-center">
@@ -586,34 +593,34 @@ function NuevaVentaTab({ user }: { user: any }) {
         {cart.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-4">
             <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>RD$ {fmt(subtotal)}</span></div>
-              <div className="flex justify-between text-gray-500"><span>ITBIS (18%)</span><span>RD$ {fmt(tax)}</span></div>
-              <div className="flex justify-between text-gray-500"><span>Propina legal (10%)</span><span>RD$ {fmt(legalTip)}</span></div>
-              <div className="flex justify-between font-bold text-gray-900 text-base border-t pt-1.5"><span>Total</span><span>RD$ {fmt(orderTotal)}</span></div>
+              <div className="flex justify-between text-gray-500"><span>{t('subtotal')}</span><span>RD$ {fmt(subtotal)}</span></div>
+              <div className="flex justify-between text-gray-500"><span>{t('itbis')}</span><span>RD$ {fmt(tax)}</span></div>
+              <div className="flex justify-between text-gray-500"><span>{t('legalTip')}</span><span>RD$ {fmt(legalTip)}</span></div>
+              <div className="flex justify-between font-bold text-gray-900 text-base border-t pt-1.5"><span>{t('total')}</span><span>RD$ {fmt(orderTotal)}</span></div>
             </div>
 
             {/* Propina extra */}
             <div>
-              <p className="text-xs font-semibold text-gray-600 mb-2">Propina adicional</p>
+              <p className="text-xs font-semibold text-gray-600 mb-2">{t('additionalTip')}</p>
               <div className="flex gap-2 flex-wrap">
                 {[0, 5, 10, 15].map(pct => (
                   <button key={pct} onClick={() => applyTipPct(pct)}
                     className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${tipPct === pct ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-blue-400'}`}>
-                    {pct === 0 ? 'Sin propina' : `${pct}%`}
+                    {pct === 0 ? t('noTip') : `${pct}%`}
                   </button>
                 ))}
               </div>
-              {tipAmount > 0 && <p className="text-xs text-blue-600 mt-1">+ RD$ {fmt(tipAmount)} de propina</p>}
+              {tipAmount > 0 && <p className="text-xs text-blue-600 mt-1">{t('tipAdded', { amount: fmt(tipAmount) })}</p>}
             </div>
 
             {/* Método de pago */}
             <div>
-              <p className="text-xs font-semibold text-gray-600 mb-2">Método de pago</p>
+              <p className="text-xs font-semibold text-gray-600 mb-2">{t('paymentMethod')}</p>
               <div className="grid grid-cols-2 gap-2">
                 {['Cash', 'Card', 'Transfer', 'Mixed'].map(m => (
                   <button key={m} onClick={() => setPaymentMethod(m)}
                     className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${paymentMethod === m ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>
-                    {METHOD_LABELS[m]}
+                    {t(`method.${m.toLowerCase()}`)}
                   </button>
                 ))}
               </div>
@@ -622,15 +629,15 @@ function NuevaVentaTab({ user }: { user: any }) {
             {/* Subpagos si es Mixto */}
             {paymentMethod === 'Mixed' && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">Desglose pago mixto</p>
+                <p className="text-xs font-semibold text-gray-600">{t('mixedBreakdown')}</p>
                 {subPayments.map((sp, i) => (
                   <div key={i} className="flex gap-2 items-center">
                     <select value={sp.method} onChange={e => setSubPayments(prev => prev.map((s, j) => j === i ? { ...s, method: e.target.value } : s))}
                       className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs">
-                      {['Cash', 'Card', 'Transfer'].map(m => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}
+                      {['Cash', 'Card', 'Transfer'].map(m => <option key={m} value={m}>{t(`method.${m.toLowerCase()}`)}</option>)}
                     </select>
                     <input type="number" min={0} value={sp.amount || ''} onChange={e => setSubPayments(prev => prev.map((s, j) => j === i ? { ...s, amount: Number(e.target.value) } : s))}
-                      placeholder="Monto"
+                      placeholder={t('amount')}
                       className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
                   </div>
                 ))}
@@ -642,18 +649,18 @@ function NuevaVentaTab({ user }: { user: any }) {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={requiresFiscal} onChange={e => setRequiresFiscal(e.target.checked)}
                   className="w-4 h-4 rounded" />
-                <span className="text-xs font-semibold text-gray-700">Requiere comprobante fiscal (NCF)</span>
+                <span className="text-xs font-semibold text-gray-700">{t('requiresFiscal')}</span>
               </label>
               {requiresFiscal && (
                 <div className="mt-2 space-y-2">
                   <div className="flex gap-2">
                     <input type="text" value={fiscalRnc}
                       onChange={(e) => { setFiscalRnc(e.target.value.replace(/\D/g, '')); setFiscalValidated(false); setFiscalError(''); }}
-                      placeholder="RNC de la empresa" maxLength={11}
+                      placeholder={t('companyRnc')} maxLength={11}
                       className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <button onClick={validateRnc} disabled={fiscalRnc.length < 9 || fiscalValidating}
                       className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold disabled:opacity-50">
-                      {fiscalValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Validar'}
+                      {fiscalValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : t('validate')}
                     </button>
                   </div>
                   {fiscalError && <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{fiscalError}</p>}
@@ -669,7 +676,7 @@ function NuevaVentaTab({ user }: { user: any }) {
 
             {/* Total final */}
             <div className="bg-gray-900 rounded-xl p-3 text-center">
-              <p className="text-xs text-gray-400">Total a cobrar</p>
+              <p className="text-xs text-gray-400">{t('totalToCharge')}</p>
               <p className="text-2xl font-bold text-white">RD$ {fmt(orderTotal + tipAmount)}</p>
             </div>
 
@@ -686,7 +693,7 @@ function NuevaVentaTab({ user }: { user: any }) {
 
             <button onClick={submitSale} disabled={processing || cart.length === 0}
               className="w-full py-3.5 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors">
-              {processing ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</> : <><ShoppingBag className="w-4 h-4" /> Confirmar venta</>}
+              {processing ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('processing')}</> : <><ShoppingBag className="w-4 h-4" /> {t('confirmSale')}</>}
             </button>
           </div>
         )}
@@ -698,6 +705,7 @@ function NuevaVentaTab({ user }: { user: any }) {
 // ─── App principal ────────────────────────────────────────────────────────────
 
 function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
+  const t = useTranslations('cashier');
   const [activeTab, setActiveTab] = useState<'caja' | 'pos'>('caja');
 
   return (
@@ -706,7 +714,7 @@ function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
       <div className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Caja</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
             <p className="text-sm text-gray-500">
               {user?.firstName ?? user?.name} {user?.lastName ?? ''}
             </p>
@@ -716,16 +724,17 @@ function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
             <div className="flex bg-gray-100 rounded-xl p-1">
               <button onClick={() => setActiveTab('caja')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'caja' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                <BarChart3 className="w-4 h-4" /> Caja del día
+                <BarChart3 className="w-4 h-4" /> {t('cajaTab')}
               </button>
               <button onClick={() => setActiveTab('pos')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'pos' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                <ShoppingBag className="w-4 h-4" /> Nueva venta
+                <ShoppingBag className="w-4 h-4" /> {t('posTab')}
               </button>
             </div>
+            <LanguageSwitcher />
             <button onClick={onLogout}
               className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium">
-              <LogOut className="w-4 h-4" /> Salir
+              <LogOut className="w-4 h-4" /> {t('logout')}
             </button>
           </div>
         </div>
@@ -739,6 +748,7 @@ function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
 }
 
 export default function CashierApp() {
+  const t = useTranslations('cashier');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -773,7 +783,7 @@ export default function CashierApp() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-10 h-10 animate-spin text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Cargando...</p>
+          <p className="text-gray-500 text-sm">{t('loading')}</p>
         </div>
       </div>
     );
