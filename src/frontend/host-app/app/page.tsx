@@ -8,6 +8,9 @@ import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 import HostReservationWizard from '@/components/HostReservationWizard';
 import dynamic from 'next/dynamic';
 import { useHostFloorPlan } from '@/lib/useHostFloorPlan';
+import { useTranslations, useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 // F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('host');
@@ -15,7 +18,7 @@ const { api } = createAuthApi('host');
 // Plano de salón (react-konva) en SOLO LECTURA — ssr:false porque Konva necesita el DOM.
 const MultiZoneFloorPlanViewer = dynamic(
   () => import('@smartmenu/ui').then((m) => ({ default: m.MultiZoneFloorPlanViewer })),
-  { ssr: false, loading: () => <p className="p-6 text-sm text-gray-500 animate-pulse">Cargando plano...</p> }
+  { ssr: false, loading: () => <p className="p-6 text-sm text-gray-500 animate-pulse">Cargando plano…</p> }
 );
 
 interface Zone {
@@ -111,6 +114,8 @@ interface TablesAvailabilityResponse {
 }
 
 export default function HostApp() {
+  const t = useTranslations();
+  const dl = dateLocale(useLocale());
   const [user, setUser] = useState<any>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
@@ -238,7 +243,7 @@ export default function HostApp() {
       setTables(tablesData);
     } catch (error: any) {
       console.error('Error loading data:', error);
-      const msg = error?.response?.data?.error || error?.message || 'Error al cargar mesas y zonas';
+      const msg = error?.response?.data?.error || error?.message || t('toast.loadError');
       toast.error(msg);
       setZones([]);
       setTables([]);
@@ -268,7 +273,7 @@ export default function HostApp() {
       const res = await api.get(url);
       setAssignableTables(Array.isArray(res.data) ? res.data : []);
     } catch {
-      toast.error('No se pudieron cargar las mesas disponibles');
+      toast.error(t('toast.availableTablesError'));
       setAssignableTables([]);
     } finally {
       setLoadingAssignable(false);
@@ -326,15 +331,15 @@ export default function HostApp() {
       // 2. Si la reserva era pendiente, también confirmarla (flujo unificado "Aceptar")
       if (!reservation.isConfirmed) {
         await api.put(`/api/tablereservation/${reservation.id}/confirm`);
-        toast.success('Reserva aceptada y mesa asignada');
+        toast.success(t('toast.reservationAccepted'));
       } else {
-        toast.success('Mesa reasignada correctamente');
+        toast.success(t('toast.tableReassigned'));
       }
       closeReservationAssignModal();
       loadReservations();
       loadData();
     } catch (e: any) {
-      const msg = e?.response?.data?.error || 'Error al asignar mesa';
+      const msg = e?.response?.data?.error || t('toast.assignError');
       toast.error(msg);
     } finally {
       setAssigningTableId(null);
@@ -367,7 +372,7 @@ export default function HostApp() {
     if (!r) return;
     const newDateTime = targetDateTime ?? `${rescheduleDate}T${rescheduleTime}:00`;
     if (!newDateTime || newDateTime.startsWith('T')) {
-      toast.error('Fecha y hora son requeridas');
+      toast.error(t('reschedule.requiredError'));
       return;
     }
     setRescheduling(true);
@@ -377,14 +382,14 @@ export default function HostApp() {
       if (data?.hasConflict && data?.warning) {
         toast(data.warning, { icon: '⚠️', duration: 6000 });
       } else {
-        toast.success('Reserva reprogramada');
+        toast.success(t('toast.rescheduled'));
       }
       closeRescheduleModal();
       setCalendarDaySelected(null);
       loadReservations();
       loadData();
     } catch (e: any) {
-      const msg = e?.response?.data?.error || 'Error al reprogramar reserva';
+      const msg = e?.response?.data?.error || t('toast.rescheduleError');
       toast.error(msg);
     } finally {
       setRescheduling(false);
@@ -408,12 +413,12 @@ export default function HostApp() {
     setCancellingReservation(true);
     try {
       await api.put(`/api/tablereservation/${cancelConfirmReservation.id}/cancel`);
-      toast.success(cancelConfirmReservation.isConfirmed ? 'Reserva cancelada' : 'Reserva rechazada');
+      toast.success(cancelConfirmReservation.isConfirmed ? t('toast.reservationCancelled') : t('toast.reservationRejected'));
       setCancelConfirmReservation(null);
       loadReservations();
       loadData();
     } catch {
-      toast.error('Error al cancelar reserva');
+      toast.error(t('toast.cancelError'));
     } finally {
       setCancellingReservation(false);
     }
@@ -421,7 +426,7 @@ export default function HostApp() {
 
   // ZONA-EXCL — abrir el modal de decisión (aceptar/rechazar) para una reserva de zona completa
   const openZoneDecision = (r: Reservation, accept: boolean) => {
-    setZoneDecisionMsg(accept ? '¡Confirmado! Reservamos toda la zona para tu evento. ¡Los esperamos!' : '');
+    setZoneDecisionMsg(accept ? t('zoneDecision.defaultAcceptMsg') : '');
     setZoneDecisionModal({ r, accept });
   };
 
@@ -431,16 +436,16 @@ export default function HostApp() {
     setZoneDeciding(true);
     try {
       await api.post(`/api/tablereservation/${r.id}/zone-decision`, { accept, message: zoneDecisionMsg });
-      toast.success(accept ? 'Zona reservada y confirmada al cliente' : 'Reserva de zona rechazada');
+      toast.success(accept ? t('toast.zoneReserved') : t('toast.zoneRejected'));
       setZoneDecisionModal(null);
       setZoneDecisionMsg('');
       loadReservations();
       loadData();
     } catch (err: any) {
       if (err?.response?.status === 409) {
-        toast.error('No se puede: la zona ya tiene reservas en esa fecha/horario. Podés rechazar con un mensaje.');
+        toast.error(t('toast.zoneConflict'));
       } else {
-        toast.error('Error al responder la reserva de zona');
+        toast.error(t('toast.zoneDecisionError'));
       }
     } finally {
       setZoneDeciding(false);
@@ -474,17 +479,17 @@ export default function HostApp() {
     connectionRef.current = connection;
 
     connection.on('NewReservation', (data: any) => {
-      toast((t) => (
+      toast((toastInstance) => (
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
             <Globe className="w-5 h-5 text-purple-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-gray-900">Nueva reserva del Portal</p>
-            <p className="text-xs text-gray-500">{data.customerName} · {data.numberOfGuests} personas · Mesa {data.tableNumber}</p>
+            <p className="text-sm font-bold text-gray-900">{t('signalR.newReservationTitle')}</p>
+            <p className="text-xs text-gray-500">{data.customerName} · {t('common.persons', { count: data.numberOfGuests })} · Mesa {data.tableNumber}</p>
           </div>
-          <button onClick={() => { toast.dismiss(t.id); setActiveView('reservations'); }} className="px-3 py-1 bg-purple-600 text-white text-xs rounded-lg font-semibold hover:bg-purple-700">
-            Ver
+          <button onClick={() => { toast.dismiss(toastInstance.id); setActiveView('reservations'); }} className="px-3 py-1 bg-purple-600 text-white text-xs rounded-lg font-semibold hover:bg-purple-700">
+            {t('signalR.view')}
           </button>
         </div>
       ), { duration: 15000, style: { maxWidth: '420px' } });
@@ -496,8 +501,8 @@ export default function HostApp() {
         navigator.vibrate([200, 100, 200, 100, 200]);
       }
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('SmartMenu — Nueva Reserva', {
-          body: `${data.customerName} quiere reservar para ${data.numberOfGuests} personas`,
+        new Notification(t('signalR.newReservationTitle'), {
+          body: `${data.customerName} — ${t('common.persons', { count: data.numberOfGuests })}`,
           icon: '/favicon.ico',
         });
       }
@@ -595,7 +600,7 @@ export default function HostApp() {
 
   const openAssignModal = (table: Table) => {
     if (table.status !== 'Available') {
-      toast.error('Esta mesa no está disponible');
+      toast.error(t('toast.tableNotAvailable'));
       return;
     }
     setSelectedTable(table);
@@ -606,7 +611,7 @@ export default function HostApp() {
 
   const assignTable = async () => {
     if (!selectedTable || !numberOfGuests) {
-      toast.error('Por favor completa todos los campos');
+      toast.error(t('toast.fillAllFields'));
       return;
     }
 
@@ -618,11 +623,11 @@ export default function HostApp() {
         specialNotes
       });
 
-      toast.success('Mesa asignada exitosamente');
+      toast.success(t('toast.tableAssigned'));
       setShowAssignModal(false);
       loadData();
     } catch (error) {
-      toast.error('Error al asignar mesa');
+      toast.error(t('toast.tableAssignError'));
     }
   };
 
@@ -660,11 +665,11 @@ export default function HostApp() {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'Available': return 'Disponible';
-      case 'Occupied': return 'Ocupada';
-      case 'Reserved': return 'Reservada';
-      case 'Billing': return 'Por cobrar';
-      case 'Cleaning': return 'Limpieza';
+      case 'Available': return t('status.available');
+      case 'Occupied': return t('status.occupied');
+      case 'Reserved': return t('status.reserved');
+      case 'Billing': return t('status.billing');
+      case 'Cleaning': return t('status.cleaning');
       default: return status;
     }
   };
@@ -869,14 +874,14 @@ export default function HostApp() {
     return `${h}:${m.padStart(2, '0')} ${ap}`;
   };
   const formatReservationTime = (dt: string) => {
-    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }); }
+    try { return new Date(dt).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true }); }
     catch { return '-'; }
   };
 
   const formatDateHeader = (dateStr: string) => {
     try {
       const d = new Date(dateStr + 'T12:00:00');
-      return d.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      return d.toLocaleDateString(dl, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     } catch { return dateStr; }
   };
 
@@ -887,7 +892,7 @@ export default function HostApp() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-slate-400">Cargando mesas...</p>
+          <p className="text-slate-400">{t('loading.tables')}</p>
         </div>
       </div>
     );
@@ -901,9 +906,9 @@ export default function HostApp() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3 sm:gap-6">
               <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">Host App</h1>
+                <h1 className="text-xl font-bold text-white tracking-tight">{t('header.title')}</h1>
                 <p className="text-sm text-slate-400">
-                  Bienvenido, {user?.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() : (user?.name ?? user?.email ?? '')}
+                  {t('header.welcome', { name: user?.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() : (user?.name ?? user?.email ?? '') })}
                 </p>
               </div>
               {/* View Tabs */}
@@ -916,7 +921,7 @@ export default function HostApp() {
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  Mesas
+                  {t('tabs.tables')}
                 </button>
                 <button
                   onClick={() => { setActiveView('reservations'); setPendingAlert(0); }}
@@ -927,7 +932,7 @@ export default function HostApp() {
                   }`}
                 >
                   <CalendarCheck className="w-4 h-4" />
-                  Reservas
+                  {t('tabs.reservations')}
                   {pendingAlert > 0 && activeView !== 'reservations' && (
                     <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">
                       {pendingAlert}
@@ -948,40 +953,43 @@ export default function HostApp() {
                   }`}
                 >
                   <Calendar className="w-4 h-4" />
-                  Calendario
+                  {t('tabs.calendar')}
                 </button>
               </div>
             </div>
             {/* Salir — esquina superior derecha (fila 1) */}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-all border border-white/10"
-            >
-              <LogOut className="w-4 h-4" />
-              Salir
-            </button>
+            <div className="flex items-center gap-2">
+              <LanguageSwitcher />
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-all border border-white/10"
+              >
+                <LogOut className="w-4 h-4" />
+                {t('header.logout')}
+              </button>
+            </div>
           </div>
           {/* Fila 2: indicadores de estado, centrados */}
           <div className="hidden md:flex flex-wrap items-center justify-center gap-2 mt-4">
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-center min-w-[80px]">
-                  <p className="text-2xl font-black text-white leading-none">{tables.filter(t => t.status === 'Available').length}</p>
-                  <p className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider mt-0.5">Libres</p>
+                  <p className="text-2xl font-black text-white leading-none">{tables.filter(tb => tb.status === 'Available').length}</p>
+                  <p className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider mt-0.5">{t('stats.free')}</p>
                 </div>
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-center min-w-[80px]">
-                  <p className="text-2xl font-black text-white leading-none">{tables.filter(t => t.status === 'Occupied').length}</p>
-                  <p className="text-[10px] text-red-400 font-semibold uppercase tracking-wider mt-0.5">Ocupadas</p>
+                  <p className="text-2xl font-black text-white leading-none">{tables.filter(tb => tb.status === 'Occupied').length}</p>
+                  <p className="text-[10px] text-red-400 font-semibold uppercase tracking-wider mt-0.5">{t('stats.occupied')}</p>
                 </div>
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-center min-w-[80px]">
-                  <p className="text-2xl font-black text-white leading-none">{tables.filter(t => t.status === 'Billing').length}</p>
-                  <p className="text-[10px] text-violet-400 font-semibold uppercase tracking-wider mt-0.5">Por cobrar</p>
+                  <p className="text-2xl font-black text-white leading-none">{tables.filter(tb => tb.status === 'Billing').length}</p>
+                  <p className="text-[10px] text-violet-400 font-semibold uppercase tracking-wider mt-0.5">{t('stats.billing')}</p>
                 </div>
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-center min-w-[80px]">
-                  <p className="text-2xl font-black text-white leading-none">{tables.filter(t => t.status === 'Reserved').length}</p>
-                  <p className="text-[10px] text-amber-400 font-semibold uppercase tracking-wider mt-0.5">Reservadas</p>
+                  <p className="text-2xl font-black text-white leading-none">{tables.filter(tb => tb.status === 'Reserved').length}</p>
+                  <p className="text-[10px] text-amber-400 font-semibold uppercase tracking-wider mt-0.5">{t('stats.reserved')}</p>
                 </div>
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-center min-w-[80px]">
                   <p className="text-2xl font-black text-white leading-none">{availableSeats}</p>
-                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Asientos libres</p>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">{t('stats.freeSeats')}</p>
                 </div>
           </div>
         </div>
@@ -1002,24 +1010,24 @@ export default function HostApp() {
           <div className="grid grid-cols-3 gap-4 mb-5">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center border-l-4 border-l-slate-400">
               <p className="text-3xl font-black text-slate-700">{todayReservations.length}</p>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Total · Hoy</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">{t('reservations.totalToday')}</p>
             </div>
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center border-l-4 border-l-amber-400">
               <p className="text-3xl font-black text-slate-700">{pendingReservations.length}</p>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Pendientes · Hoy</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">{t('reservations.pendingToday')}</p>
             </div>
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center border-l-4 border-l-emerald-400">
               <p className="text-3xl font-black text-slate-700">{confirmedReservations.length}</p>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Confirmadas · Hoy</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">{t('reservations.confirmedToday')}</p>
             </div>
           </div>
 
           {/* Filter tabs + filtro de fecha inline (ASSIGN-DATE-FILTER) */}
           <div className="flex flex-wrap items-center gap-2 mb-5">
             {([
-              { key: 'all', label: 'Todas' },
-              { key: 'pending', label: 'Pendientes' },
-              { key: 'confirmed', label: 'Confirmadas' },
+              { key: 'all', label: t('reservations.filterAll') },
+              { key: 'pending', label: t('reservations.filterPending') },
+              { key: 'confirmed', label: t('reservations.filterConfirmed') },
             ] as const).map(f => (
               <button
                 key={f.key}
@@ -1047,8 +1055,8 @@ export default function HostApp() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar cliente..."
-                  aria-label="Buscar reserva por nombre, teléfono o email"
+                  placeholder={t('reservations.searchPlaceholder')}
+                  aria-label={t('reservations.searchAriaLabel')}
                   className={`pl-9 pr-8 py-2 w-56 rounded-xl text-sm font-medium border transition-all focus:outline-none focus:border-blue-500 ${
                     searchQuery
                       ? 'bg-blue-50 text-blue-900 border-blue-300 placeholder:text-blue-300'
@@ -1059,7 +1067,7 @@ export default function HostApp() {
                   <button
                     onClick={() => setSearchQuery('')}
                     className="absolute right-2 text-slate-400 hover:text-red-600 transition-colors p-1"
-                    aria-label="Limpiar búsqueda"
+                    aria-label={t('reservations.clearSearch')}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1075,8 +1083,8 @@ export default function HostApp() {
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  aria-label="Desde"
-                  title="Desde"
+                  aria-label={t('reservations.dateFrom')}
+                  title={t('reservations.dateFrom')}
                   className="px-2 py-1 text-xs font-medium text-slate-700 bg-white border border-gray-200 rounded focus:outline-none focus:border-blue-500"
                 />
                 <span className={`text-xs font-bold ${(dateFrom || dateTo) ? 'text-blue-500' : 'text-slate-400'}`}>→</span>
@@ -1085,15 +1093,15 @@ export default function HostApp() {
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
                   min={dateFrom}
-                  aria-label="Hasta"
-                  title="Hasta"
+                  aria-label={t('reservations.dateTo')}
+                  title={t('reservations.dateTo')}
                   className="px-2 py-1 text-xs font-medium text-slate-700 bg-white border border-gray-200 rounded focus:outline-none focus:border-blue-500"
                 />
                 {(dateFrom || dateTo) && (
                   <button
                     onClick={() => { setDateFrom(''); setDateTo(''); }}
                     className="text-slate-400 hover:text-red-600 transition-colors p-0.5"
-                    aria-label="Limpiar rango"
+                    aria-label={t('reservations.clearDateRange')}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1104,24 +1112,23 @@ export default function HostApp() {
               {birthdayCount > 0 && (
                 <div
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm"
-                  title={`${birthdayCount} cumpleaños en el rango filtrado`}
+                  title={t('reservations.birthdayBadge', { count: birthdayCount })}
                 >
                   <span className="text-base leading-none">🎂</span>
                   <span className="text-sm font-bold text-slate-800 tabular-nums">{birthdayCount}</span>
                   <span className="text-xs font-medium text-slate-500">
-                    {birthdayCount === 1 ? 'cumpleaños' : 'cumpleaños'}
+                    {t('reservations.birthdayBadge', { count: birthdayCount })}
                   </span>
                 </div>
               )}
               {specialOccasionsCount > birthdayCount && (
                 <div
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm"
-                  title={`${specialOccasionsCount - birthdayCount} otras ocasiones especiales (aniversarios, romántica, etc.)`}
                 >
                   <span className="text-base leading-none">✨</span>
                   <span className="text-sm font-bold text-slate-800 tabular-nums">{specialOccasionsCount - birthdayCount}</span>
                   <span className="text-xs font-medium text-slate-500">
-                    {specialOccasionsCount - birthdayCount === 1 ? 'ocasión' : 'ocasiones'}
+                    {t('reservations.occasionBadge', { count: specialOccasionsCount - birthdayCount })}
                   </span>
                 </div>
               )}
@@ -1134,9 +1141,9 @@ export default function HostApp() {
               {hasActiveReservationFilters ? (
                 <>
                   <Search className="w-14 h-14 text-blue-200 mx-auto mb-3" />
-                  <p className="text-lg font-semibold text-slate-700">Sin resultados</p>
+                  <p className="text-lg font-semibold text-slate-700">{t('reservations.noResultsTitle')}</p>
                   <p className="text-sm text-slate-500 mt-1">
-                    No encontramos reservas que coincidan con los filtros activos.
+                    {t('reservations.noResultsDesc')}
                   </p>
                   <button
                     onClick={() => {
@@ -1148,15 +1155,15 @@ export default function HostApp() {
                     className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl transition-colors"
                   >
                     <X className="w-4 h-4" />
-                    Limpiar todos los filtros
+                    {t('common.clearAllFilters')}
                   </button>
                 </>
               ) : (
                 <>
                   <Inbox className="w-14 h-14 text-gray-200 mx-auto mb-3" />
-                  <p className="text-lg font-semibold text-slate-600">Aún no hay reservas</p>
+                  <p className="text-lg font-semibold text-slate-600">{t('reservations.emptyTitle')}</p>
                   <p className="text-sm text-slate-400 mt-1">
-                    Cuando lleguen reservas del portal o las crees aquí, aparecerán en esta lista.
+                    {t('reservations.emptyDesc')}
                   </p>
                 </>
               )}
@@ -1169,10 +1176,10 @@ export default function HostApp() {
                   <div className={`flex items-center gap-3 mb-3 px-1 ${isPastDate(dateKey) ? 'opacity-60' : ''}`}>
                     <CalendarCheck className={`w-4 h-4 ${dateKey === today ? 'text-blue-500' : 'text-slate-400'}`} />
                     <span className={`text-sm font-bold capitalize ${dateKey === today ? 'text-blue-600' : 'text-slate-600'}`}>
-                      {dateKey === today ? 'Hoy — ' : ''}{formatDateHeader(dateKey)}
+                      {dateKey === today ? t('reservations.todayPrefix') : ''}{formatDateHeader(dateKey)}
                     </span>
                     <span className="ml-auto text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">
-                      {groupedByDate[dateKey].length} reserva{groupedByDate[dateKey].length !== 1 ? 's' : ''}
+                      {t('reservations.groupCount', { count: groupedByDate[dateKey].length })}
                     </span>
                   </div>
 
@@ -1202,39 +1209,37 @@ export default function HostApp() {
                                   <span className="text-lg font-bold text-slate-900">{r.customerName}</span>
                                   {isPortal && (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold">
-                                      <Globe className="w-3 h-3" />Portal
+                                      <Globe className="w-3 h-3" />{t('reservations.portal')}
                                     </span>
                                   )}
                                   {isPending ? (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                                      <Clock className="w-3 h-3 text-amber-500" />Pendiente
+                                      <Clock className="w-3 h-3 text-amber-500" />{t('reservations.pending')}
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                                      <CheckCircle className="w-3 h-3 text-emerald-500" />Confirmada
+                                      <CheckCircle className="w-3 h-3 text-emerald-500" />{t('reservations.confirmed')}
                                     </span>
                                   )}
                                   {isUpcoming && r.isConfirmed && (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
-                                      Próxima
+                                      {t('reservations.upcoming')}
                                     </span>
                                   )}
                                   {r.isZoneExclusive && (
                                     <span
                                       className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200"
-                                      title="Reserva de zona completa (uso exclusivo)"
                                     >
-                                      🏛 Zona completa{r.requestedZoneName ? `: ${r.requestedZoneName}` : ''}
+                                      🏛 {t('reservations.zoneExclusive', { zonePart: r.requestedZoneName ? `: ${r.requestedZoneName}` : '' })}
                                     </span>
                                   )}
                                   {/* Badge de tipo de ocasión (si != Casual) */}
                                   {r.occasionType !== undefined && r.occasionType !== 0 && OCCASION_LABELS[r.occasionType] ? (
                                     <span
                                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${OCCASION_LABELS[r.occasionType].color}`}
-                                      title={`Ocasión: ${OCCASION_LABELS[r.occasionType].label}`}
                                     >
                                       <span>{OCCASION_LABELS[r.occasionType].icon}</span>
-                                      {OCCASION_LABELS[r.occasionType].label}
+                                      {t(`occasions.${r.occasionType}`)}
                                     </span>
                                   ) : null}
                                 </div>
@@ -1242,7 +1247,7 @@ export default function HostApp() {
                                 {/* Contacto del cliente: el botón "Contactar" se movió a la columna de acciones (debajo de "Mover") */}
 
                                 {/* 2️⃣ Datos de la reserva */}
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Reserva</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{t('reservations.reservationLabel')}</p>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                                   <div className="flex items-center gap-1.5 text-slate-600">
                                     <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -1250,15 +1255,15 @@ export default function HostApp() {
                                   </div>
                                   <div className="flex items-center gap-1.5 text-slate-600">
                                     <Users className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>{r.numberOfGuests} {r.numberOfGuests === 1 ? 'persona' : 'personas'}</span>
+                                    <span>{t('common.persons', { count: r.numberOfGuests })}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 text-slate-600">
                                     <CreditCard className="w-3.5 h-3.5 text-slate-400" />
                                     {r.tableId && r.tableNumber ? (
-                                      <span>Mesa {r.tableNumber} · {r.zoneName}</span>
+                                      <span>{t('reservations.tableAssigned', { num: r.tableNumber, zone: r.zoneName ?? '' })}</span>
                                     ) : (
                                       <span className="text-amber-600 font-medium">
-                                        Sin mesa · {r.requestedZoneName || r.zoneName || 'Sin zona'}
+                                        {t('reservations.noTable', { zone: r.requestedZoneName || r.zoneName || '' })}
                                       </span>
                                     )}
                                   </div>
@@ -1276,7 +1281,7 @@ export default function HostApp() {
                                     className="mt-2 flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-semibold"
                                   >
                                     <UtensilsCrossed className="w-3.5 h-3.5" />
-                                    Pre-orden ({preOrder.items.length} plato{preOrder.items.length !== 1 ? 's' : ''})
+                                    {t('reservations.preOrder', { count: preOrder.items.length })}
                                     {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                                   </button>
                                 )}
@@ -1292,14 +1297,14 @@ export default function HostApp() {
                                       className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                                     >
                                       <CheckCircle className="w-4 h-4" />
-                                      Aceptar
+                                      {t('reservations.accept')}
                                     </button>
                                     <button
                                       onClick={() => r.isZoneExclusive ? openZoneDecision(r, false) : requestCancelReservation(r)}
                                       className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                                     >
                                       <XCircle className="w-4 h-4" />
-                                      Rechazar
+                                      {t('reservations.reject')}
                                     </button>
                                   </div>
                                 ) : (
@@ -1308,7 +1313,7 @@ export default function HostApp() {
                                     className="flex items-center justify-center gap-1.5 w-full px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                                   >
                                     <XCircle className="w-4 h-4" />
-                                    Cancelar
+                                    {t('reservations.cancel')}
                                   </button>
                                 )}
                                 {/* Solo confirmadas: botón Reasignar (las pendientes asignan vía Aceptar) */}
@@ -1318,7 +1323,7 @@ export default function HostApp() {
                                     className="flex items-center justify-center gap-1.5 w-full px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                                   >
                                     <CalendarCheck className="w-4 h-4" />
-                                    Reasignar mesa
+                                    {t('reservations.reassignTable')}
                                   </button>
                                 )}
                                 {/* Mover y Contactar JUNTOS en la misma línea */}
@@ -1326,19 +1331,19 @@ export default function HostApp() {
                                   <button
                                     onClick={() => openRescheduleModal(r)}
                                     className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-white hover:bg-blue-50 text-blue-600 rounded-xl text-sm font-semibold transition-colors shadow-sm border-2 border-blue-300"
-                                    title="Mover a otra fecha u hora"
+                                    title={t('reservations.moveDateTitle')}
                                   >
                                     <Calendar className="w-4 h-4" />
-                                    Mover
+                                    {t('reservations.moveDate')}
                                   </button>
                                   {(r.customerPhone || r.customerEmail) && (
                                     <button
                                       onClick={() => setContactReservation(r)}
                                       className="flex items-center justify-center gap-1 flex-1 px-2 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-sm font-semibold transition-colors border-2 border-blue-200"
-                                      title="Ver datos de contacto"
+                                      title={t('reservations.contactTitle')}
                                     >
                                       <Phone className="w-4 h-4" />
-                                      Contactar
+                                      {t('reservations.contact')}
                                     </button>
                                   )}
                                 </div>
@@ -1348,7 +1353,7 @@ export default function HostApp() {
                             {/* Pre-order expandible */}
                             {isExpanded && preOrder && preOrder.items.length > 0 && (
                               <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Pre-orden de platos</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('reservations.preOrderTitle')}</p>
                                 <div className="space-y-1.5">
                                   {preOrder.items.map((item, idx) => (
                                     <div key={idx} className="flex items-center justify-between text-sm">
@@ -1367,10 +1372,10 @@ export default function HostApp() {
                                     </div>
                                   ))}
                                   {preOrder.notes && (
-                                    <p className="text-xs text-slate-400 mt-2 italic">Nota: {preOrder.notes}</p>
+                                    <p className="text-xs text-slate-400 mt-2 italic">{t('reservations.preOrderNote', { notes: preOrder.notes })}</p>
                                   )}
                                   <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-gray-100 mt-1">
-                                    <span className="text-slate-600">Total pre-orden</span>
+                                    <span className="text-slate-600">{t('reservations.preOrderTotal')}</span>
                                     <span className="text-slate-900">
                                       ${preOrder.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0).toFixed(2)}
                                     </span>
@@ -1399,14 +1404,14 @@ export default function HostApp() {
           {/* Zone tabs */}
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Zona</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t('filters.zone')}</p>
               {floorPlanEnabled && (
                 <button
                   onClick={() => setShowPlan((v) => !v)}
                   className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
                   style={{ backgroundColor: '#16a34a' }}
                 >
-                  {showPlan ? 'Ver lista' : 'Ver plano'}
+                  {showPlan ? t('floorPlan.showList') : t('floorPlan.showPlan')}
                 </button>
               )}
             </div>
@@ -1419,12 +1424,12 @@ export default function HostApp() {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                Todas
+                {t('filters.allZones')}
                 {timeRange && (
                   <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
                     selectedZone === null ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
                   }`}>
-                    {Array.from(reservationsByTableInRange.values()).reduce((s, a) => s + a.length, 0)} res
+                    {t('filters.resCount', { count: Array.from(reservationsByTableInRange.values()).reduce((s, a) => s + a.length, 0) })}
                   </span>
                 )}
               </button>
@@ -1446,7 +1451,7 @@ export default function HostApp() {
                       <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
                         selectedZone === zone.id ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {reservasEnZona} res
+                        {t('filters.resCount', { count: reservasEnZona ?? 0 })}
                       </span>
                     ) : (
                       <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
@@ -1467,15 +1472,15 @@ export default function HostApp() {
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Calendar className="w-3 h-3" />
-              Reservas
+              {t('filters.reservations')}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               {[
-                { value: 'any',      label: 'Cualquier momento' },
-                { value: 'today',    label: 'Hoy' },
-                { value: 'tomorrow', label: 'Mañana' },
-                { value: 'week',     label: 'Esta semana' },
-                { value: 'custom',   label: 'Personalizado' },
+                { value: 'any',      label: t('filters.timeAny') },
+                { value: 'today',    label: t('filters.timeToday') },
+                { value: 'tomorrow', label: t('filters.timeTomorrow') },
+                { value: 'week',     label: t('filters.timeWeek') },
+                { value: 'custom',   label: t('filters.timeCustom') },
               ].map(opt => (
                 <button
                   key={opt.value}
@@ -1510,9 +1515,9 @@ export default function HostApp() {
               {/* Resumen del rango activo */}
               {timeRange && (
                 <span className="ml-2 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded">
-                  {timeRange.from.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}
+                  {timeRange.from.toLocaleDateString(dl, { day: 'numeric', month: 'short' })}
                   {timeRange.from.toDateString() !== timeRange.to.toDateString() && (
-                    <> → {timeRange.to.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}</>
+                    <> → {timeRange.to.toLocaleDateString(dl, { day: 'numeric', month: 'short' })}</>
                   )}
                 </span>
               )}
@@ -1527,14 +1532,14 @@ export default function HostApp() {
 
             {/* Estado */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Estado</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filters.status')}</p>
               <div className="flex gap-2">
                 {[
-                  { value: 'all', label: 'Todos', dot: null },
-                  { value: 'Available', label: 'Disponible', dot: 'bg-green-500' },
-                  { value: 'Occupied', label: 'Ocupada', dot: 'bg-red-500' },
-                  { value: 'Billing', label: 'Por cobrar', dot: 'bg-violet-500' },
-                  { value: 'Reserved', label: 'Reservada', dot: 'bg-yellow-400' },
+                  { value: 'all', label: t('filters.allStatus'), dot: null },
+                  { value: 'Available', label: t('filters.available'), dot: 'bg-green-500' },
+                  { value: 'Occupied', label: t('filters.occupied'), dot: 'bg-red-500' },
+                  { value: 'Billing', label: t('filters.billing'), dot: 'bg-violet-500' },
+                  { value: 'Reserved', label: t('filters.reserved'), dot: 'bg-yellow-400' },
                 ].map(opt => (
                   <button
                     key={opt.value}
@@ -1556,13 +1561,13 @@ export default function HostApp() {
 
             {/* Capacidad */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Capacidad</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filters.capacity')}</p>
               <div className="flex gap-2">
                 {[
-                  { value: 'all', label: 'Todas', icon: null },
-                  { value: '2', label: '1–2 personas', icon: '🪑' },
-                  { value: '4', label: '3–4 personas', icon: '🪑🪑' },
-                  { value: '6+', label: '5+ personas', icon: '🪑🪑🪑' },
+                  { value: 'all', label: t('filters.allCapacity'), icon: null },
+                  { value: '2', label: t('filters.cap2'), icon: '🪑' },
+                  { value: '4', label: t('filters.cap4'), icon: '🪑🪑' },
+                  { value: '6+', label: t('filters.cap6'), icon: '🪑🪑🪑' },
                 ].map(opt => (
                   <button
                     key={opt.value}
@@ -1588,12 +1593,12 @@ export default function HostApp() {
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-all border border-gray-200 hover:border-red-200"
                 >
                   <X className="w-3.5 h-3.5" />
-                  Limpiar
+                  {t('common.clearFilters')}
                 </button>
               )}
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900 leading-none">{filteredTables.length}</p>
-                <p className="text-xs text-gray-400">mesa{filteredTables.length !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-gray-400">{t('common.tables', { count: filteredTables.length })}</p>
               </div>
             </div>
           </div>
@@ -1605,8 +1610,8 @@ export default function HostApp() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-center justify-between px-4 py-2 text-xs text-slate-500">
-            <span>Toca una mesa para gestionarla</span>
-            <span className="hidden sm:inline">Plano en vivo · estado por color</span>
+            <span>{t('floorPlan.tapToManage')}</span>
+            <span className="hidden sm:inline">{t('floorPlan.livePlan')}</span>
           </div>
           <div style={{ height: 560 }}>
             <MultiZoneFloorPlanViewer
@@ -1652,7 +1657,7 @@ export default function HostApp() {
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest truncate">{table.zoneName}</p>
                   <div className="flex items-center gap-1 mt-1 text-slate-500">
                     <Users className="w-3 h-3" />
-                    <span className="text-xs">{table.capacity} personas</span>
+                    <span className="text-xs">{t('tables.capacity', { count: table.capacity })}</span>
                   </div>
                 </div>
 
@@ -1662,7 +1667,7 @@ export default function HostApp() {
                   onClick={(e) => { e.stopPropagation(); openTableOccupancy(table); }}
                   className="mt-1 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200 text-xs font-bold transition-colors"
                 >
-                  <CalendarCheck className="w-4 h-4" /> Ver reservas
+                  <CalendarCheck className="w-4 h-4" /> {t('tables.viewReservations')}
                 </button>
 
                 {/* CAL-FE FEATURE 2 — Horarios libres de la mesa para el día efectivo (badges + "+N más") */}
@@ -1673,7 +1678,7 @@ export default function HostApp() {
                     return tableSlotsLoading ? (
                       <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
                         <Clock className="w-3 h-3 animate-pulse" />
-                        <span className="animate-pulse">Cargando horarios…</span>
+                        <span className="animate-pulse">{t('tables.loadingSlots')}</span>
                       </div>
                     ) : null;
                   }
@@ -1681,7 +1686,7 @@ export default function HostApp() {
                     return (
                       <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
                         <Clock className="w-3 h-3" />
-                        Sin horarios libres
+                        {t('tables.noFreeSlots')}
                       </div>
                     );
                   }
@@ -1693,7 +1698,7 @@ export default function HostApp() {
                     <div className="mt-2">
                       <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-1 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        Horarios libres ({slots.length})
+                        {t('tables.freeSlots', { count: slots.length })}
                       </p>
                       <div className="flex flex-wrap gap-1">
                         {visible.map((s) => (
@@ -1710,7 +1715,7 @@ export default function HostApp() {
                             onClick={(e) => { e.stopPropagation(); setOpenSlotsTableId(table.id); }}
                             className="px-2 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-semibold leading-none hover:bg-slate-200 transition-colors"
                           >
-                            +{extra} más
+                            {t('tables.moreSlots', { count: extra })}
                           </button>
                         )}
                         {isOpen && extra > 0 && (
@@ -1719,7 +1724,7 @@ export default function HostApp() {
                             onClick={(e) => { e.stopPropagation(); setOpenSlotsTableId(null); }}
                             className="px-2 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-semibold leading-none hover:bg-slate-200 transition-colors"
                           >
-                            Menos
+                            {t('tables.lessSlots')}
                           </button>
                         )}
                       </div>
@@ -1735,17 +1740,17 @@ export default function HostApp() {
                     new Date(a.reservationDateTime).getTime() - new Date(b.reservationDateTime).getTime()
                   )[0];
                   const dt = new Date(earliest.reservationDateTime);
-                  const dayLabel = dt.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' });
-                  const timeLabel = dt.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
+                  const dayLabel = dt.toLocaleDateString(dl, { day: 'numeric', month: 'short' });
+                  const timeLabel = dt.toLocaleTimeString(dl, { hour: '2-digit', minute: '2-digit' });
                   return (
                     <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
                       <Calendar className="w-3 h-3 text-blue-600 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-[10px] font-bold text-blue-900 leading-tight">
-                          {rsv.length} reserva{rsv.length !== 1 ? 's' : ''}
+                          {t('tables.reservationsBadge', { count: rsv.length })}
                         </p>
                         <p className="text-[10px] text-blue-700 truncate">
-                          Próx: {dayLabel} · {timeLabel}
+                          {t('tables.nextBadge', { label: dayLabel, time: timeLabel })}
                         </p>
                       </div>
                     </div>
@@ -1777,15 +1782,15 @@ export default function HostApp() {
                       <div className="mt-auto pt-3">
                         {table.status === 'Billing' ? (
                           <div className="w-full py-3 px-2 rounded-xl text-center bg-violet-50 border border-violet-200">
-                            <p className="text-xs font-bold text-violet-700 leading-tight">Proceso de cobro</p>
-                            <p className="text-[10px] text-violet-500 mt-0.5">Liberándose pronto</p>
+                            <p className="text-xs font-bold text-violet-700 leading-tight">{t('tables.billing')}</p>
+                            <p className="text-[10px] text-violet-500 mt-0.5">{t('tables.billingFree')}</p>
                           </div>
                         ) : (
                           <div className={`w-full py-3 rounded-xl text-xs font-semibold text-center ${
                             table.status === 'Occupied' ? 'bg-red-50 text-red-500'
                             : 'bg-blue-50 text-blue-500'
                           }`}>
-                            {table.status === 'Occupied' ? 'En uso' : 'En limpieza'}
+                            {table.status === 'Occupied' ? t('tables.inUse') : t('tables.cleaning')}
                           </div>
                         )}
                       </div>
@@ -1800,9 +1805,9 @@ export default function HostApp() {
                     const dt = new Date(r.reservationDateTime);
                     const now = new Date();
                     const hoursUntil = (dt.getTime() - now.getTime()) / 3600000;
-                    const dayLabel = dt.toLocaleDateString('es-DO', { day: 'numeric', month: 'short' });
-                    const timeLabel = dt.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
-                    const dayLong = dt.toLocaleDateString('es-DO', { weekday: 'short' }).replace('.', '');
+                    const dayLabel = dt.toLocaleDateString(dl, { day: 'numeric', month: 'short' });
+                    const timeLabel = dt.toLocaleTimeString(dl, { hour: '2-digit', minute: '2-digit' });
+                    const dayLong = dt.toLocaleDateString(dl, { weekday: 'short' }).replace('.', '');
                     // Si la reserva es lejana (>2h), permite walk-in. Si ya está cerca, mejor no.
                     const allowWalkIn = hoursUntil > 2;
 
@@ -1825,7 +1830,7 @@ export default function HostApp() {
                           <p className="text-xs text-slate-600 leading-snug">
                             <span className="font-semibold">{dayLong} {dayLabel}</span> · {timeLabel}
                             <br />
-                            <span className="text-slate-500">{r.numberOfGuests} {r.numberOfGuests === 1 ? 'persona' : 'personas'}</span>
+                            <span className="text-slate-500">{t('common.persons', { count: r.numberOfGuests })}</span>
                           </p>
                         </div>
 
@@ -1837,9 +1842,9 @@ export default function HostApp() {
                           }`}
                         >
                           {isPending ? (
-                            <><CheckCircle className="w-4 h-4" /> Aceptar reserva</>
+                            <><CheckCircle className="w-4 h-4" /> {t('tables.accept')}</>
                           ) : (
-                            <><CalendarCheck className="w-4 h-4" /> Reasignar mesa</>
+                            <><CalendarCheck className="w-4 h-4" /> {t('tables.reassign')}</>
                           )}
                         </button>
 
@@ -1850,14 +1855,14 @@ export default function HostApp() {
                             className="flex items-center justify-center gap-1 py-2 rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 text-[11px] font-semibold transition-colors"
                           >
                             <XCircle className="w-3.5 h-3.5" />
-                            {isPending ? 'Rechazar' : 'Cancelar'}
+                            {isPending ? t('tables.reject') : t('reservations.cancel')}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); openRescheduleModal(r); }}
                             className="flex items-center justify-center gap-1 py-2 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 active:bg-blue-100 text-[11px] font-semibold transition-colors"
                           >
                             <Calendar className="w-3.5 h-3.5" />
-                            Mover
+                            {t('tables.move')}
                           </button>
                         </div>
 
@@ -1868,7 +1873,7 @@ export default function HostApp() {
                             className="mt-1.5 w-full py-1.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 rounded transition-colors flex items-center justify-center gap-1"
                           >
                             <ChevronDown className="w-3 h-3" />
-                            Ver {extra} reserva{extra !== 1 ? 's' : ''} más
+                            {t('tables.moreReservations', { count: extra })}
                           </button>
                         )}
 
@@ -1877,13 +1882,13 @@ export default function HostApp() {
                           <>
                             <div className="mt-2 pt-2 border-t border-dashed border-gray-200">
                               <p className="text-[9px] text-slate-400 uppercase tracking-wider text-center mb-1.5">
-                                o cliente walk-in
+                                {t('tables.walkin')}
                               </p>
                               <button
                                 onClick={() => openAssignModal(table)}
                                 className="w-full py-2 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 text-[11px] font-semibold transition-colors"
                               >
-                                Asignar ahora
+                                {t('tables.assignNow')}
                               </button>
                             </div>
                           </>
@@ -1899,13 +1904,13 @@ export default function HostApp() {
                         onClick={() => openAssignModal(table)}
                         className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                       >
-                        Asignar
+                        {t('tables.assign')}
                       </button>
                       <button
                         onClick={() => openReservationModal(table)}
                         className="w-full py-2.5 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
                       >
-                        Reservar
+                        {t('tables.reserve')}
                       </button>
                     </div>
                   );
@@ -1923,29 +1928,29 @@ export default function HostApp() {
           <div style={{ width: '100%', maxWidth: 380 }} onClick={(e) => e.stopPropagation()} className="overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Mesa {planoTable.tableNumber}</h3>
-                <p className="text-xs text-slate-500">{planoTable.zoneName} · {planoTable.capacity} pers.</p>
+                <h3 className="text-base font-bold text-slate-900">{t('assign.tableNumber', { num: planoTable.tableNumber })}</h3>
+                <p className="text-xs text-slate-500">{t('planoModal.capacity', { zoneName: planoTable.zoneName, count: planoTable.capacity })}</p>
               </div>
               <button type="button" onClick={() => setPlanoTable(null)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-2 p-5">
               {planoTable.status === 'Available' ? (
                 <>
-                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openAssignModal(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
-                    <Users className="h-4 w-4" /> Sentar comensales
+                  <button type="button" onClick={() => { const pt = planoTable; setPlanoTable(null); openAssignModal(pt); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
+                    <Users className="h-4 w-4" /> {t('planoModal.seatGuests')}
                   </button>
-                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openReservationModal(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                    <CalendarCheck className="h-4 w-4" /> Reservar
+                  <button type="button" onClick={() => { const pt = planoTable; setPlanoTable(null); openReservationModal(pt); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <CalendarCheck className="h-4 w-4" /> {t('planoModal.reserve')}
                   </button>
-                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openTableOccupancy(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                    <Calendar className="h-4 w-4" /> Ver reservas
+                  <button type="button" onClick={() => { const pt = planoTable; setPlanoTable(null); openTableOccupancy(pt); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <Calendar className="h-4 w-4" /> {t('planoModal.viewReservations')}
                   </button>
                 </>
               ) : (
                 <>
-                  <p className="mb-1 text-xs text-slate-500">Mesa {planoTable.status === 'Reserved' ? 'reservada' : planoTable.status === 'Occupied' ? 'ocupada' : planoTable.status === 'Billing' ? 'por cobrar' : 'en limpieza'} — gestiona sus reservas:</p>
-                  <button type="button" onClick={() => { const t = planoTable; setPlanoTable(null); openTableOccupancy(t); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
-                    <Calendar className="h-4 w-4" /> Ver reservas
+                  <p className="mb-1 text-xs text-slate-500">{t('planoModal.statusDescription', { status: getStatusLabel(planoTable.status) })}</p>
+                  <button type="button" onClick={() => { const pt = planoTable; setPlanoTable(null); openTableOccupancy(pt); }} className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: '#16a34a' }}>
+                    <Calendar className="h-4 w-4" /> {t('planoModal.viewReservations')}
                   </button>
                 </>
               )}
@@ -1962,7 +1967,7 @@ export default function HostApp() {
         const tbl = tableReservasModal.table;
         const dayRes = occTableDate ? occupancyForTableOnDate(tbl, occTableDate) : [];
         const dateLabel = occTableDate
-          ? new Date(occTableDate + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          ? new Date(occTableDate + 'T00:00:00').toLocaleDateString(dl, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
           : '';
         return (
         <div
@@ -1978,10 +1983,10 @@ export default function HostApp() {
               <div>
                 <h3 className="text-base font-bold flex items-center gap-2">
                   <CalendarCheck className="w-4 h-4" />
-                  Reservas · Mesa #{tbl.tableNumber}
+                  {t('occupancy.modalTitle', { num: tbl.tableNumber })}
                 </h3>
                 <p className="text-xs text-indigo-100 mt-0.5">
-                  {tbl.zoneName} · hasta {tbl.capacity} personas
+                  {t('occupancy.zoneCapacity', { zone: tbl.zoneName, cap: tbl.capacity })}
                 </p>
               </div>
               <button onClick={() => setTableReservasModal(null)} className="p-1.5 hover:bg-white/10 rounded">
@@ -1994,11 +1999,11 @@ export default function HostApp() {
               <div className="px-4 pt-3">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label="Mes anterior">
+                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label={t('occupancy.prevMonth')}>
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <p className="text-sm font-bold capitalize text-slate-700">{occTableMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' })}</p>
-                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label="Mes siguiente">
+                    <p className="text-sm font-bold capitalize text-slate-700">{occTableMonth.toLocaleDateString(dl, { month: 'long', year: 'numeric' })}</p>
+                    <button type="button" onClick={() => setOccTableMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200" aria-label={t('occupancy.nextMonth')}>
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -2046,7 +2051,7 @@ export default function HostApp() {
                 {dayRes.length === 0 ? (
                   <div className="py-8 text-center text-sm text-slate-400">
                     <CalendarCheck className="mx-auto mb-2 h-7 w-7 opacity-40" />
-                    Sin reservas confirmadas para este día
+                    {t('occupancy.noConfirmed')}
                   </div>
                 ) : (
                   <div className="space-y-2.5">
@@ -2057,30 +2062,30 @@ export default function HostApp() {
                           <div className="flex items-center justify-between mb-1">
                             <p className={`font-bold text-sm truncate ${r.customerName ? 'text-slate-900' : 'italic text-slate-400'}`}>{r.customerName || (r.confirmationCode ? `Reserva ${r.confirmationCode}` : 'Sin nombre')}</p>
                             <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${seated ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                              {seated ? 'Sentada' : 'Confirmada'}
+                              {seated ? t('occupancy.seated') : t('occupancy.confirmed')}
                             </span>
                           </div>
                           <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-600">
                             <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{to12h((r.reservationDateTime || '').slice(11, 16))}</span>
-                            <span className="flex items-center gap-1"><Users className="w-3 h-3" />{r.numberOfGuests} {r.numberOfGuests === 1 ? 'persona' : 'personas'}</span>
+                            <span className="flex items-center gap-1"><Users className="w-3 h-3" />{t('common.persons', { count: r.numberOfGuests })}</span>
                             {r.occasionType && r.occasionType !== 0 && OCCASION_LABELS[r.occasionType] ? (
-                              <span>{OCCASION_LABELS[r.occasionType].icon} {OCCASION_LABELS[r.occasionType].label}</span>
+                              <span>{OCCASION_LABELS[r.occasionType].icon} {t(`occasions.${r.occasionType}`)}</span>
                             ) : null}
                           </p>
                           {r.specialRequests && <p className="mt-1 text-[11px] italic text-amber-600 truncate" title={r.specialRequests}>“{r.specialRequests}”</p>}
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {r.customerPhone && (
                               <a href={`tel:${r.customerPhone}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-semibold transition-colors">
-                                <Phone className="w-3 h-3" /> Contactar
+                                <Phone className="w-3 h-3" /> {t('occupancy.contact')}
                               </a>
                             )}
                             {!seated && (
                               <>
                                 <button onClick={() => { openReservationAssignModal(r); setTableReservasModal(null); }} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-semibold">
-                                  <CalendarCheck className="w-3 h-3" /> Reasignar
+                                  <CalendarCheck className="w-3 h-3" /> {t('occupancy.reassign')}
                                 </button>
                                 <button onClick={() => { openRescheduleModal(r); setTableReservasModal(null); }} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 text-[11px] font-semibold">
-                                  <Calendar className="w-3 h-3" /> Mover
+                                  <Calendar className="w-3 h-3" /> {t('occupancy.move')}
                                 </button>
                               </>
                             )}
@@ -2094,12 +2099,12 @@ export default function HostApp() {
             </div>
 
             <div className="bg-gray-50 px-4 py-2.5 border-t flex items-center justify-between flex-shrink-0">
-              <span className="text-xs text-slate-500">{dayRes.length} reserva{dayRes.length !== 1 ? 's' : ''} este día</span>
+              <span className="text-xs text-slate-500">{t('occupancy.dayCount', { count: dayRes.length })}</span>
               <button
                 onClick={() => setTableReservasModal(null)}
                 className="px-4 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800"
               >
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -2113,9 +2118,9 @@ export default function HostApp() {
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             <div className="bg-slate-900 px-6 py-5 flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Asignar</p>
-                <h2 className="text-xl font-bold text-white">Mesa #{selectedTable.tableNumber}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{selectedTable.zoneName} · hasta {selectedTable.capacity} personas</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t('assign.header')}</p>
+                <h2 className="text-xl font-bold text-white">{t('assign.tableNumber', { num: selectedTable.tableNumber })}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('assign.zoneCapacity', { zone: selectedTable.zoneName, cap: selectedTable.capacity })}</p>
               </div>
               <button onClick={() => setShowAssignModal(false)} className="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -2124,7 +2129,7 @@ export default function HostApp() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Número de Personas *
+                  {t('assign.numberOfPersons')}
                 </label>
                 <input
                   type="number"
@@ -2132,27 +2137,27 @@ export default function HostApp() {
                   onChange={(e) => setNumberOfGuests(e.target.value)}
                   max={selectedTable.capacity}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-slate-900"
-                  placeholder={`Máximo ${selectedTable.capacity}`}
+                  placeholder={t('assign.maxCapacity', { max: selectedTable.capacity })}
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Notas Especiales
+                  {t('assign.specialNotes')}
                 </label>
                 <textarea
                   value={specialNotes}
                   onChange={(e) => setSpecialNotes(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-slate-900 resize-none"
                   rows={3}
-                  placeholder="Ocasión especial, preferencias, alergias..."
+                  placeholder={t('assign.specialNotesPlaceholder')}
                 />
               </div>
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setShowAssignModal(false)} className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 text-sm font-semibold transition-colors">
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button onClick={assignTable} className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 text-sm font-semibold transition-colors shadow-sm">
-                  Asignar Mesa
+                  {t('assign.assignButton')}
                 </button>
               </div>
             </div>
@@ -2186,36 +2191,36 @@ export default function HostApp() {
                 </div>
                 <div className="min-w-0">
                   <h3 className={`text-lg font-bold ${accept ? 'text-emerald-900' : 'text-red-900'}`}>
-                    {accept ? 'Aceptar zona completa' : 'Rechazar zona completa'}
+                    {accept ? t('zoneDecision.acceptTitle') : t('zoneDecision.rejectTitle')}
                   </h3>
-                  <p className="text-xs text-slate-500 truncate">{r.customerName} · {r.requestedZoneName || r.zoneName || 'zona'} · {r.numberOfGuests} pers</p>
+                  <p className="text-xs text-slate-500 truncate">{r.customerName} · {r.requestedZoneName || r.zoneName || '—'} · {r.numberOfGuests} pers</p>
                 </div>
               </div>
               <div className="px-6 py-5">
                 <p className="text-sm text-slate-600 mb-3">
                   {accept
-                    ? <>Se bloqueará <b>toda la zona {r.requestedZoneName || ''}</b> (todas sus mesas) para este cliente. Si la zona ya tiene reservas en esa ventana, no se podrá.</>
-                    : <>La solicitud se marcará como rechazada. El cliente verá tu mensaje en su seguimiento.</>}
+                    ? <>{t('zoneDecision.acceptDesc', { zone: r.requestedZoneName || '' })}</>
+                    : <>{t('zoneDecision.rejectDesc')}</>}
                 </p>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Mensaje al cliente</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{t('zoneDecision.messageLabel')}</label>
                 <textarea
                   value={zoneDecisionMsg}
                   onChange={(e) => setZoneDecisionMsg(e.target.value)}
                   rows={3}
-                  placeholder={accept ? '¡Confirmado! Los esperamos…' : 'Lo sentimos, esa zona ya está comprometida ese día…'}
+                  placeholder={accept ? t('zoneDecision.acceptPlaceholder') : t('zoneDecision.rejectPlaceholder')}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 />
               </div>
               <div className="bg-slate-50 px-6 py-3 flex items-center justify-end gap-2 border-t">
                 <button onClick={() => setZoneDecisionModal(null)} disabled={zoneDeciding} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
-                  Cerrar
+                  {t('common.close')}
                 </button>
                 <button
                   onClick={submitZoneDecision}
                   disabled={zoneDeciding || (!accept && !zoneDecisionMsg.trim())}
                   className={`px-4 py-2 rounded-xl text-sm font-bold text-white shadow-sm disabled:opacity-50 ${accept ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}
                 >
-                  {zoneDeciding ? 'Enviando…' : (accept ? 'Aceptar y bloquear zona' : 'Rechazar')}
+                  {zoneDeciding ? t('zoneDecision.sending') : (accept ? t('zoneDecision.accept') : t('zoneDecision.reject'))}
                 </button>
               </div>
             </div>
@@ -2243,15 +2248,15 @@ export default function HostApp() {
                 <XCircle className="w-5 h-5 text-red-600" />
               </div>
               <h3 id="cancel-modal-title" className="text-lg font-bold text-red-900">
-                {cancelConfirmReservation.isConfirmed ? '¿Cancelar reserva?' : '¿Rechazar reserva?'}
+                {cancelConfirmReservation.isConfirmed ? t('cancelModal.cancelTitle') : t('cancelModal.rejectTitle')}
               </h3>
             </div>
 
             <div className="px-6 py-5">
               <p className="text-sm text-slate-600 mb-4">
                 {cancelConfirmReservation.isConfirmed
-                  ? 'Esta reserva ya estaba confirmada. Al cancelar se notificará a los demás staff y se liberará la mesa si aplica.'
-                  : 'La reserva volverá al cliente como rechazada. Esta acción no se puede deshacer.'}
+                  ? t('cancelModal.confirmedDesc')
+                  : t('cancelModal.pendingDesc')}
               </p>
 
               <div className="bg-slate-50 rounded-lg p-3 space-y-1.5 text-sm">
@@ -2273,12 +2278,12 @@ export default function HostApp() {
                 <div className="flex items-center gap-2 text-slate-600">
                   <Users className="w-3.5 h-3.5 text-slate-400" />
                   <span>
-                    {cancelConfirmReservation.numberOfGuests} {cancelConfirmReservation.numberOfGuests === 1 ? 'persona' : 'personas'}
+                    {t('common.persons', { count: cancelConfirmReservation.numberOfGuests })}
                     {cancelConfirmReservation.tableId && cancelConfirmReservation.tableNumber && (
-                      <> · Mesa {cancelConfirmReservation.tableNumber} · {cancelConfirmReservation.zoneName}</>
+                      <> · {t('reservations.tableAssigned', { num: cancelConfirmReservation.tableNumber, zone: cancelConfirmReservation.zoneName ?? '' })}</>
                     )}
                     {!cancelConfirmReservation.tableId && (
-                      <> · {cancelConfirmReservation.requestedZoneName || cancelConfirmReservation.zoneName || 'Sin zona'} · sin mesa asignada</>
+                      <> · {t('reservations.noTable', { zone: cancelConfirmReservation.requestedZoneName || cancelConfirmReservation.zoneName || '' })}</>
                     )}
                   </span>
                 </div>
@@ -2291,7 +2296,7 @@ export default function HostApp() {
                 disabled={cancellingReservation}
                 className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
               >
-                No, mantener
+                {t('cancelModal.keep')}
               </button>
               <button
                 onClick={confirmCancelReservation}
@@ -2301,12 +2306,12 @@ export default function HostApp() {
                 {cancellingReservation ? (
                   <>
                     <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
-                    Cancelando...
+                    {t('cancelModal.cancelling')}
                   </>
                 ) : (
                   <>
                     <XCircle className="w-4 h-4" />
-                    {cancelConfirmReservation.isConfirmed ? 'Sí, cancelar' : 'Sí, rechazar'}
+                    {cancelConfirmReservation.isConfirmed ? t('cancelModal.yesCancel') : t('cancelModal.yesReject')}
                   </>
                 )}
               </button>
@@ -2322,7 +2327,7 @@ export default function HostApp() {
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-slate-900 px-6 py-4 flex items-center justify-between">
               <div className="min-w-0">
-                <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Contacto</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t('contactModal.title')}</p>
                 <h2 className="text-lg font-bold text-white truncate">{contactReservation.customerName}</h2>
               </div>
               <button onClick={() => setContactReservation(null)} className="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors flex-shrink-0">
@@ -2335,32 +2340,32 @@ export default function HostApp() {
                   <div className="flex items-center gap-2 min-w-0">
                     <Phone className="w-4 h-4 text-blue-500 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wider">Teléfono</p>
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wider">{t('contactModal.phone')}</p>
                       <p className="text-slate-900 font-semibold truncate">{contactReservation.customerPhone}</p>
                     </div>
                   </div>
-                  <a href={`tel:${contactReservation.customerPhone}`} className="flex-shrink-0 px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">Llamar</a>
+                  <a href={`tel:${contactReservation.customerPhone}`} className="flex-shrink-0 px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">{t('contactModal.call')}</a>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">Sin teléfono registrado</p>
+                <p className="text-sm text-slate-400">{t('contactModal.noPhone')}</p>
               )}
               {contactReservation.customerEmail ? (
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <Mail className="w-4 h-4 text-blue-500 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wider">Correo</p>
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wider">{t('contactModal.email')}</p>
                       <p className="text-slate-900 font-semibold truncate">{contactReservation.customerEmail}</p>
                     </div>
                   </div>
-                  <a href={`mailto:${contactReservation.customerEmail}`} className="flex-shrink-0 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold">Enviar</a>
+                  <a href={`mailto:${contactReservation.customerEmail}`} className="flex-shrink-0 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold">{t('contactModal.send')}</a>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">Sin correo registrado</p>
+                <p className="text-sm text-slate-400">{t('contactModal.noEmail')}</p>
               )}
             </div>
             <div className="px-6 pb-6">
-              <button onClick={() => setContactReservation(null)} className="w-full py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-gray-50">Cerrar</button>
+              <button onClick={() => setContactReservation(null)} className="w-full py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-gray-50">{t('common.close')}</button>
             </div>
           </div>
         </div>
@@ -2379,7 +2384,7 @@ export default function HostApp() {
               <div>
                 <h3 className="text-lg font-bold flex items-center gap-2">
                   <Calendar className="w-5 h-5" />
-                  Mover reserva
+                  {t('reschedule.title')}
                 </h3>
                 <p className="text-xs text-blue-100 mt-0.5">
                   {rescheduleModalForReservation.customerName} · {rescheduleModalForReservation.numberOfGuests} pers
@@ -2391,9 +2396,9 @@ export default function HostApp() {
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm">
-                <p className="text-xs text-slate-500 mb-1">Fecha y hora actuales</p>
+                <p className="text-xs text-slate-500 mb-1">{t('reschedule.currentDateTime')}</p>
                 <p className="font-semibold text-slate-700">
-                  {new Date(rescheduleModalForReservation.reservationDateTime).toLocaleString('es-DO', {
+                  {new Date(rescheduleModalForReservation.reservationDateTime).toLocaleString(dl, {
                     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
                     hour: '2-digit', minute: '2-digit'
                   })}
@@ -2402,7 +2407,7 @@ export default function HostApp() {
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Calendar className="w-3 h-3" /> Nueva fecha
+                    <Calendar className="w-3 h-3" /> {t('reschedule.newDate')}
                   </span>
                   <input
                     type="date"
@@ -2413,7 +2418,7 @@ export default function HostApp() {
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Clock className="w-3 h-3" /> Nueva hora
+                    <Clock className="w-3 h-3" /> {t('reschedule.newTime')}
                   </span>
                   <input
                     type="time"
@@ -2425,9 +2430,9 @@ export default function HostApp() {
               </div>
               {rescheduleDate && rescheduleTime && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                  <p className="text-xs text-blue-600 mb-1">Será movida a</p>
+                  <p className="text-xs text-blue-600 mb-1">{t('reschedule.movedTo')}</p>
                   <p className="font-semibold text-blue-900">
-                    {new Date(`${rescheduleDate}T${rescheduleTime}:00`).toLocaleString('es-DO', {
+                    {new Date(`${rescheduleDate}T${rescheduleTime}:00`).toLocaleString(dl, {
                       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
                       hour: '2-digit', minute: '2-digit'
                     })}
@@ -2436,7 +2441,7 @@ export default function HostApp() {
               )}
               {rescheduleModalForReservation.tableId && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                  ℹ️ La mesa <strong>#{rescheduleModalForReservation.tableNumber}</strong> se mantiene asignada. Si hay conflicto con otra reserva ese día, recibirás un aviso.
+                  {t('reschedule.tableKept', { num: rescheduleModalForReservation.tableNumber })}
                 </p>
               )}
             </div>
@@ -2445,7 +2450,7 @@ export default function HostApp() {
                 onClick={closeRescheduleModal}
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => submitReschedule()}
@@ -2455,12 +2460,12 @@ export default function HostApp() {
                 {rescheduling ? (
                   <>
                     <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
-                    Moviendo...
+                    {t('reschedule.moving')}
                   </>
                 ) : (
                   <>
                     <Calendar className="w-3.5 h-3.5" />
-                    Confirmar movimiento
+                    {t('reschedule.confirm')}
                   </>
                 )}
               </button>
@@ -2479,7 +2484,7 @@ export default function HostApp() {
           const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
           return k !== calendarDaySelected;
         });
-        const dayLabel = new Date(calendarDaySelected + 'T12:00:00').toLocaleDateString('es-DO', {
+        const dayLabel = new Date(calendarDaySelected + 'T12:00:00').toLocaleDateString(dl, {
           weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
         });
         return (
@@ -2498,7 +2503,7 @@ export default function HostApp() {
                     {dayLabel}
                   </h3>
                   <p className="text-xs text-blue-100 mt-0.5">
-                    {dayReservas.length} reserva{dayReservas.length !== 1 ? 's' : ''} este día
+                    {t('calendarDay.dayCount', { count: dayReservas.length })}
                   </p>
                 </div>
                 <button onClick={() => setCalendarDaySelected(null)} className="p-1.5 hover:bg-white/10 rounded">
@@ -2510,7 +2515,7 @@ export default function HostApp() {
                 {/* Sección 1: Reservas del día */}
                 <div>
                   <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">
-                    Reservas de este día
+                    {t('calendarDay.dayReservations')}
                   </p>
                   {/* Tabs por ocasión — solo si hay >1 tipo distinto */}
                   {(() => {
@@ -2531,7 +2536,7 @@ export default function HostApp() {
                               : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          Todas ({dayReservas.length})
+                          {t('calendarDay.allFilter', { count: dayReservas.length })}
                         </button>
                         {sortedGroups.map(([occType, count]) => {
                           const meta = OCCASION_LABELS[occType];
@@ -2548,7 +2553,7 @@ export default function HostApp() {
                               }`}
                             >
                               {meta.icon && <span className="text-sm leading-none">{meta.icon}</span>}
-                              {meta.label} ({count})
+                              {t(`occasions.${occType}`)} ({count})
                             </button>
                           );
                         })}
@@ -2562,7 +2567,7 @@ export default function HostApp() {
                     if (dayReservas.length === 0) {
                       return (
                         <p className="text-sm text-slate-400 italic bg-slate-50 rounded-lg p-3">
-                          No hay reservas para este día todavía.
+                          {t('calendarDay.noReservationsDay')}
                         </p>
                       );
                     }
@@ -2570,12 +2575,12 @@ export default function HostApp() {
                       const filterMeta = OCCASION_LABELS[dayModalOccasionFilter as number];
                       return (
                         <div className="text-sm text-slate-500 bg-slate-50 rounded-lg p-3 flex items-center gap-2">
-                          <span>Ninguna reserva con ocasión {filterMeta?.icon} <strong>{filterMeta?.label}</strong> este día.</span>
+                          <span>{t('calendarDay.noOccasionFilter', { icon: filterMeta?.icon ?? '', label: filterMeta ? t(`occasions.${dayModalOccasionFilter as number}`) : '' })}</span>
                           <button
                             onClick={() => setDayModalOccasionFilter('all')}
                             className="ml-auto text-blue-600 hover:underline font-semibold text-xs"
                           >
-                            Ver todas
+                            {t('calendarDay.showAll')}
                           </button>
                         </div>
                       );
@@ -2609,7 +2614,7 @@ export default function HostApp() {
                                   <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                                     <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-semibold border ${occMeta.color}`}>
                                       <span className="text-sm leading-none">{occMeta.icon}</span>
-                                      {occMeta.label}
+                                      {t(`occasions.${occType}`)}
                                     </span>
                                     {r.specialRequests && (
                                       <span className="text-[11px] text-slate-500 italic truncate" title={r.specialRequests}>
@@ -2628,7 +2633,7 @@ export default function HostApp() {
                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                     : 'bg-amber-50 text-amber-700 border-amber-200'
                               }`}>
-                                {isCancelled ? 'Cancelada' : r.isConfirmed ? 'Confirmada' : 'Pendiente'}
+                                {isCancelled ? t('status.cancelled') : r.isConfirmed ? t('status.confirmed') : t('status.pending')}
                               </span>
                               {!isCancelled && (
                                 <button
@@ -2638,17 +2643,16 @@ export default function HostApp() {
                                       ? 'bg-emerald-500 hover:bg-emerald-600'
                                       : 'bg-blue-500 hover:bg-blue-600'
                                   }`}
-                                  title={isPending ? 'Aceptar reserva y asignar mesa' : 'Reasignar mesa'}
                                 >
                                   {isPending ? (
                                     <>
                                       <CheckCircle className="w-3.5 h-3.5" />
-                                      Aceptar
+                                      {t('reservations.accept')}
                                     </>
                                   ) : (
                                     <>
                                       <CalendarCheck className="w-3.5 h-3.5" />
-                                      Reasignar
+                                      {t('reservations.reassignTable')}
                                     </>
                                   )}
                                 </button>
@@ -2665,11 +2669,11 @@ export default function HostApp() {
                 {/* Sección 2: Mover otras reservas a este día */}
                 <div className="pt-4 border-t border-slate-200">
                   <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">
-                    Mover una reserva a este día
+                    {t('calendarDay.moveSection')}
                   </p>
                   {otherReservas.length === 0 ? (
                     <p className="text-sm text-slate-400 italic bg-slate-50 rounded-lg p-3">
-                      No hay otras reservas para mover.
+                      {t('calendarDay.noOtherReservations')}
                     </p>
                   ) : (
                     <div className="space-y-2 max-h-72 overflow-y-auto">
@@ -2681,7 +2685,7 @@ export default function HostApp() {
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold text-slate-900 truncate">{r.customerName}</p>
                               <p className="text-xs text-slate-500">
-                                Actualmente: {new Date(r.reservationDateTime).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}, {formatReservationTime(r.reservationDateTime)}
+                                {t('calendarDay.currentlyAt', { date: new Date(r.reservationDateTime).toLocaleDateString(dl, { day: 'numeric', month: 'short' }), time: formatReservationTime(r.reservationDateTime) })}
                                 {' '}· 👥 {r.numberOfGuests}
                                 {r.tableNumber && ` · Mesa ${r.tableNumber}`}
                               </p>
@@ -2691,7 +2695,7 @@ export default function HostApp() {
                               disabled={rescheduling}
                               className="flex-shrink-0 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50"
                             >
-                              Mover aquí
+                              {t('calendarDay.moveHere')}
                             </button>
                           </div>
                         );
@@ -2706,7 +2710,7 @@ export default function HostApp() {
                   onClick={() => setCalendarDaySelected(null)}
                   className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
                 >
-                  Cerrar
+                  {t('common.close')}
                 </button>
               </div>
             </div>
@@ -2728,10 +2732,10 @@ export default function HostApp() {
               <div>
                 <h3 className="text-lg font-bold flex items-center gap-2">
                   <CalendarCheck className="w-5 h-5" />
-                  {assignModalForReservation.isConfirmed ? 'Reasignar mesa' : 'Aceptar reserva'}
+                  {assignModalForReservation.isConfirmed ? t('reservations.reassignTable') : t('reservations.accept')}
                 </h3>
                 <p className="text-xs text-blue-100 mt-0.5">
-                  {assignModalForReservation.customerName} · {assignModalForReservation.numberOfGuests} pers · zona pedida:{' '}
+                  {assignModalForReservation.customerName} · {assignModalForReservation.numberOfGuests} pers · {t('assign.requestedZone')}{' '}
                   <span className="font-semibold">
                     {assignModalForReservation.requestedZoneName || assignModalForReservation.zoneName || '—'}
                   </span>
@@ -2747,7 +2751,7 @@ export default function HostApp() {
               {allZonesForAssign.length > 0 && (
                 <div className="mb-4">
                   <p className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">
-                    Zona
+                    {t('assign.zoneLabel')}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {allZonesForAssign.map(z => {
@@ -2768,7 +2772,7 @@ export default function HostApp() {
                             <span className={`ml-1.5 text-[10px] px-1 py-0.5 rounded ${
                               isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
                             }`}>
-                              pedida
+                              {t('assign.requested')}
                             </span>
                           )}
                         </button>
@@ -2781,65 +2785,65 @@ export default function HostApp() {
               {loadingAssignable ? (
                 <div className="text-center py-10">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
-                  <p className="text-sm text-slate-500">Cargando mesas disponibles...</p>
+                  <p className="text-sm text-slate-500">{t('assign.loadingTables')}</p>
                 </div>
               ) : assignableTables.length === 0 ? (
                 <div className="text-center py-8 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-amber-900 font-semibold">Sin disponibilidad en esta zona</p>
+                  <p className="text-amber-900 font-semibold">{t('assign.noAvailability')}</p>
                   <p className="text-sm text-amber-700 mt-1">
-                    No hay mesas con capacidad ≥ {assignModalForReservation.numberOfGuests} libres este día.
+                    {t('assign.noAvailabilityDesc', { guests: assignModalForReservation.numberOfGuests })}
                   </p>
                   <p className="text-xs text-amber-600 mt-2">
-                    💡 Prueba otra zona arriba — el cliente puede ser reubicado.
+                    {t('assign.noAvailabilityHint')}
                   </p>
                 </div>
               ) : (
                 <>
                   <div className="flex items-center gap-2 mb-3">
                     <p className="text-xs uppercase tracking-wider font-semibold text-slate-400">
-                      Mesas disponibles
+                      {t('assign.availableTables')}
                     </p>
                     {assignableZoneId !== assignModalForReservation.requestedZoneId && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
-                        Diferente a la zona pedida
+                        {t('assign.differentZone')}
                       </span>
                     )}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {assignableTables.map((t) => {
-                      const disabled = t.isOccupied || assigningTableId !== null;
+                    {assignableTables.map((assignableTable) => {
+                      const disabled = assignableTable.isOccupied || assigningTableId !== null;
                       return (
                         <button
-                          key={t.id}
+                          key={assignableTable.id}
                           type="button"
                           disabled={disabled}
-                          onClick={() => !t.isOccupied && assignTableToReservation(t.id)}
+                          onClick={() => !assignableTable.isOccupied && assignTableToReservation(assignableTable.id)}
                           className={`relative rounded-xl border-2 p-4 text-left transition-all ${
-                            t.isCurrent
+                            assignableTable.isCurrent
                               ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-300'
-                              : t.isOccupied
+                              : assignableTable.isOccupied
                                 ? 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed'
                                 : 'border-blue-200 bg-white hover:border-blue-500 hover:bg-blue-50'
                           }`}
                         >
                           <div className="text-2xl font-bold text-slate-900">
-                            Mesa {t.tableNumber}
+                            {t('assign.tableNumber', { num: assignableTable.tableNumber })}
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
                             <Users className="w-3 h-3" />
-                            {t.capacity} pers
+                            {t('assign.personas', { count: assignableTable.capacity })}
                           </div>
-                          {t.isCurrent && (
+                          {assignableTable.isCurrent && (
                             <span className="absolute top-1.5 right-1.5 text-xs bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">
-                              Actual
+                              {t('assign.currentTable')}
                             </span>
                           )}
-                          {t.isOccupied && !t.isCurrent && (
+                          {assignableTable.isOccupied && !assignableTable.isCurrent && (
                             <span className="absolute top-1.5 right-1.5 text-[10px] bg-slate-400 text-white px-1.5 py-0.5 rounded-full font-medium">
-                              Ocupada
+                              {t('assign.occupiedTable')}
                             </span>
                           )}
-                          {assigningTableId === t.id && (
+                          {assigningTableId === assignableTable.id && (
                             <div className="absolute inset-0 bg-blue-500/10 rounded-xl flex items-center justify-center">
                               <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
                             </div>
@@ -2857,7 +2861,7 @@ export default function HostApp() {
                 onClick={closeReservationAssignModal}
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
               >
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -2877,6 +2881,8 @@ function CalendarView({
   reservations: Reservation[];
   onDayClick: (dateKey: string) => void;
 }) {
+  const t = useTranslations();
+  const dl = dateLocale(useLocale());
   const today = new Date();
   const todayKey = today.toLocaleDateString('sv-SE');
   const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -2903,12 +2909,12 @@ function CalendarView({
   // Pad final para completar la última fila
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const monthName = viewMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' });
+  const monthName = viewMonth.toLocaleDateString(dl, { month: 'long', year: 'numeric' });
   const prevMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1));
   const nextMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1));
   const goToday = () => setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
 
-  const weekDayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const weekDayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']; // day-of-week abbreviations remain locale-invariant (calendar header)
 
   return (
     <div className="max-w-6xl mx-auto px-6 pt-5 pb-10">
@@ -2918,7 +2924,7 @@ function CalendarView({
           <button
             onClick={prevMonth}
             className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-            aria-label="Mes anterior"
+            aria-label={t('calendar.prevMonth')}
           >
             <ChevronDown className="w-5 h-5 rotate-90 text-slate-600" />
           </button>
@@ -2928,7 +2934,7 @@ function CalendarView({
           <button
             onClick={nextMonth}
             className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-            aria-label="Mes siguiente"
+            aria-label={t('calendar.nextMonth')}
           >
             <ChevronDown className="w-5 h-5 -rotate-90 text-slate-600" />
           </button>
@@ -2937,7 +2943,7 @@ function CalendarView({
           onClick={goToday}
           className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors"
         >
-          Hoy
+          {t('calendar.today')}
         </button>
       </div>
 
@@ -2982,7 +2988,7 @@ function CalendarView({
                 className={`aspect-square border-r border-b border-gray-100 p-2 text-left transition-all flex flex-col gap-1 ${
                   total > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'
                 } ${isToday ? 'bg-blue-50/40 ring-2 ring-blue-300 ring-inset' : ''} ${isPast ? 'opacity-60' : ''}`}
-                title={total > 0 ? `${total} reserva${total !== 1 ? 's' : ''} — click para filtrar` : 'Sin reservas'}
+                title={total > 0 ? t('calendar.dayCount', { count: total }) : t('calendar.noReservations')}
               >
                 <div className="flex items-center justify-between">
                   <span className={`text-base font-bold ${
@@ -3005,13 +3011,13 @@ function CalendarView({
                     {confirmed > 0 && (
                       <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
-                        {confirmed} confirmada{confirmed !== 1 ? 's' : ''}
+                        {t('calendar.confirmed', { count: confirmed })}
                       </div>
                     )}
                     {pending > 0 && (
                       <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
                         <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
-                        {pending} pendiente{pending !== 1 ? 's' : ''}
+                        {t('calendar.pending', { count: pending })}
                       </div>
                     )}
                     {birthdays > 0 && (
@@ -3036,22 +3042,22 @@ function CalendarView({
       <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-slate-500">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span>Confirmadas</span>
+          <span>{t('calendar.legendConfirmed')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-          <span>Pendientes</span>
+          <span>{t('calendar.legendPending')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span>🎂</span>
-          <span>Cumpleaños</span>
+          <span>{t('calendar.legendBirthdays')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span>✨</span>
-          <span>Otras ocasiones</span>
+          <span>{t('calendar.legendOccasions')}</span>
         </div>
         <div className="ml-auto text-slate-400">
-          Click en un día con reservas para filtrar la lista
+          {t('calendar.clickHint')}
         </div>
       </div>
     </div>

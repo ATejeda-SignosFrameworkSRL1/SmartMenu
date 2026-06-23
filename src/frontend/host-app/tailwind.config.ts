@@ -12,6 +12,14 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        // Sistema + fallbacks CJK (zh/ja/ko); host no usa una fuente web propia.
+        sans: [
+          'system-ui', '-apple-system', '"Segoe UI"', 'Roboto',
+          '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', '"Noto Sans CJK SC"',
+          '"Malgun Gothic"', '"Noto Sans JP"', '"Noto Sans KR"', 'sans-serif',
+        ],
+      },
       colors: {
         primary: {
           50: '#f0fdf4',

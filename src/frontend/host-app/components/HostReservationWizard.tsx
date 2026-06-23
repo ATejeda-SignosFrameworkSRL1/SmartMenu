@@ -6,6 +6,8 @@ import {
   CalendarDays, Users, Clock, ChevronLeft, ChevronRight, CheckCircle2, Loader2,
   Phone, Mail, User as UserIcon, PartyPopper, ArrowRight, MapPin, X, UtensilsCrossed,
 } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
 
 // ── Tipos locales (espejo del backend de disponibilidad) ──
 type SlotStatus = 'available' | 'limited' | 'full';
@@ -15,17 +17,6 @@ interface Availability { date: string; guests: number; slotMinutes: number; serv
 
 interface TableLite { id: number; tableNumber: number; capacity: number; zoneId: number; zoneName: string; }
 interface PreOrderItem { dishId: number; name: string; price: number; quantity: number; }
-
-// Mismas opciones que el formulario de reservas público (reservation-app).
-const OCCASIONS: { value: number; label: string }[] = [
-  { value: 0, label: 'Sin ocasión especial' },
-  { value: 1, label: '🎂 Cumpleaños' },
-  { value: 2, label: '💍 Aniversario' },
-  { value: 3, label: '💼 Negocios' },
-  { value: 4, label: '❤️ Romántica' },
-  { value: 5, label: '🎉 Celebración familiar' },
-  { value: 99, label: 'Otra' },
-];
 
 function todayStr(): string {
   const d = new Date();
@@ -65,9 +56,12 @@ export default function HostReservationWizard({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const t = useTranslations();
+  const dl = dateLocale(useLocale());
+
   const [step, setStep] = useState<Step>(1);
   const [date, setDate] = useState(tomorrowStr());
-  const [calMonth, setCalMonth] = useState<Date>(() => { const t = new Date(); t.setDate(t.getDate() + 1); return new Date(t.getFullYear(), t.getMonth(), 1); });
+  const [calMonth, setCalMonth] = useState<Date>(() => { const d = new Date(); d.setDate(d.getDate() + 1); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [guests, setGuests] = useState(() => Math.min(2, table.capacity));
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -93,17 +87,17 @@ export default function HostReservationWizard({
       const { data } = await api.get(`/api/tablereservation/availability/slots?${params.toString()}`);
       setAvailability(data);
     } catch {
-      setSlotsError('No pudimos cargar la disponibilidad. Reintenta.');
+      setSlotsError(t('wizard.slotsError'));
     } finally {
       setLoadingSlots(false);
     }
-  }, [date, guests, table.zoneId, api]);
+  }, [date, guests, table.zoneId, api, t]);
 
   // Al entrar al paso 2, (re)carga la disponibilidad.
   useEffect(() => {
     if (step !== 2) return;
-    const t = setTimeout(fetchSlots, 200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(fetchSlots, 200);
+    return () => clearTimeout(timer);
   }, [step, fetchSlots]);
 
   const windowsWithSlots = useMemo(() => {
@@ -120,11 +114,21 @@ export default function HostReservationWizard({
   );
 
   const preOrderTotal = preOrderItems.reduce((s, i) => s + i.price * i.quantity, 0);
-  const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString(dl, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  const OCCASIONS: { value: number; label: string }[] = [
+    { value: 0, label: t('wizard.occasionNone') },
+    { value: 1, label: t('wizard.occasion1') },
+    { value: 2, label: t('wizard.occasion2') },
+    { value: 3, label: t('wizard.occasion3') },
+    { value: 4, label: t('wizard.occasion4') },
+    { value: 5, label: t('wizard.occasion5') },
+    { value: 99, label: t('wizard.occasion99') },
+  ];
 
   async function submit() {
-    if (!name.trim() || !phone.trim()) { toast.error('Nombre y teléfono son obligatorios'); return; }
-    if (!selectedTime) { toast.error('Elige un horario'); setStep(2); return; }
+    if (!name.trim() || !phone.trim()) { toast.error(t('wizard.nameRequired')); return; }
+    if (!selectedTime) { toast.error(t('wizard.timeRequired')); setStep(2); return; }
     setSubmitting(true);
     try {
       const reservationDateTime = `${date}T${selectedTime}:00`;
@@ -152,10 +156,10 @@ export default function HostReservationWizard({
           }
         } catch { /* opcional */ }
       }
-      toast.success('Reserva creada exitosamente');
+      toast.success(t('wizard.reservationCreated'));
       onCreated();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al crear reserva');
+      toast.error(e?.response?.data?.error || t('wizard.createError'));
     } finally {
       setSubmitting(false);
     }
@@ -167,11 +171,11 @@ export default function HostReservationWizard({
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between bg-warm-900 px-6 py-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-gold-light">Reservar</p>
-            <h2 className="text-xl font-bold text-white">Mesa #{table.tableNumber}</h2>
-            <p className="mt-0.5 text-xs text-warm-400">{table.zoneName} · hasta {table.capacity} personas</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-gold-light">{t('wizard.reserveLabel')}</p>
+            <h2 className="text-xl font-bold text-white">{t('wizard.tableTitle', { num: table.tableNumber })}</h2>
+            <p className="mt-0.5 text-xs text-warm-400">{t('wizard.zoneCapacity', { zone: table.zoneName, cap: table.capacity })}</p>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-warm-400 transition-colors hover:bg-white/10 hover:text-white" aria-label="Cerrar">
+          <button onClick={onClose} className="rounded-xl p-2 text-warm-400 transition-colors hover:bg-white/10 hover:text-white" aria-label={t('wizard.closeLabel')}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -180,16 +184,16 @@ export default function HostReservationWizard({
         <div className="flex-shrink-0 px-6 pt-5">
           <div className="flex items-center gap-3">
             {step > 1 && (
-              <button onClick={() => setStep((s) => (s - 1) as Step)} className="-ml-2 rounded-lg p-2 text-warm-300 transition-colors hover:bg-warm-800" aria-label="Atrás">
+              <button onClick={() => setStep((s) => (s - 1) as Step)} className="-ml-2 rounded-lg p-2 text-warm-300 transition-colors hover:bg-warm-800" aria-label={t('wizard.back')}>
                 <ChevronLeft className="h-5 w-5" />
               </button>
             )}
             <div className="flex-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-gold-light">Paso {step} de 3</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-gold-light">{t('wizard.stepOf', { step })}</p>
               <h3 className="text-lg font-bold text-white">
-                {step === 1 && '¿Cuándo y cuántos?'}
-                {step === 2 && 'Elige tu horario'}
-                {step === 3 && 'Datos del cliente'}
+                {step === 1 && t('wizard.step1Title')}
+                {step === 2 && t('wizard.step2Title')}
+                {step === 3 && t('wizard.step3Title')}
               </h3>
             </div>
           </div>
@@ -205,18 +209,18 @@ export default function HostReservationWizard({
             <div className="space-y-5">
               <div>
                 <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                  <CalendarDays className="h-4 w-4 text-gold-light" /> Fecha *
+                  <CalendarDays className="h-4 w-4 text-gold-light" /> {t('wizard.dateLabel')}
                 </span>
                 <div className="rounded-xl border border-warm-700 bg-warm-800/50 p-3">
                   <div className="mb-3 flex items-center justify-between">
                     <button type="button" onClick={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
                       disabled={calMonth.getFullYear() === new Date().getFullYear() && calMonth.getMonth() <= new Date().getMonth()}
-                      className="rounded-lg p-2 text-warm-300 transition-colors hover:bg-warm-800 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Mes anterior">
+                      className="rounded-lg p-2 text-warm-300 transition-colors hover:bg-warm-800 disabled:cursor-not-allowed disabled:opacity-30" aria-label={t('calendar.prevMonth')}>
                       <ChevronLeft className="h-5 w-5" />
                     </button>
-                    <p className="text-base font-bold capitalize text-warm-100">{calMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' })}</p>
+                    <p className="text-base font-bold capitalize text-warm-100">{calMonth.toLocaleDateString(dl, { month: 'long', year: 'numeric' })}</p>
                     <button type="button" onClick={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-                      className="rounded-lg p-2 text-warm-300 transition-colors hover:bg-warm-800" aria-label="Mes siguiente">
+                      className="rounded-lg p-2 text-warm-300 transition-colors hover:bg-warm-800" aria-label={t('calendar.nextMonth')}>
                       <ChevronRight className="h-5 w-5" />
                     </button>
                   </div>
@@ -261,20 +265,20 @@ export default function HostReservationWizard({
 
               <div>
                 <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                  <Users className="h-4 w-4 text-gold-light" /> Comensales * <span className="text-xs font-normal text-warm-500">(máx {table.capacity})</span>
+                  <Users className="h-4 w-4 text-gold-light" /> {t('wizard.guestsLabel')} <span className="text-xs font-normal text-warm-500">{t('wizard.guestsMax', { max: table.capacity })}</span>
                 </span>
                 <div className="flex items-center justify-between rounded-xl border border-warm-700 bg-warm-800/50 p-2">
                   <button onClick={() => setGuests((g) => Math.max(1, g - 1))} disabled={guests <= 1}
-                    className="h-12 w-12 rounded-lg bg-warm-800 text-2xl font-bold text-white transition-colors hover:bg-warm-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Menos comensales">−</button>
+                    className="h-12 w-12 rounded-lg bg-warm-800 text-2xl font-bold text-white transition-colors hover:bg-warm-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label={t('wizard.lessGuests')}>−</button>
                   <span className="text-2xl font-semibold tabular-nums text-white">{guests}</span>
                   <button onClick={() => setGuests((g) => Math.min(table.capacity, g + 1))} disabled={guests >= table.capacity}
-                    className="h-12 w-12 rounded-lg bg-warm-800 text-2xl font-bold text-white transition-colors hover:bg-warm-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Más comensales">+</button>
+                    className="h-12 w-12 rounded-lg bg-warm-800 text-2xl font-bold text-white transition-colors hover:bg-warm-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label={t('wizard.moreGuests')}>+</button>
                 </div>
               </div>
 
               <div>
                 <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
-                  <MapPin className="h-4 w-4 text-gold-light" /> Zona
+                  <MapPin className="h-4 w-4 text-gold-light" /> {t('wizard.zoneLabel')}
                 </span>
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-4 py-2 text-sm font-medium text-gold-light">
                   {table.zoneName}
@@ -283,7 +287,7 @@ export default function HostReservationWizard({
 
               <button onClick={() => setStep(2)}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-8 py-4 text-lg font-semibold text-white transition hover:bg-gold-light active:scale-[0.98]">
-                Ver horarios disponibles <ArrowRight className="h-5 w-5" />
+                {t('wizard.viewSlots')} <ArrowRight className="h-5 w-5" />
               </button>
             </div>
           )}
@@ -291,7 +295,7 @@ export default function HostReservationWizard({
           {/* ── Paso 2: rejilla de horarios ── */}
           {step === 2 && (
             <div className="space-y-5">
-              <p className="text-sm capitalize text-warm-400">{dateLabel} · {guests} {guests === 1 ? 'persona' : 'personas'}</p>
+              <p className="text-sm capitalize text-warm-400">{t('wizard.step2Subtitle', { date: dateLabel, count: guests })}</p>
               {loadingSlots && !availability && (
                 <div className="grid grid-cols-4 gap-2">
                   {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-14 animate-pulse rounded-xl bg-warm-800/50" />)}
@@ -300,13 +304,13 @@ export default function HostReservationWizard({
               {slotsError && (
                 <div className="py-8 text-center">
                   <p className="mb-3 text-warm-400">{slotsError}</p>
-                  <button onClick={fetchSlots} className="rounded-lg bg-gold px-6 py-3 font-semibold text-white transition hover:bg-gold-light">Reintentar</button>
+                  <button onClick={fetchSlots} className="rounded-lg bg-gold px-6 py-3 font-semibold text-white transition hover:bg-gold-light">{t('common.retry')}</button>
                 </div>
               )}
               {availability && !anyBookable && !loadingSlots && (
                 <div className="py-10 text-center text-warm-400">
                   <Clock className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                  No hay horarios disponibles para esta fecha. Prueba otro día.
+                  {t('wizard.noSlotsAvailable')}
                 </div>
               )}
               {windowsWithSlots.map((w) => (
@@ -330,7 +334,7 @@ export default function HostReservationWizard({
                                 : 'border-warm-700 bg-warm-800/50 text-warm-200 hover:border-gold-light hover:bg-warm-800',
                             ].join(' ')}>
                             <span className="text-base font-semibold tabular-nums">{to12h(s.time)}</span>
-                            {s.status === 'limited' && !disabled && <span className="text-[10px]">Pocos</span>}
+                            {s.status === 'limited' && !disabled && <span className="text-[10px]">{t('wizard.few')}</span>}
                           </button>
                         );
                       })}
@@ -347,37 +351,37 @@ export default function HostReservationWizard({
               {selectedTime && (
                 <div className="flex items-center gap-2 rounded-xl border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-warm-200">
                   <Clock className="h-4 w-4 text-gold-light" />
-                  <span>Mesa #{table.tableNumber} · <b className="text-white">{to12h(selectedTime)}</b> · {guests} pers.</span>
+                  <span>{t('wizard.reservationSummary', { num: table.tableNumber, time: to12h(selectedTime), count: guests })}</span>
                 </div>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><UserIcon className="h-4 w-4 text-gold-light" /> Nombre *</span>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del cliente" className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold" />
+                  <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><UserIcon className="h-4 w-4 text-gold-light" /> {t('wizard.nameLabel')}</span>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('wizard.namePlaceholder')} className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold" />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><Phone className="h-4 w-4 text-gold-light" /> Teléfono *</span>
+                  <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><Phone className="h-4 w-4 text-gold-light" /> {t('wizard.phoneLabel')}</span>
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="(809) 555-0000" className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold" />
                 </label>
               </div>
               <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><Mail className="h-4 w-4 text-gold-light" /> Email <span className="text-xs font-normal text-warm-500">(opcional)</span></span>
+                <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><Mail className="h-4 w-4 text-gold-light" /> {t('wizard.emailLabel')} <span className="text-xs font-normal text-warm-500">{t('wizard.emailOptional')}</span></span>
                 <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="cliente@email.com" className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold" />
               </label>
               <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><PartyPopper className="h-4 w-4 text-gold-light" /> Ocasión</span>
+                <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><PartyPopper className="h-4 w-4 text-gold-light" /> {t('wizard.occasionLabel')}</span>
                 <select value={occasion} onChange={(e) => setOccasion(Number(e.target.value))} className="w-full rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold">
                   {OCCASIONS.map((o) => <option key={o.value} value={o.value} className="bg-warm-900 text-white">{o.label}</option>)}
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-warm-300">Solicitudes especiales</span>
-                <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alergias, silla de bebé, mesa junto a la ventana…" className="w-full resize-none rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold" />
+                <span className="mb-1.5 block text-sm font-medium text-warm-300">{t('wizard.notesLabel')}</span>
+                <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('wizard.notesPlaceholder')} className="w-full resize-none rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold" />
               </label>
 
               {/* Extra host — bloquear mesa */}
               <div>
-                <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><Clock className="h-4 w-4 text-gold-light" /> Bloquear mesa (min antes)</span>
+                <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><Clock className="h-4 w-4 text-gold-light" /> {t('wizard.blockLabel')}</span>
                 <div className="flex gap-2">
                   {['30', '45', '60', '90', '120'].map((m) => (
                     <button key={m} type="button" onClick={() => setAdvanceBlockMinutes(m)}
@@ -389,13 +393,13 @@ export default function HostReservationWizard({
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] text-warm-500">La mesa se mostrará como reservada este tiempo antes de la hora.</p>
+                <p className="mt-1 text-[10px] text-warm-500">{t('wizard.blockHint')}</p>
               </div>
 
               {/* Extra host — pre-ordenar platos */}
               <div className="overflow-hidden rounded-xl border border-warm-700">
                 <button type="button" onClick={() => setShowPreOrder((s) => !s)} className="flex w-full items-center justify-between bg-warm-800/50 px-4 py-3 transition-colors hover:bg-warm-800">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-warm-200"><UtensilsCrossed className="h-4 w-4 text-gold-light" /> Pre-ordenar platos <span className="font-normal text-warm-500">(opcional)</span></span>
+                  <span className="flex items-center gap-2 text-sm font-semibold text-warm-200"><UtensilsCrossed className="h-4 w-4 text-gold-light" /> {t('wizard.preOrderLabel')} <span className="font-normal text-warm-500">{t('wizard.preOrderOptional')}</span></span>
                   <span className={`text-xs text-warm-400 transition-transform ${showPreOrder ? 'rotate-180' : ''}`}>▼</span>
                 </button>
                 {showPreOrder && (
@@ -430,7 +434,7 @@ export default function HostReservationWizard({
                         {preOrderItems.map((i) => (
                           <div key={i.dishId} className="flex justify-between text-xs text-warm-300"><span>{i.quantity}x {i.name}</span><span className="font-medium text-gold-light">RD$ {(i.price * i.quantity).toLocaleString('es-DO')}</span></div>
                         ))}
-                        <div className="mt-1 flex justify-between border-t border-gold/30 pt-1 text-sm font-bold text-warm-100"><span>Total</span><span className="text-gold-light">RD$ {preOrderTotal.toLocaleString('es-DO')}</span></div>
+                        <div className="mt-1 flex justify-between border-t border-gold/30 pt-1 text-sm font-bold text-warm-100"><span>{t('wizard.preOrderTotal')}</span><span className="text-gold-light">RD$ {preOrderTotal.toLocaleString('es-DO')}</span></div>
                       </div>
                     )}
                   </div>
@@ -439,7 +443,7 @@ export default function HostReservationWizard({
 
               <button onClick={submit} disabled={submitting}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-8 py-4 text-lg font-semibold text-white transition hover:bg-gold-light active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60">
-                {submitting ? <><Loader2 className="h-5 w-5 animate-spin" /> Creando…</> : <><CheckCircle2 className="h-5 w-5" /> Crear Reserva</>}
+                {submitting ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('wizard.creating')}</> : <><CheckCircle2 className="h-5 w-5" /> {t('wizard.createButton')}</>}
               </button>
             </div>
           )}
