@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,10 +33,10 @@ function getFoodItems(order: any): any[] {
 // Filtro por curso (igual que KDS app)
 type CourseFilter = 'all' | 'Entrada' | 'PlatoFuerte' | 'Postre';
 
-const COURSE_META: Record<string, { label: string; icon: string; colorClass: string; badgeClass: string }> = {
-  Entrada:     { label: 'Entrada',      icon: '🥗', colorClass: 'bg-green-50 border-green-400 text-green-800',   badgeClass: 'bg-green-100 text-green-700' },
-  PlatoFuerte: { label: 'Plato Fuerte', icon: '🍖', colorClass: 'bg-orange-50 border-orange-400 text-orange-800', badgeClass: 'bg-orange-100 text-orange-700' },
-  Postre:      { label: 'Postre',       icon: '🍰', colorClass: 'bg-pink-50 border-pink-400 text-pink-800',       badgeClass: 'bg-pink-100 text-pink-700' },
+const COURSE_META: Record<string, { labelKey: string; icon: string; colorClass: string; badgeClass: string }> = {
+  Entrada:     { labelKey: 'courseEntrada',      icon: '🥗', colorClass: 'bg-green-50 border-green-400 text-green-800',   badgeClass: 'bg-green-100 text-green-700' },
+  PlatoFuerte: { labelKey: 'coursePlatoFuerte',  icon: '🍖', colorClass: 'bg-orange-50 border-orange-400 text-orange-800', badgeClass: 'bg-orange-100 text-orange-700' },
+  Postre:      { labelKey: 'coursePostre',        icon: '🍰', colorClass: 'bg-pink-50 border-pink-400 text-pink-800',       badgeClass: 'bg-pink-100 text-pink-700' },
 };
 
 const DRINK_TIMING_TO_COURSE: Record<number, string> = { 0: 'Entrada', 1: 'PlatoFuerte', 2: 'Postre' };
@@ -84,6 +85,7 @@ function getElapsedMinutes(createdAt: string | number | undefined): number {
 }
 
 export default function KitchenPage() {
+  const t = useTranslations('kitchen');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [courseFilter, setCourseFilter] = useState<CourseFilter>('all');
@@ -121,20 +123,20 @@ export default function KitchenPage() {
   const setKitchenPreparing = async (orderId: number) => {
     try {
       await api.put(`/api/order/${orderId}/kitchen-preparing`);
-      toast.success('Marcado como Preparando');
+      toast.success(t('toastPreparing'));
       loadOrders();
     } catch (error) {
-      toast.error('Error al actualizar');
+      toast.error(t('toastUpdateError'));
     }
   };
 
   const setKitchenReady = async (orderId: number) => {
     try {
       await api.put(`/api/order/${orderId}/kitchen-ready`);
-      toast.success('Comida marcada como lista');
+      toast.success(t('toastReady'));
       loadOrders();
     } catch (error) {
-      toast.error('Error al actualizar');
+      toast.error(t('toastUpdateError'));
     }
   };
 
@@ -152,7 +154,7 @@ export default function KitchenPage() {
 
   if (loading) {
     return (
-      <MainLayout title="Cocina" subtitle="Kitchen Display System">
+      <MainLayout title={t('title')} subtitle={t('subtitle')}>
         <div className="flex items-center justify-center h-64">
           <RefreshCw className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -162,10 +164,10 @@ export default function KitchenPage() {
 
   // Tabs de curso: contar ítems según filtro
   const courseTabs = [
-    { key: 'all' as CourseFilter,         label: 'Todos',       icon: '📋' },
-    { key: 'Entrada' as CourseFilter,     label: 'Entrada',     icon: '🥗' },
-    { key: 'PlatoFuerte' as CourseFilter, label: 'Plato Fuerte',icon: '🍖' },
-    { key: 'Postre' as CourseFilter,      label: 'Postre',      icon: '🍰' },
+    { key: 'all' as CourseFilter,         label: t('courseAll'),        icon: '📋' },
+    { key: 'Entrada' as CourseFilter,     label: t('courseEntrada'),    icon: '🥗' },
+    { key: 'PlatoFuerte' as CourseFilter, label: t('coursePlatoFuerte'),icon: '🍖' },
+    { key: 'Postre' as CourseFilter,      label: t('coursePostre'),     icon: '🍰' },
   ];
 
   function getCourseCount(key: CourseFilter): number {
@@ -175,7 +177,7 @@ export default function KitchenPage() {
   }
 
   return (
-    <MainLayout title="Cocina (KDS)" subtitle="Kitchen Display System">
+    <MainLayout title={t('title')} subtitle={t('subtitle')}>
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -183,16 +185,16 @@ export default function KitchenPage() {
             <ChefHat className="h-8 w-8 text-primary" />
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold">Pedidos de cocina (comida): {activeOrders.length}</h2>
+                <h2 className="text-2xl font-bold">{t('headingOrders', { count: activeOrders.length })}</h2>
                 {urgentCount > 0 && (
                   <Badge className="bg-destructive text-destructive-foreground flex items-center gap-1 px-3 py-1">
                     <Flame className="h-4 w-4" />
-                    {urgentCount} urgentes
+                    {t('urgentBadge', { count: urgentCount })}
                   </Badge>
                 )}
               </div>
               <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                <span><span className="inline-block w-3 h-3 rounded-full bg-green-500 mr-1" />Normal</span>
+                <span><span className="inline-block w-3 h-3 rounded-full bg-green-500 mr-1" />{t('legendNormal')}</span>
                 <span><span className="inline-block w-3 h-3 rounded-full bg-yellow-500 mr-1" />&gt;15min</span>
                 <span><span className="inline-block w-3 h-3 rounded-full bg-red-500 mr-1" />&gt;25min</span>
               </div>
@@ -200,7 +202,7 @@ export default function KitchenPage() {
           </div>
           <Button onClick={loadOrders} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-2" />
-            Actualizar
+            {t('refresh')}
           </Button>
         </div>
 
@@ -237,8 +239,8 @@ export default function KitchenPage() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-20">
               <ChefHat className="h-20 w-20 text-muted-foreground/20 mb-4" />
-              <p className="text-xl font-medium text-muted-foreground">No hay pedidos de comida en cola</p>
-              <p className="text-sm text-muted-foreground">Solo aparecen ítems de comida; las bebidas van al Bar</p>
+              <p className="text-xl font-medium text-muted-foreground">{t('emptyTitle')}</p>
+              <p className="text-sm text-muted-foreground">{t('emptySubtitle')}</p>
             </CardContent>
           </Card>
         ) : (
@@ -277,12 +279,12 @@ export default function KitchenPage() {
                       !isWarning && !isUrgent && 'border-green-500'
                     )}>
                       <div>
-                        <span className="text-2xl font-bold">Mesa {order.tableNumber ?? order.TableNumber ?? '-'}</span>
-                        <p className="text-xs text-muted-foreground">Pedido #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-'}</p>
+                        <span className="text-2xl font-bold">{t('tableLabel', { number: order.tableNumber ?? order.TableNumber ?? '-' })}</span>
+                        <p className="text-xs text-muted-foreground">{t('orderNumber', { number: (String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-' })}</p>
                         {hasAllergies && (
                           <div className="flex items-center gap-1 text-destructive mt-1">
                             <AlertCircle className="h-4 w-4" />
-                            <span className="text-xs font-bold uppercase">Alergía</span>
+                            <span className="text-xs font-bold uppercase">{t('allergyLabel')}</span>
                           </div>
                         )}
                       </div>
@@ -298,7 +300,7 @@ export default function KitchenPage() {
 
                     {hasAllergies && (
                       <div className="bg-destructive/10 border border-destructive rounded-lg p-2 mb-3 text-sm font-medium text-destructive">
-                        ATENCIÓN: Este pedido contiene alergias
+                        {t('allergyWarning')}
                       </div>
                     )}
 
@@ -311,7 +313,7 @@ export default function KitchenPage() {
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-bold text-lg">{item.quantity ?? 0}x {item.dishName ?? item.DishName ?? ''}</span>
                               <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap', cm.colorClass)}>
-                                {cm.icon} {cm.label}
+                                {cm.icon} {t(cm.labelKey as Parameters<typeof t>[0])}
                               </span>
                             </div>
                             {(item.notes ?? item.Notes) && (
@@ -329,17 +331,17 @@ export default function KitchenPage() {
                       {!(order.kitchenPreparing ?? order.KitchenPreparing) ? (
                         <Button className="flex-1 font-bold" onClick={() => setKitchenPreparing(order.id)}>
                           <Clock className="h-5 w-5 mr-2" />
-                          Preparando
+                          {t('btnPreparing')}
                         </Button>
                       ) : !(order.kitchenReady ?? order.KitchenReady) ? (
                         <Button className="flex-1 font-bold" onClick={() => setKitchenReady(order.id)}>
                           <Check className="h-5 w-5 mr-2" />
-                          Listo
+                          {t('btnReady')}
                         </Button>
                       ) : (
                         <Button className="flex-1 font-bold" variant="secondary" disabled>
                           <Check className="h-5 w-5 mr-2" />
-                          Comida lista
+                          {t('btnFoodReady')}
                         </Button>
                       )}
                     </div>

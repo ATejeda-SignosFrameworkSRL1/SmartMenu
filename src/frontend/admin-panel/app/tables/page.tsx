@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -92,6 +93,7 @@ interface Zone {
 }
 
 export default function TablesPage() {
+  const t = useTranslations('tables');
   const [tables, setTables] = useState<Table[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +162,7 @@ export default function TablesPage() {
       setTables(normalizedTables);
     } catch (error) {
       console.error('Error loading data:', error);
-      toast.error('Error al cargar datos');
+      toast.error(t('errorLoadData'));
     } finally {
       setLoading(false);
     }
@@ -226,11 +228,11 @@ export default function TablesPage() {
 
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
-      'Available': 'Disponible',
-      'Occupied': 'Ocupada',
-      'Reserved': 'Reservada',
-      'Cleaning': 'Limpieza',
-      'Billing': 'Por cobrar',
+      'Available': t('statusAvailable'),
+      'Occupied': t('statusOccupied'),
+      'Reserved': t('statusReserved'),
+      'Cleaning': t('statusCleaning'),
+      'Billing': t('statusBilling'),
     };
     return labels[status] || status;
   };
@@ -238,41 +240,41 @@ export default function TablesPage() {
   const updateTableStatus = async (tableId: number, newStatus: string) => {
     try {
       await api.put(`/api/table/${tableId}/status`, { newStatus });
-      toast.success(`Estado cambiado a ${getStatusLabel(newStatus)}`);
+      toast.success(t('statusChanged', { status: getStatusLabel(newStatus) }));
       if (selectedTable && selectedTable.id === tableId) {
         setSelectedTable({ ...selectedTable, status: newStatus });
       }
       loadData();
     } catch (error) {
-      toast.error('Error al cambiar estado');
+      toast.error(t('errorChangeStatus'));
     }
   };
 
   const deleteTable = async (tableId: number) => {
-    if (!confirm('¿Seguro que deseas eliminar esta mesa?')) return;
+    if (!confirm(t('confirmDelete'))) return;
     try {
       await api.delete(`/api/table/${tableId}`);
-      toast.success('Mesa eliminada');
+      toast.success(t('tableDeleted'));
       setSelectedTable(null);
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Error al eliminar mesa');
+      toast.error(error?.response?.data?.error || t('errorDeleteTable'));
     }
   };
 
   const createTable = async () => {
     if (!createForm.tableNumber || !createForm.zoneId) {
-      toast.error('Completa todos los campos');
+      toast.error(t('errorRequiredFields'));
       return;
     }
     try {
       const res = await api.post('/api/table', createForm);
-      toast.success('Mesa creada exitosamente');
+      toast.success(t('tableCreated'));
       setShowCreateModal(false);
       setCreatedTable(res.data);
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Error al crear mesa');
+      toast.error(error?.response?.data?.error || t('errorCreateTable'));
     }
   };
 
@@ -280,11 +282,11 @@ export default function TablesPage() {
     if (!selectedTable) return;
     try {
       await api.put(`/api/table/${selectedTable.id}`, { name: editName.trim() || null, color: editColor || null });
-      toast.success('Mesa actualizada');
+      toast.success(t('tableUpdated'));
       setSelectedTable(null);
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Error al actualizar mesa');
+      toast.error(error?.response?.data?.error || t('errorUpdateTable'));
     }
   };
 
@@ -310,22 +312,22 @@ export default function TablesPage() {
   };
 
   return (
-    <MainLayout title="Gestión de Mesas" subtitle="Administra el estado y configuración de las mesas">
+    <MainLayout title={t('pageTitle')} subtitle={t('pageSubtitle')}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Gestión de Mesas</h1>
-            <p className="text-muted-foreground">Administra el estado y configuración de las mesas</p>
+            <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
+            <p className="text-muted-foreground">{t('pageSubtitle')}</p>
           </div>
           <div className="flex gap-2 items-center">
             <Button onClick={() => { setShowCreateModal(true); setCreateForm({ tableNumber: tables.length + 1, capacity: 4, zoneId: zones[0] ? getZoneId(zones[0]) : 0, name: '', color: '' }); }} variant="default">
               <Plus className="h-4 w-4 mr-2" />
-              Nueva Mesa
+              {t('btnNewTable')}
             </Button>
             <Button onClick={loadData} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
-              Actualizar
+              {t('btnRefresh')}
             </Button>
           </div>
         </div>
@@ -335,25 +337,25 @@ export default function TablesPage() {
           <Card className="border-2 border-success/30">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{stats.available}</div>
-              <p className="text-xs text-muted-foreground">Mesas Disponibles</p>
+              <p className="text-xs text-muted-foreground">{t('statsAvailable')}</p>
             </CardContent>
           </Card>
           <Card className="border-2 border-danger/30">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{stats.occupied}</div>
-              <p className="text-xs text-muted-foreground">Mesas Ocupadas</p>
+              <p className="text-xs text-muted-foreground">{t('statsOccupied')}</p>
             </CardContent>
           </Card>
           <Card className="border-2 border-billing/30">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{stats.billing}</div>
-              <p className="text-xs text-muted-foreground">Por Cobrar</p>
+              <p className="text-xs text-muted-foreground">{t('statsBilling')}</p>
             </CardContent>
           </Card>
           <Card className="border-2 border-warning/30">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{stats.reserved}</div>
-              <p className="text-xs text-muted-foreground">Mesas Reservadas</p>
+              <p className="text-xs text-muted-foreground">{t('statsReserved')}</p>
             </CardContent>
           </Card>
         </div>
@@ -363,7 +365,7 @@ export default function TablesPage() {
 
           {/* Zone tabs */}
           <div>
-            <p className="text-xs font-semibold text-black uppercase tracking-wider mb-2">Zona</p>
+            <p className="text-xs font-semibold text-black uppercase tracking-wider mb-2">{t('filterZone')}</p>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedZone(null)}
@@ -374,7 +376,7 @@ export default function TablesPage() {
                 }`}
                 style={selectedZone === null ? { backgroundColor: '#8a0000e6', borderColor: '#8a0000e6' } : {}}
               >
-                Todas
+                {t('zoneAll')}
                 <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
                   selectedZone === null ? 'bg-white/20 text-white' : 'bg-white text-gray-500'
                 }`}>
@@ -410,15 +412,15 @@ export default function TablesPage() {
 
             {/* Estado */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Estado</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filterStatus')}</p>
               <div className="flex gap-2">
                 {[
-                  { value: 'all', label: 'Todos', dot: null },
-                  { value: 'Available', label: 'Disponible', dot: 'bg-green-500' },
-                  { value: 'Occupied', label: 'Ocupada', dot: 'bg-red-500' },
-                  { value: 'Billing', label: 'Por cobrar', dot: 'bg-purple-500' },
-                  { value: 'Reserved', label: 'Reservada', dot: 'bg-yellow-400' },
-                  { value: 'Cleaning', label: 'Limpieza', dot: 'bg-blue-400' },
+                  { value: 'all', label: t('statusAll'), dot: null },
+                  { value: 'Available', label: t('statusAvailable'), dot: 'bg-green-500' },
+                  { value: 'Occupied', label: t('statusOccupied'), dot: 'bg-red-500' },
+                  { value: 'Billing', label: t('statusBilling'), dot: 'bg-purple-500' },
+                  { value: 'Reserved', label: t('statusReserved'), dot: 'bg-yellow-400' },
+                  { value: 'Cleaning', label: t('statusCleaning'), dot: 'bg-blue-400' },
                 ].map(opt => (
                   <button
                     key={opt.value}
@@ -439,13 +441,13 @@ export default function TablesPage() {
 
             {/* Capacidad */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Capacidad</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filterCapacity')}</p>
               <div className="flex gap-2">
                 {[
-                  { value: 'all', label: 'Todas', icon: null },
-                  { value: '2', label: '1–2 personas', icon: '🪑' },
-                  { value: '4', label: '3–4 personas', icon: '🪑🪑' },
-                  { value: '6+', label: '5+ personas', icon: '🪑🪑🪑' },
+                  { value: 'all', label: t('capacityAll'), icon: null },
+                  { value: '2', label: t('capacity2'), icon: '🪑' },
+                  { value: '4', label: t('capacity4'), icon: '🪑🪑' },
+                  { value: '6+', label: t('capacity6plus'), icon: '🪑🪑🪑' },
                 ].map(opt => (
                   <button
                     key={opt.value}
@@ -472,12 +474,12 @@ export default function TablesPage() {
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-all border border-gray-200 hover:border-red-200"
                 >
                   <X className="w-3.5 h-3.5" />
-                  Limpiar
+                  {t('btnClear')}
                 </button>
               )}
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900 leading-none">{filteredTables.length}</p>
-                <p className="text-xs text-gray-400">mesa{filteredTables.length !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-gray-400">{t('tableCount', { count: filteredTables.length })}</p>
               </div>
             </div>
           </div>
@@ -486,13 +488,13 @@ export default function TablesPage() {
         {/* Tables Grid */}
         <Card>
           <CardHeader>
-            <CardTitle>Mesas {hasActiveFilters ? `(${filteredTables.length} de ${tables.length})` : `(${tables.length})`}</CardTitle>
+            <CardTitle>{t('sectionTables')} {hasActiveFilters ? `(${filteredTables.length} de ${tables.length})` : `(${tables.length})`}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                <p className="text-sm text-muted-foreground">Cargando mesas...</p>
+                <p className="text-sm text-muted-foreground">{t('loadingTables')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -528,7 +530,7 @@ export default function TablesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTable(null)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Mesa #{selectedTable.tableNumber}</h2>
+              <h2 className="text-2xl font-bold">{t('detailModalTitle', { number: selectedTable.tableNumber })}</h2>
               <button onClick={() => setSelectedTable(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
                 <X className="h-5 w-5" />
               </button>
@@ -546,32 +548,32 @@ export default function TablesPage() {
               <p className="text-xs text-muted-foreground mt-2 break-all text-center">{getQrUrl(selectedTable)}</p>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => downloadQR(selectedTable)}>
                 <Download className="h-4 w-4 mr-2" />
-                Descargar QR
+                {t('btnDownloadQR')}
               </Button>
             </div>
 
             {/* Info */}
             <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                <span className="text-muted-foreground">Zona</span>
+                <span className="text-muted-foreground">{t('detailZone')}</span>
                 <p className="font-semibold">{selectedTable.zoneName}</p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                <span className="text-muted-foreground">Capacidad</span>
-                <p className="font-semibold">{selectedTable.capacity} personas</p>
+                <span className="text-muted-foreground">{t('detailCapacity')}</span>
+                <p className="font-semibold">{selectedTable.capacity} {t('persons')}</p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 col-span-2">
-                <span className="text-muted-foreground">Estado actual</span>
+                <span className="text-muted-foreground">{t('detailCurrentStatus')}</span>
                 <p className="font-semibold">{getStatusLabel(selectedTable.status)}</p>
               </div>
             </div>
 
             {/* Apariencia: nombre + color */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Apariencia</h3>
+              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">{t('sectionAppearance')}</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-muted-foreground">Nombre / etiqueta</label>
+                  <label className="block text-xs font-medium mb-1 text-muted-foreground">{t('labelNameTag')}</label>
                   <input
                     value={editName}
                     onChange={e => setEditName(e.target.value)}
@@ -582,7 +584,7 @@ export default function TablesPage() {
                 </div>
                 <div className="flex items-end gap-3">
                   <div>
-                    <label className="block text-xs font-medium mb-1 text-muted-foreground">Color</label>
+                    <label className="block text-xs font-medium mb-1 text-muted-foreground">{t('labelColor')}</label>
                     <input
                       type="color"
                       value={editColor || '#2F9E78'}
@@ -591,16 +593,16 @@ export default function TablesPage() {
                     />
                   </div>
                   {editColor && (
-                    <button onClick={() => setEditColor('')} className="mb-1.5 text-xs text-muted-foreground underline">Quitar color</button>
+                    <button onClick={() => setEditColor('')} className="mb-1.5 text-xs text-muted-foreground underline">{t('btnRemoveColor')}</button>
                   )}
-                  <Button size="sm" className="ml-auto" onClick={saveTableAppearance}>Guardar</Button>
+                  <Button size="sm" className="ml-auto" onClick={saveTableAppearance}>{t('btnSave')}</Button>
                 </div>
               </div>
             </div>
 
             {/* Cambiar Estado */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Cambiar Estado</h3>
+              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">{t('sectionChangeStatus')}</h3>
               <div className="grid grid-cols-2 gap-2">
                 {['Available', 'Occupied', 'Billing', 'Reserved', 'Cleaning'].map(status => (
                   <Button
@@ -627,7 +629,7 @@ export default function TablesPage() {
                 disabled={selectedTable.status === 'Occupied'}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Eliminar Mesa
+                {t('btnDeleteTable')}
               </Button>
             </div>
           </div>
@@ -639,14 +641,14 @@ export default function TablesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Nueva Mesa</h2>
+              <h2 className="text-xl font-bold">{t('createModalTitle')}</h2>
               <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Número de Mesa</label>
+                <label className="block text-sm font-medium mb-1">{t('labelTableNumber')}</label>
                 <input
                   type="number"
                   value={createForm.tableNumber}
@@ -655,7 +657,7 @@ export default function TablesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Capacidad</label>
+                <label className="block text-sm font-medium mb-1">{t('labelCapacity')}</label>
                 <input
                   type="number"
                   value={createForm.capacity}
@@ -665,20 +667,20 @@ export default function TablesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Zona</label>
+                <label className="block text-sm font-medium mb-1">{t('labelZone')}</label>
                 <select
                   value={createForm.zoneId}
                   onChange={e => setCreateForm({ ...createForm, zoneId: parseInt(e.target.value) })}
                   className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
                 >
-                  <option value={0}>Seleccionar zona...</option>
+                  <option value={0}>{t('zoneSelectPlaceholder')}</option>
                   {zones.map(z => (
                     <option key={z.id} value={z.id}>{z.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Nombre / etiqueta (opcional)</label>
+                <label className="block text-sm font-medium mb-1">{t('labelNameTagOptional')}</label>
                 <input
                   value={createForm.name}
                   onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
@@ -689,7 +691,7 @@ export default function TablesPage() {
               </div>
               <div className="flex items-end gap-3">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Color (opcional)</label>
+                  <label className="block text-sm font-medium mb-1">{t('labelColorOptional')}</label>
                   <input
                     type="color"
                     value={createForm.color || '#2F9E78'}
@@ -698,12 +700,12 @@ export default function TablesPage() {
                   />
                 </div>
                 {createForm.color && (
-                  <button onClick={() => setCreateForm({ ...createForm, color: '' })} className="mb-1.5 text-xs text-muted-foreground underline">Quitar</button>
+                  <button onClick={() => setCreateForm({ ...createForm, color: '' })} className="mb-1.5 text-xs text-muted-foreground underline">{t('btnRemove')}</button>
                 )}
               </div>
               <Button className="w-full" onClick={createTable}>
                 <Plus className="h-4 w-4 mr-2" />
-                Crear Mesa
+                {t('btnCreateTable')}
               </Button>
             </div>
           </div>
@@ -718,8 +720,8 @@ export default function TablesPage() {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <QrCode className="h-8 w-8 text-green-600" />
               </div>
-              <h2 className="text-xl font-bold">Mesa #{createdTable.tableNumber} Creada</h2>
-              <p className="text-sm text-muted-foreground">Este es el código QR de la mesa</p>
+              <h2 className="text-xl font-bold">{t('createdModalTitle', { number: createdTable.tableNumber })}</h2>
+              <p className="text-sm text-muted-foreground">{t('createdModalSubtitle')}</p>
             </div>
             <div className="flex justify-center mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <QRCodeSVG
@@ -734,10 +736,10 @@ export default function TablesPage() {
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => downloadQR(createdTable)}>
                 <Download className="h-4 w-4 mr-2" />
-                Descargar QR
+                {t('btnDownloadQR')}
               </Button>
               <Button className="flex-1" onClick={() => setCreatedTable(null)}>
-                Aceptar
+                {t('btnAccept')}
               </Button>
             </div>
           </div>

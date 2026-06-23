@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useTranslations, useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ensureFreshToken } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,6 +57,8 @@ interface Reservation {
 }
 
 export default function ReservationsPage() {
+  const t = useTranslations('reservations');
+  const dl = dateLocale(useLocale());
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
@@ -70,7 +74,7 @@ export default function ReservationsPage() {
       const res = await api.get('/api/tablereservation');
       setReservations(Array.isArray(res.data) ? res.data : []);
     } catch {
-      toast.error('Error al cargar reservas');
+      toast.error(t('errorLoad'));
       setReservations([]);
     } finally {
       setLoading(false);
@@ -97,16 +101,16 @@ export default function ReservationsPage() {
     connectionRef.current = connection;
 
     connection.on('NewReservation', (data: any) => {
-      toast((t) => (
+      toast((toastRef) => (
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
             <Globe className="w-5 h-5 text-purple-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold">Nueva reserva del Portal</p>
-            <p className="text-xs text-gray-500">{data.customerName} · {data.numberOfGuests} pers. · Mesa {data.tableNumber}</p>
+            <p className="text-sm font-bold">{t('newPortalReservation')}</p>
+            <p className="text-xs text-gray-500">{data.customerName} · {t('guestsShort', { count: data.numberOfGuests })} · {t('tableShort', { number: data.tableNumber })}</p>
           </div>
-          <button onClick={() => toast.dismiss(t.id)} className="px-2 py-1 bg-purple-600 text-white text-xs rounded-lg">OK</button>
+          <button onClick={() => toast.dismiss(toastRef.id)} className="px-2 py-1 bg-purple-600 text-white text-xs rounded-lg">OK</button>
         </div>
       ), { duration: 15000, style: { maxWidth: '420px' } });
       loadReservations();
@@ -123,30 +127,30 @@ export default function ReservationsPage() {
   const confirmReservation = async (id: number) => {
     try {
       await api.put(`/api/tablereservation/${id}/confirm`);
-      toast.success('Reserva confirmada');
+      toast.success(t('confirmedSuccess'));
       loadReservations();
-    } catch { toast.error('Error al confirmar reserva'); }
+    } catch { toast.error(t('errorConfirm')); }
   };
 
   const cancelReservation = async (id: number) => {
-    if (!confirm('¿Cancelar esta reserva?')) return;
+    if (!confirm(t('confirmCancel'))) return;
     try {
       await api.put(`/api/tablereservation/${id}/cancel`);
-      toast.success('Reserva cancelada');
+      toast.success(t('cancelledSuccess'));
       loadReservations();
-    } catch { toast.error('Error al cancelar reserva'); }
+    } catch { toast.error(t('errorCancel')); }
   };
 
   const getVal = (obj: any, key: string) =>
     obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)] ?? '';
 
   const formatTime = (dt: string) => {
-    try { return new Date(dt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true }); }
+    try { return new Date(dt).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true }); }
     catch { return '-'; }
   };
 
   const formatDate = (dt: string) => {
-    try { return new Date(dt).toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric', month: 'short' }); }
+    try { return new Date(dt).toLocaleDateString(dl, { weekday: 'short', day: 'numeric', month: 'short' }); }
     catch { return '-'; }
   };
 
@@ -171,17 +175,17 @@ export default function ReservationsPage() {
   const confirmedCount = reservationsForDate.filter(r => !!getVal(r, 'isConfirmed')).length;
 
   return (
-    <MainLayout title="Reservas" subtitle="Visualiza y gestiona las reservas del restaurante">
+    <MainLayout title={t('pageTitle')} subtitle={t('pageSubtitle')}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Reservas</h1>
-            <p className="text-muted-foreground">Visualiza y gestiona las reservas del restaurante</p>
+            <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
+            <p className="text-muted-foreground">{t('pageSubtitle')}</p>
           </div>
           <Button onClick={loadReservations} variant="outline">
             <RefreshCw className="h-4 w-4 mr-2" />
-            Actualizar
+            {t('refresh')}
           </Button>
         </div>
 
@@ -190,19 +194,19 @@ export default function ReservationsPage() {
           <Card className="border-2 border-blue-500/30">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{reservationsForDate.length}</div>
-              <p className="text-xs text-muted-foreground">Total Reservas del Día</p>
+              <p className="text-xs text-muted-foreground">{t('statTotal')}</p>
             </CardContent>
           </Card>
           <Card className="border-2 border-yellow-400/40">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-yellow-600">{confirmedCount}</div>
-              <p className="text-xs text-muted-foreground">Mesa Reservada (esperando)</p>
+              <p className="text-xs text-muted-foreground">{t('statConfirmed')}</p>
             </CardContent>
           </Card>
           <Card className="border-2 border-green-400/40">
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-green-600">{pendingCount}</div>
-              <p className="text-xs text-muted-foreground">Sin confirmar / externas</p>
+              <p className="text-xs text-muted-foreground">{t('statPending')}</p>
             </CardContent>
           </Card>
         </div>
@@ -219,15 +223,15 @@ export default function ReservationsPage() {
               />
               <div className="flex gap-2">
                 <Button variant={filter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('all')}>
-                  Todas ({reservationsForDate.length})
+                  {t('filterAll', { count: reservationsForDate.length })}
                 </Button>
                 <Button variant={filter === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('pending')}>
                   <Clock className="h-4 w-4 mr-1" />
-                  Pendientes ({pendingCount})
+                  {t('filterPending', { count: pendingCount })}
                 </Button>
                 <Button variant={filter === 'confirmed' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('confirmed')}>
                   <CheckCircle className="h-4 w-4 mr-1" />
-                  Confirmadas ({confirmedCount})
+                  {t('filterConfirmed', { count: confirmedCount })}
                 </Button>
               </div>
             </div>
@@ -237,18 +241,18 @@ export default function ReservationsPage() {
         {/* Lista de reservas */}
         <Card>
           <CardHeader>
-            <CardTitle>Reservas — {formatDate(date + 'T12:00:00')}</CardTitle>
+            <CardTitle>{t('cardTitle', { date: formatDate(date + 'T12:00:00') })}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">Cargando reservas...</p>
+                <p className="text-sm text-muted-foreground">{t('loading')}</p>
               </div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-12">
                 <CalendarCheck className="h-16 w-16 text-muted-foreground/20 mx-auto mb-4" />
-                <p className="text-lg text-muted-foreground">No hay reservas para esta fecha</p>
+                <p className="text-lg text-muted-foreground">{t('emptyState')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -275,11 +279,11 @@ export default function ReservationsPage() {
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <span className="text-lg font-bold">{getVal(reservation, 'customerName')}</span>
                               {confirmed ? (
-                                <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Confirmada</Badge>
+                                <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">{t('badgeConfirmed')}</Badge>
                               ) : upcoming ? (
-                                <Badge className="bg-orange-100 text-orange-700 animate-pulse">Próxima — Sin confirmar</Badge>
+                                <Badge className="bg-orange-100 text-orange-700 animate-pulse">{t('badgeUpcoming')}</Badge>
                               ) : (
-                                <Badge variant="secondary">Pendiente</Badge>
+                                <Badge variant="secondary">{t('badgePending')}</Badge>
                               )}
                               {getVal(reservation, 'source') === 'Portal' && (
                                 <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
@@ -294,11 +298,11 @@ export default function ReservationsPage() {
                               </span>
                               <span className="flex items-center gap-1">
                                 <Users className="h-3.5 w-3.5" />
-                                {getVal(reservation, 'numberOfGuests')} personas
+                                {t('guests', { count: getVal(reservation, 'numberOfGuests') })}
                               </span>
                               <span className="flex items-center gap-1">
                                 <MapPin className="h-3.5 w-3.5" />
-                                Mesa {getVal(reservation, 'tableNumber')} — {getVal(reservation, 'zoneName')}
+                                {t('tableInfo', { number: getVal(reservation, 'tableNumber'), zone: getVal(reservation, 'zoneName') })}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Phone className="h-3.5 w-3.5" />
@@ -307,7 +311,7 @@ export default function ReservationsPage() {
                             </div>
                             {getVal(reservation, 'specialRequests') && (
                               <p className="text-sm mt-2 text-amber-600 dark:text-amber-400">
-                                Nota: {getVal(reservation, 'specialRequests')}
+                                {t('specialNote', { text: getVal(reservation, 'specialRequests') })}
                               </p>
                             )}
                             {preOrder && preOrder.items.length > 0 && (
@@ -316,7 +320,7 @@ export default function ReservationsPage() {
                                 className="mt-2 flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium"
                               >
                                 <UtensilsCrossed className="h-3.5 w-3.5" />
-                                Pre-orden ({preOrder.items.length} plato{preOrder.items.length !== 1 ? 's' : ''})
+                                {t('preOrderToggle', { count: preOrder.items.length })}
                                 {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                               </button>
                             )}
@@ -325,12 +329,12 @@ export default function ReservationsPage() {
                             {!confirmed && (
                               <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => confirmReservation(reservation.id)}>
                                 <CheckCircle className="h-4 w-4 mr-1" />
-                                Aceptar
+                                {t('btnAccept')}
                               </Button>
                             )}
                             <Button size="sm" variant="destructive" onClick={() => cancelReservation(reservation.id)}>
                               <XCircle className="h-4 w-4 mr-1" />
-                              {confirmed ? 'Cancelar' : 'Rechazar'}
+                              {confirmed ? t('btnCancel') : t('btnReject')}
                             </Button>
                           </div>
                         </div>
@@ -338,7 +342,7 @@ export default function ReservationsPage() {
                         {/* Pre-order expandible */}
                         {isExpanded && preOrder && preOrder.items.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-dashed">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pre-orden de platos</p>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t('preOrderHeading')}</p>
                             <div className="space-y-1.5">
                               {preOrder.items.map((item, idx) => (
                                 <div key={idx} className="flex items-center justify-between text-sm">
@@ -357,10 +361,10 @@ export default function ReservationsPage() {
                                 </div>
                               ))}
                               {preOrder.notes && (
-                                <p className="text-xs text-muted-foreground mt-2 italic">Nota: {preOrder.notes}</p>
+                                <p className="text-xs text-muted-foreground mt-2 italic">{t('preOrderNote', { text: preOrder.notes })}</p>
                               )}
                               <div className="flex justify-between text-sm font-bold pt-1 border-t">
-                                <span>Total pre-orden</span>
+                                <span>{t('preOrderTotal')}</span>
                                 <span>${preOrder.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0).toFixed(2)}</span>
                               </div>
                             </div>

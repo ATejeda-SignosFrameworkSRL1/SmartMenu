@@ -114,6 +114,7 @@ export { MULTI_ZONE_FLOOR_PLAN } from "./components/floor-plan/multi-zone-mock";
 export {
   FloorPlanDashboard,
   type FloorPlanDashboardProps,
+  type FloorPlanDashboardMessages,
   type Reservation,
   type ReservationStatus,
 } from "./components/floor-plan/floor-plan-dashboard";
@@ -121,6 +122,8 @@ export {
   FloorPlanModule,
   type FloorPlanModuleProps,
   type FloorPlanChannel,
+  type FloorPlanModuleMessages,
+  defaultFloorPlanModuleMessages,
 } from "./components/floor-plan/floor-plan-module";
 export {
   STATUS_COLORS,
@@ -129,8 +132,10 @@ export {
   WAITER_BADGE_PALETTE,
   waiterColor,
   resolveStatusColors,
+  resolveStatusLabels,
   contrastText,
   type StatusColor,
+  type StatusLabels,
   type StatusPaletteOverride,
 } from "./components/floor-plan/status-colors";
 export type {

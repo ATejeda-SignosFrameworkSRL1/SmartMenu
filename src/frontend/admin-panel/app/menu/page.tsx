@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Eye, EyeOff, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
+import { useTranslations } from 'next-intl';
 import { MainLayout } from '@/components/layout/MainLayout';
 
 const api = axios.create({
@@ -12,14 +13,15 @@ const api = axios.create({
 
 type CourseTiming = 0 | 1 | 2; // 0=Entrada, 1=PlatoFuerte, 2=Postre
 
-const COURSE_OPTIONS: { value: CourseTiming; label: string; icon: string; color: string }[] = [
-  { value: 0, label: 'Entrada', icon: '🥗', color: 'bg-green-100 text-green-800' },
-  { value: 1, label: 'Plato Fuerte', icon: '🍖', color: 'bg-orange-100 text-orange-800' },
-  { value: 2, label: 'Postre', icon: '🍰', color: 'bg-pink-100 text-pink-800' },
+// Labels are resolved per-render via t(); keep icons/colors here as non-translatable data.
+const COURSE_OPTIONS_BASE: { value: CourseTiming; icon: string; color: string; key: string }[] = [
+  { value: 0, icon: '🥗', color: 'bg-green-100 text-green-800', key: 'courseEntrada' },
+  { value: 1, icon: '🍖', color: 'bg-orange-100 text-orange-800', key: 'coursePlatoFuerte' },
+  { value: 2, icon: '🍰', color: 'bg-pink-100 text-pink-800', key: 'coursePostre' },
 ];
 
-function getCourseOption(v: number) {
-  return COURSE_OPTIONS.find((c) => c.value === v) ?? COURSE_OPTIONS[1];
+function getCourseOptionBase(v: number) {
+  return COURSE_OPTIONS_BASE.find((c) => c.value === v) ?? COURSE_OPTIONS_BASE[1];
 }
 
 interface Dish {
@@ -46,6 +48,7 @@ interface Category {
 }
 
 export default function MenuManagementPage() {
+  const t = useTranslations('menu');
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dishTags, setDishTags] = useState<{ id: number; code: string; label: string; icon: string; isActive: boolean }[]>([]);
@@ -93,7 +96,7 @@ export default function MenuManagementPage() {
         : []);
       setKitchenBarZones([...(kitchensRes.data ?? []), ...(barsRes.data ?? [])]);
     } catch (error) {
-      toast.error('Error al cargar datos');
+      toast.error(t('errorLoadData'));
     } finally {
       setLoading(false);
     }
@@ -111,36 +114,36 @@ export default function MenuManagementPage() {
   const toggleAvailability = async (dishId: number) => {
     try {
       await api.patch(`/api/dish/${dishId}/toggle-availability`);
-      toast.success('Disponibilidad actualizada');
+      toast.success(t('availabilityUpdated'));
       loadData();
     } catch (error) {
-      toast.error('Error al actualizar');
+      toast.error(t('errorUpdate'));
     }
   };
 
   const deleteDish = async (dishId: number) => {
-    if (!confirm('¿Eliminar este platillo?')) return;
+    if (!confirm(t('confirmDelete'))) return;
     try {
       await api.delete(`/api/dish/${dishId}`);
-      toast.success('Platillo eliminado');
+      toast.success(t('dishDeleted'));
       loadData();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Error al eliminar');
+      toast.error(error.response?.data?.error || t('errorDelete'));
     }
   };
 
   if (loading) {
     return (
-      <MainLayout title="Gestión de Menú" subtitle="Cargando...">
+      <MainLayout title={t('pageTitle')} subtitle={t('loading')}>
         <div className="flex items-center justify-center py-12">
-          <div className="text-xl">Cargando...</div>
+          <div className="text-xl">{t('loading')}</div>
         </div>
       </MainLayout>
     );
   }
 
   return (
-    <MainLayout title="Gestión de Menú" subtitle={`${dishes.length} platillos totales`}>
+    <MainLayout title={t('pageTitle')} subtitle={t('subtitleTotal', { count: dishes.length })}>
     <div className="space-y-6">
       {/* Acciones y filtros */}
       <div className="bg-white rounded-lg border p-4">
@@ -154,7 +157,7 @@ export default function MenuManagementPage() {
               className="flex items-center gap-2 px-6 py-3 bg-green-800 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
               <Plus className="w-5 h-5" />
-              Agregar Platillo
+              {t('addDish')}
             </button>
           </div>
 
@@ -164,7 +167,7 @@ export default function MenuManagementPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar platillos..."
+                placeholder={t('searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -177,7 +180,7 @@ export default function MenuManagementPage() {
               }
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
-              <option value="">Todas las categorías</option>
+              <option value="">{t('allCategories')}</option>
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name} ({cat.dishCount})
@@ -191,7 +194,7 @@ export default function MenuManagementPage() {
       <div className="py-4">
         {filteredDishes.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No se encontraron platillos</p>
+            <p className="text-gray-500 text-lg">{t('noDishesFound')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -230,29 +233,29 @@ export default function MenuManagementPage() {
 
                   {/* Tags */}
                   <div className="flex gap-2 mb-3 flex-wrap">
-                    {(dish as Dish).tags?.map((t) => (
-                      <span key={t.id} className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
-                        {t.icon} {t.label}
+                    {(dish as Dish).tags?.map((tag) => (
+                      <span key={tag.id} className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
+                        {tag.icon} {tag.label}
                       </span>
                     ))}
                     {dish.isVegetarian && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">🌱 Vegetariano</span>
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">🌱 {t('tagVegetarian')}</span>
                     )}
                     {dish.isVegan && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">🌾 Vegano</span>
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">🌾 {t('tagVegan')}</span>
                     )}
                     {dish.isGlutenFree && (
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">🚫 Sin Gluten</span>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">🚫 {t('tagGlutenFree')}</span>
                     )}
                   </div>
 
                   {/* Course + Status */}
                   <div className="mb-3 flex items-center gap-2 flex-wrap">
                     {(() => {
-                      const c = getCourseOption(dish.defaultCourse ?? 1);
+                      const c = getCourseOptionBase(dish.defaultCourse ?? 1);
                       return (
                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${c.color}`}>
-                          {c.icon} {c.label}
+                          {c.icon} {t(c.key as Parameters<typeof t>[0])}
                         </span>
                       );
                     })()}
@@ -263,7 +266,7 @@ export default function MenuManagementPage() {
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
-                      {dish.isAvailable ? '● Disponible' : '○ No disponible'}
+                      {dish.isAvailable ? `● ${t('statusAvailable')}` : `○ ${t('statusUnavailable')}`}
                     </span>
                   </div>
 
@@ -272,7 +275,7 @@ export default function MenuManagementPage() {
                     <button
                       onClick={() => toggleAvailability(dish.id)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                      title="Toggle disponibilidad"
+                      title={t('toggleAvailability')}
                     >
                       {dish.isAvailable ? (
                         <EyeOff className="w-4 h-4" />
@@ -288,12 +291,12 @@ export default function MenuManagementPage() {
                       className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
                     >
                       <Edit className="w-4 h-4" />
-                      Editar
+                      {t('edit')}
                     </button>
                     <button
                       onClick={() => deleteDish(dish.id)}
                       className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                      title="Eliminar"
+                      title={t('delete')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -344,6 +347,7 @@ function DishFormModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const t = useTranslations('menu');
   const [formData, setFormData] = useState({
     name: dish?.name || '',
     description: dish?.description || '',
@@ -354,7 +358,7 @@ function DishFormModal({
     isVegetarian: dish?.isVegetarian || false,
     isVegan: dish?.isVegan || false,
     isGlutenFree: dish?.isGlutenFree || false,
-    tagIds: (dish?.tags ?? []).map((t: any) => t.id),
+    tagIds: (dish?.tags ?? []).map((tag: any) => tag.id),
     kitchenZoneId: (dish as any)?.kitchenZoneId ?? (dish as any)?.KitchenZoneId ?? null as number | null,
     defaultCourse: (dish?.defaultCourse ?? 1) as CourseTiming,
   });
@@ -385,10 +389,10 @@ function DishFormModal({
 
       if (dish) {
         await api.put(`/api/dish/${dish.id}`, payload);
-        toast.success('Platillo actualizado');
+        toast.success(t('dishUpdated'));
       } else {
         await api.post('/api/dish', payload);
-        toast.success('Platillo creado');
+        toast.success(t('dishCreated'));
       }
       onSuccess();
     } catch (error: any) {
@@ -400,9 +404,9 @@ function DishFormModal({
           flat[k] = Array.isArray(v) ? v.join(' ') : String(v);
         }
         setFieldErrors(flat);
-        toast.error('Revisa los campos marcados en rojo');
+        toast.error(t('errorFieldsMarked'));
       } else {
-        toast.error(resp?.error || 'Error al guardar');
+        toast.error(resp?.error || t('errorSave'));
       }
     }
   };
@@ -410,7 +414,7 @@ function DishFormModal({
   const toggleTag = (id: number) => {
     setFormData((prev) => ({
       ...prev,
-      tagIds: prev.tagIds.includes(id) ? prev.tagIds.filter((t) => t !== id) : [...prev.tagIds, id],
+      tagIds: prev.tagIds.includes(id) ? prev.tagIds.filter((tid) => tid !== id) : [...prev.tagIds, id],
     }));
   };
 
@@ -419,13 +423,13 @@ function DishFormModal({
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h2 className="text-2xl font-bold mb-6">
-            {dish ? 'Editar Platillo' : 'Nuevo Platillo'}
+            {dish ? t('modalTitleEdit') : t('modalTitleNew')}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre *
+                {t('fieldName')} *
               </label>
               <input
                 type="text"
@@ -440,7 +444,7 @@ function DishFormModal({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción *
+                {t('fieldDescription')} *
               </label>
               <textarea
                 required
@@ -456,7 +460,7 @@ function DishFormModal({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio (RD$) *
+                  {t('fieldPrice')} *
                 </label>
                 <input
                   type="number"
@@ -475,7 +479,7 @@ function DishFormModal({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Categoría *
+                  {t('fieldCategory')} *
                 </label>
                 <select
                   required
@@ -503,10 +507,10 @@ function DishFormModal({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tiempo del plato
+                {t('fieldCourseTiming')}
               </label>
               <div className="flex gap-2">
-                {COURSE_OPTIONS.map((c) => (
+                {COURSE_OPTIONS_BASE.map((c) => (
                   <button
                     key={c.value}
                     type="button"
@@ -517,7 +521,7 @@ function DishFormModal({
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    {c.icon} {c.label}
+                    {c.icon} {t(c.key as Parameters<typeof t>[0])}
                   </button>
                 ))}
               </div>
@@ -525,17 +529,17 @@ function DishFormModal({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Estación de preparación (Cocina / Bar)
+                {t('fieldPreparationStation')}
               </label>
               <select
                 value={formData.kitchenZoneId ?? ''}
                 onChange={(e) => setFormData({ ...formData, kitchenZoneId: e.target.value ? Number(e.target.value) : null })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="">Cocina Principal (por defecto)</option>
+                <option value="">{t('mainKitchenDefault')}</option>
                 {kitchenBarZones.map((z: any) => (
                   <option key={z.id ?? z.Id} value={z.id ?? z.Id}>
-                    {z.name ?? z.Name} ({(z.type ?? z.Type) === 'Kitchen' ? 'Cocina' : 'Bar'})
+                    {z.name ?? z.Name} ({(z.type ?? z.Type) === 'Kitchen' ? t('zoneTypeKitchen') : t('zoneTypeBar')})
                   </option>
                 ))}
               </select>
@@ -543,7 +547,7 @@ function DishFormModal({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Imágenes del plato
+                {t('fieldImages')}
               </label>
               <div className="flex flex-col gap-3">
                 {/* Gallery of existing images */}
@@ -551,7 +555,7 @@ function DishFormModal({
                   <div className="flex gap-2 flex-wrap">
                     {dishImages.map((img, idx) => (
                       <div key={img.id || idx} className={`relative group rounded-lg border-2 overflow-hidden ${img.isMain ? 'border-green-500' : 'border-gray-200'}`}>
-                        <img src={img.imageUrl} alt={`Imagen ${idx + 1}`} className="h-20 w-20 object-cover" />
+                        <img src={img.imageUrl} alt={t('imageAlt', { n: idx + 1 })} className="h-20 w-20 object-cover" />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
                           {!img.isMain && dish && (
                             <button type="button" onClick={async () => {
@@ -562,8 +566,8 @@ function DishFormModal({
                                 });
                                 setDishImages(prev => prev.map(i => ({ ...i, isMain: i.id === img.id })));
                                 setFormData(prev => ({ ...prev, imageUrl: img.imageUrl }));
-                              } catch { toast.error('Error'); }
-                            }} className="p-1 bg-white rounded text-xs" title="Hacer principal">⭐</button>
+                              } catch { toast.error(t('errorGeneric')); }
+                            }} className="p-1 bg-white rounded text-xs" title={t('setMainImage')}>⭐</button>
                           )}
                           {dish && (
                             <button type="button" onClick={async () => {
@@ -573,12 +577,12 @@ function DishFormModal({
                                   method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {},
                                 });
                                 setDishImages(prev => prev.filter(i => i.id !== img.id));
-                                toast.success('Imagen eliminada');
-                              } catch { toast.error('Error'); }
-                            }} className="p-1 bg-red-500 text-white rounded text-xs" title="Eliminar">✕</button>
+                                toast.success(t('imageDeleted'));
+                              } catch { toast.error(t('errorGeneric')); }
+                            }} className="p-1 bg-red-500 text-white rounded text-xs" title={t('delete')}>✕</button>
                           )}
                         </div>
-                        {img.isMain && <span className="absolute bottom-0 left-0 right-0 bg-green-500 text-white text-[9px] text-center font-bold py-0.5">Principal</span>}
+                        {img.isMain && <span className="absolute bottom-0 left-0 right-0 bg-green-500 text-white text-[9px] text-center font-bold py-0.5">{t('mainImageBadge')}</span>}
                       </div>
                     ))}
                   </div>
@@ -605,7 +609,7 @@ function DishFormModal({
                             headers: token ? { Authorization: `Bearer ${token}` } : {},
                             body: formDataUpload,
                           });
-                          if (!res.ok) throw new Error('Error al subir');
+                          if (!res.ok) throw new Error(t('errorUploadImage'));
                           const data = await res.json();
                           const url = data?.url || '';
                           const isMain = dishImages.length === 0 && i === 0;
@@ -623,9 +627,9 @@ function DishFormModal({
                           } else {
                             setDishImages(prev => [...prev, { id: Date.now() + i, imageUrl: url, isMain }]);
                           }
-                          toast.success(`Imagen ${i + 1} subida`);
+                          toast.success(t('imageUploaded', { n: i + 1 }));
                         } catch (err: any) {
-                          toast.error(err?.message || 'Error al subir imagen');
+                          toast.error(err?.message || t('errorUploadImage'));
                         }
                       }
                       setUploadingImage(false);
@@ -633,21 +637,21 @@ function DishFormModal({
                     }}
                   />
                   <span className="text-sm font-medium text-gray-700">
-                    {uploadingImage ? 'Subiendo...' : '+ Subir imágenes'}
+                    {uploadingImage ? t('uploading') : t('uploadImages')}
                   </span>
                 </label>
               </div>
               {formData.imageUrl && dishImages.length === 0 && (
                 <div className="mt-2">
-                  <p className="text-xs text-gray-500 mb-1">Vista previa:</p>
-                  <img src={formData.imageUrl} alt="Vista previa" className="h-24 w-auto object-contain rounded border border-gray-200" />
+                  <p className="text-xs text-gray-500 mb-1">{t('imagePreview')}:</p>
+                  <img src={formData.imageUrl} alt={t('imagePreview')} className="h-24 w-auto object-contain rounded border border-gray-200" />
                 </div>
               )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tiempo de Preparación (minutos)
+                {t('fieldPrepTime')}
               </label>
               <input
                 type="number"
@@ -666,7 +670,7 @@ function DishFormModal({
 
             {dishTags.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Etiquetas (picante, etc.)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('fieldTags')}</label>
                 <div className="flex flex-wrap gap-2">
                   {dishTags.map((tag) => (
                     <label key={tag.id} className="inline-flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -689,13 +693,13 @@ function DishFormModal({
                 onClick={onClose}
                 className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
               >
-                Cancelar
+                {t('cancel')}
               </button>
               <button
                 type="submit"
                 className="flex-1 px-6 py-3 bg-green-800 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
               >
-                {dish ? 'Guardar Cambios' : 'Crear Platillo'}
+                {dish ? t('saveChanges') : t('createDish')}
               </button>
             </div>
           </form>

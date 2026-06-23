@@ -24,7 +24,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["var(--font-inter)", "Inter", "system-ui", "-apple-system", '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', '"Noto Sans CJK SC"', '"Malgun Gothic"', '"Noto Sans JP"', '"Noto Sans KR"', "sans-serif"],
         display: ["Space Grotesk", "system-ui", "sans-serif"],
       },
       // Tokens específicos de admin que NO están en el preset compartido.

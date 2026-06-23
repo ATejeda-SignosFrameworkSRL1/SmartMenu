@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,10 +42,10 @@ function isDrinkItem(dishName: string): boolean {
 // Filtro por momento de servicio de bebida
 type DrinkTimingFilter = 'all' | 'Before' | 'During' | 'After';
 
-const TIMING_META: Record<string, { label: string; icon: string; colorClass: string; badgeClass: string }> = {
-  Before: { label: 'Con la Entrada',      icon: '🥂', colorClass: 'bg-blue-50 border-blue-400 text-blue-800',       badgeClass: 'bg-blue-100 text-blue-700' },
-  During: { label: 'Con el Plato Fuerte', icon: '🍷', colorClass: 'bg-purple-50 border-purple-400 text-purple-800', badgeClass: 'bg-purple-100 text-purple-700' },
-  After:  { label: 'Con el Postre',       icon: '🍸', colorClass: 'bg-amber-50 border-amber-400 text-amber-800',    badgeClass: 'bg-amber-100 text-amber-700' },
+const TIMING_META: Record<string, { labelKey: string; icon: string; colorClass: string; badgeClass: string }> = {
+  Before: { labelKey: 'timing.before',  icon: '🥂', colorClass: 'bg-blue-50 border-blue-400 text-blue-800',       badgeClass: 'bg-blue-100 text-blue-700' },
+  During: { labelKey: 'timing.during',  icon: '🍷', colorClass: 'bg-purple-50 border-purple-400 text-purple-800', badgeClass: 'bg-purple-100 text-purple-700' },
+  After:  { labelKey: 'timing.after',   icon: '🍸', colorClass: 'bg-amber-50 border-amber-400 text-amber-800',    badgeClass: 'bg-amber-100 text-amber-700' },
 };
 
 // Resuelve el drinkTiming de un ítem → 'Before' | 'During' | 'After'
@@ -67,6 +68,7 @@ function getElapsedMinutes(createdAt: string | number | undefined): number {
 }
 
 export default function BarPage() {
+  const t = useTranslations('bar');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [timingFilter, setTimingFilter] = useState<DrinkTimingFilter>('all');
@@ -104,20 +106,20 @@ export default function BarPage() {
   const setBarPreparing = async (orderId: number) => {
     try {
       await api.put(`/api/order/${orderId}/bar-preparing`);
-      toast.success('Marcado como Preparando');
+      toast.success(t('toast.markedPreparing'));
       loadOrders();
     } catch (error) {
-      toast.error('Error al actualizar');
+      toast.error(t('toast.updateError'));
     }
   };
 
   const setBarReady = async (orderId: number) => {
     try {
       await api.put(`/api/order/${orderId}/bar-ready`);
-      toast.success('Bebidas marcadas como listas');
+      toast.success(t('toast.drinksReady'));
       loadOrders();
     } catch (error) {
-      toast.error('Error al actualizar');
+      toast.error(t('toast.updateError'));
     }
   };
 
@@ -143,10 +145,10 @@ export default function BarPage() {
 
   // Tabs de filtro por DrinkTiming
   const timingTabs = [
-    { key: 'all' as DrinkTimingFilter,    label: 'Todos',   icon: '🍹' },
-    { key: 'Before' as DrinkTimingFilter, label: 'Con la Entrada',      icon: '🥂' },
-    { key: 'During' as DrinkTimingFilter, label: 'Con el Plato Fuerte', icon: '🍷' },
-    { key: 'After' as DrinkTimingFilter,  label: 'Con el Postre',       icon: '🍸' },
+    { key: 'all' as DrinkTimingFilter,    label: t('tabs.all'),    icon: '🍹' },
+    { key: 'Before' as DrinkTimingFilter, label: t('timing.before'), icon: '🥂' },
+    { key: 'During' as DrinkTimingFilter, label: t('timing.during'), icon: '🍷' },
+    { key: 'After' as DrinkTimingFilter,  label: t('timing.after'),  icon: '🍸' },
   ];
 
   function getTimingCount(key: DrinkTimingFilter): number {
@@ -157,7 +159,7 @@ export default function BarPage() {
 
   if (loading) {
     return (
-      <MainLayout title="Bar" subtitle="Sistema de bebidas">
+      <MainLayout title={t('title')} subtitle={t('subtitleLoading')}>
         <div className="flex items-center justify-center h-64">
           <RefreshCw className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -166,20 +168,20 @@ export default function BarPage() {
   }
 
   return (
-    <MainLayout title="Bar" subtitle="Cola de bebidas y cócteles">
+    <MainLayout title={t('title')} subtitle={t('subtitleQueue')}>
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Wine className="h-8 w-8 text-primary" />
             <div>
-              <h2 className="text-2xl font-bold">Pedidos en cola: {queueCount}</h2>
-              <p className="text-sm text-muted-foreground">Bebidas pendientes de preparación</p>
+              <h2 className="text-2xl font-bold">{t('queueCount', { count: queueCount })}</h2>
+              <p className="text-sm text-muted-foreground">{t('pendingDrinks')}</p>
             </div>
           </div>
           <Button onClick={loadOrders} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-2" />
-            Actualizar
+            {t('refresh')}
           </Button>
         </div>
 
@@ -216,8 +218,8 @@ export default function BarPage() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-20">
               <Wine className="h-20 w-20 text-muted-foreground/20 mb-4" />
-              <p className="text-xl font-medium text-muted-foreground">No hay bebidas pendientes</p>
-              <p className="text-sm text-muted-foreground">Los nuevos pedidos aparecerán aquí</p>
+              <p className="text-xl font-medium text-muted-foreground">{t('emptyState.title')}</p>
+              <p className="text-sm text-muted-foreground">{t('emptyState.subtitle')}</p>
             </CardContent>
           </Card>
         ) : (
@@ -240,8 +242,8 @@ export default function BarPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-4 pb-2 border-b">
                       <div>
-                        <span className="text-xl font-bold">Mesa {order.tableNumber ?? order.TableNumber ?? '-'}</span>
-                        <p className="text-xs text-muted-foreground">Pedido #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-'}</p>
+                        <span className="text-xl font-bold">{t('table')} {order.tableNumber ?? order.TableNumber ?? '-'}</span>
+                        <p className="text-xs text-muted-foreground">{t('order')} #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-'}</p>
                       </div>
                       <span className={cn(
                         'font-mono font-bold px-2 py-1 rounded text-sm',
@@ -260,11 +262,11 @@ export default function BarPage() {
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-medium">{item.quantity ?? 0}x {getItemDishName(item)}</span>
                               <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap', tm.colorClass)}>
-                                {tm.icon} {tm.label}
+                                {tm.icon} {t(tm.labelKey as any)}
                               </span>
                             </div>
                             {(item.notes ?? item.Notes) && (
-                              <p className="text-xs text-muted-foreground mt-1">Nota: {item.notes ?? item.Notes}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{t('noteLabel')}: {item.notes ?? item.Notes}</p>
                             )}
                           </div>
                         );
@@ -275,17 +277,17 @@ export default function BarPage() {
                       {!(order.barPreparing ?? order.BarPreparing) ? (
                         <Button className="flex-1" onClick={() => setBarPreparing(order.id)}>
                           <Clock className="h-5 w-5 mr-2" />
-                          Preparando
+                          {t('actions.preparing')}
                         </Button>
                       ) : !(order.barReady ?? order.BarReady) ? (
                         <Button className="flex-1" onClick={() => setBarReady(order.id)}>
                           <Check className="h-5 w-5 mr-2" />
-                          Listo
+                          {t('actions.ready')}
                         </Button>
                       ) : (
                         <Button className="flex-1" variant="secondary" disabled>
                           <Check className="h-5 w-5 mr-2" />
-                          Bebidas listas
+                          {t('actions.drinksReady')}
                         </Button>
                       )}
                     </div>

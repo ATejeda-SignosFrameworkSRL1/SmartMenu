@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -42,17 +45,6 @@ interface User {
   pinSetAt?: string | null;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  'Admin': 'Administrador',
-  'Manager': 'Gerente',
-  'Chef': 'Chef',
-  'KitchenStaff': 'Personal de Cocina',
-  'Waiter': 'Mesero',
-  'Host': 'Recepcionista',
-  'Cashier': 'Cajero',
-  'Customer': 'Cliente',
-};
-
 const ROLE_COLORS: Record<string, string> = {
   'Admin': 'bg-purple-500 text-white',
   'Manager': 'bg-blue-500 text-white',
@@ -67,6 +59,20 @@ const ROLE_COLORS: Record<string, string> = {
 const ROLES = ['Admin', 'Manager', 'Chef', 'KitchenStaff', 'Waiter', 'Host', 'Cashier', 'Customer'];
 
 export default function UsersPage() {
+  const t = useTranslations('users');
+  const dl = dateLocale(useLocale());
+
+  const ROLE_LABELS: Record<string, string> = {
+    'Admin': t('roles.Admin'),
+    'Manager': t('roles.Manager'),
+    'Chef': t('roles.Chef'),
+    'KitchenStaff': t('roles.KitchenStaff'),
+    'Waiter': t('roles.Waiter'),
+    'Host': t('roles.Host'),
+    'Cashier': t('roles.Cashier'),
+    'Customer': t('roles.Customer'),
+  };
+
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState<string>('all');
@@ -105,11 +111,11 @@ export default function UsersPage() {
       if (error?.response?.status === 401) {
         localStorage.removeItem('admin_token');
         localStorage.removeItem('admin_user');
-        toast.error('Sesión expirada. Inicia sesión de nuevo.');
+        toast.error(t('toast.sessionExpired'));
         window.location.href = '/login';
         return;
       }
-      toast.error('Error al cargar usuarios');
+      toast.error(t('toast.loadError'));
       setUsers([]);
     } finally {
       setLoading(false);
@@ -163,7 +169,7 @@ export default function UsersPage() {
   const getOnShift = (u: User): { onShift: boolean; label: string } => {
     const uid = (u as any).id ?? (u as any).Id;
     const e = shiftByWaiter[uid];
-    if (!e) return { onShift: false, label: 'Fuera de turno' };
+    if (!e) return { onShift: false, label: t('shift.offShift') };
     const mins = e.baseMinutes + Math.max(0, Math.floor((shiftNow - e.fetchedAt) / 60000));
     const h = Math.floor(mins / 60), m = mins % 60;
     return { onShift: true, label: h > 0 ? `${h}h ${m}m` : `${m}m` };
@@ -176,7 +182,7 @@ export default function UsersPage() {
   const filteredUsers = users.filter(user => {
     const role = getRole(user);
     const matchesRole = selectedRole === 'all' || role === selectedRole;
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       getFirstName(user).toLowerCase().includes(searchTerm.toLowerCase()) ||
       getLastName(user).toLowerCase().includes(searchTerm.toLowerCase()) ||
       getEmail(user).toLowerCase().includes(searchTerm.toLowerCase());
@@ -215,16 +221,16 @@ export default function UsersPage() {
   // USER-CREATE.2 — Validación cliente con mensajes claros antes de tocar la red
   const validateUserForm = (): string | null => {
     const email = formUser.email.trim();
-    if (!email) return 'El correo electrónico es obligatorio';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Formato de correo electrónico inválido';
+    if (!email) return t('validation.emailRequired');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return t('validation.emailInvalid');
     if (!editingUser) {
-      if (!formUser.password) return 'La contraseña es obligatoria para nuevos usuarios';
-      if (formUser.password.length < 8) return 'La contraseña debe tener al menos 8 caracteres';
+      if (!formUser.password) return t('validation.passwordRequired');
+      if (formUser.password.length < 8) return t('validation.passwordTooShort');
     } else if (formUser.password && formUser.password.length > 0 && formUser.password.length < 8) {
-      return 'Si cambias la contraseña debe tener al menos 8 caracteres';
+      return t('validation.passwordChangeTooShort');
     }
-    if (!formUser.firstName.trim()) return 'El nombre es obligatorio';
-    if (!formUser.lastName.trim()) return 'El apellido es obligatorio';
+    if (!formUser.firstName.trim()) return t('validation.firstNameRequired');
+    if (!formUser.lastName.trim()) return t('validation.lastNameRequired');
     return null;
   };
 
@@ -247,7 +253,7 @@ export default function UsersPage() {
           isActive: formUser.isActive,
           assignedZoneId: zoneId ?? 0
         });
-        toast.success(`Usuario "${formUser.firstName} ${formUser.lastName}" actualizado`);
+        toast.success(t('toast.userUpdated', { name: `${formUser.firstName} ${formUser.lastName}` }));
       } else {
         await api.post('/api/user', {
           email: formUser.email.trim(),
@@ -259,14 +265,14 @@ export default function UsersPage() {
           isActive: formUser.isActive,
           assignedZoneId: zoneId
         });
-        toast.success(`Usuario "${formUser.firstName} ${formUser.lastName}" creado correctamente`);
+        toast.success(t('toast.userCreated', { name: `${formUser.firstName} ${formUser.lastName}` }));
       }
       setShowUserModal(false);
       setUserFormError(null);
       loadUsers();
     } catch (e: any) {
       // Error inline (queda visible) + toast para usuarios con scroll lejos del modal
-      const msg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Error al guardar usuario';
+      const msg = e?.response?.data?.error || e?.response?.data?.message || e?.message || t('toast.saveError');
       setUserFormError(msg);
       toast.error(msg);
     } finally {
@@ -285,7 +291,7 @@ export default function UsersPage() {
       const res = await api.get(`/api/user/${id}/deletion-impact`);
       setDeletionImpact(res.data);
     } catch (e: any) {
-      const msg = e?.response?.data?.error || e?.message || 'Error al consultar impacto de eliminación';
+      const msg = e?.response?.data?.error || e?.message || t('toast.impactError');
       toast.error(msg);
       setDeletingUser(null);
     } finally {
@@ -307,13 +313,13 @@ export default function UsersPage() {
       const res = await api.delete(`/api/user/${id}`);
       const mode = res.data?.mode;
       const msg = res.data?.message ||
-        (mode === 'hard' ? 'Usuario eliminado permanentemente.' : 'Usuario desactivado.');
+        (mode === 'hard' ? t('toast.userDeletedHard') : t('toast.userDeactivated'));
       toast.success(msg);
       setDeletingUser(null);
       setDeletionImpact(null);
       loadUsers();
     } catch (e: any) {
-      const msg = e?.response?.data?.error || e?.response?.data?.detail || 'Error al eliminar';
+      const msg = e?.response?.data?.error || e?.response?.data?.detail || t('toast.deleteError');
       toast.error(msg);
     } finally {
       setConfirmingDelete(false);
@@ -327,22 +333,22 @@ export default function UsersPage() {
   };
 
   return (
-    <MainLayout title="Gestión de Usuarios">
+    <MainLayout title={t('pageTitle')}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Gestión de Usuarios</h1>
-            <p className="text-muted-foreground">Administra los usuarios del sistema</p>
+            <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
+            <p className="text-muted-foreground">{t('pageSubtitle')}</p>
           </div>
           <div className="flex gap-2">
             <Button onClick={loadUsers} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
-              Actualizar
+              {t('actions.refresh')}
             </Button>
             <Button onClick={openCreate}>
               <UsersIcon className="h-4 w-4 mr-2" />
-              Crear usuario
+              {t('actions.createUser')}
             </Button>
           </div>
         </div>
@@ -355,7 +361,7 @@ export default function UsersPage() {
                 <UsersIcon className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <div className="text-2xl font-bold">{stats.total}</div>
-                  <p className="text-xs text-muted-foreground">Total Usuarios</p>
+                  <p className="text-xs text-muted-foreground">{t('stats.total')}</p>
                 </div>
               </div>
             </CardContent>
@@ -366,7 +372,7 @@ export default function UsersPage() {
                 <CheckCircle className="h-5 w-5 text-success" />
                 <div>
                   <div className="text-2xl font-bold">{stats.active}</div>
-                  <p className="text-xs text-muted-foreground">Activos</p>
+                  <p className="text-xs text-muted-foreground">{t('stats.active')}</p>
                 </div>
               </div>
             </CardContent>
@@ -377,7 +383,7 @@ export default function UsersPage() {
                 <XCircle className="h-5 w-5 text-danger" />
                 <div>
                   <div className="text-2xl font-bold">{stats.inactive}</div>
-                  <p className="text-xs text-muted-foreground">Inactivos</p>
+                  <p className="text-xs text-muted-foreground">{t('stats.inactive')}</p>
                 </div>
               </div>
             </CardContent>
@@ -396,7 +402,7 @@ export default function UsersPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <input
                   type="text"
-                  placeholder="Buscar por nombre o email..."
+                  placeholder={t('search.placeholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 w-full border rounded-lg px-3 py-2"
@@ -410,7 +416,7 @@ export default function UsersPage() {
                   onClick={() => setSelectedRole('all')}
                   size="sm"
                 >
-                  Todos ({users.length})
+                  {t('filter.all', { count: users.length })}
                 </Button>
                 {roleStats.map(({ role, count }) => (
                   <Button
@@ -433,27 +439,27 @@ export default function UsersPage() {
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
+                <p className="text-sm text-muted-foreground">{t('loading')}</p>
               </div>
             ) : filteredUsers.length === 0 ? (
               <div className="text-center py-8">
                 <UsersIcon className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">No se encontraron usuarios</p>
+                <p className="text-muted-foreground">{t('empty')}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left p-3 font-semibold">Usuario</th>
-                      <th className="text-left p-3 font-semibold">Email</th>
-                      <th className="text-left p-3 font-semibold">Teléfono</th>
-                      <th className="text-left p-3 font-semibold">Rol</th>
-                      <th className="text-left p-3 font-semibold">Estado</th>
-                      <th className="text-left p-3 font-semibold">Tiempo en turno</th>
-                      <th className="text-left p-3 font-semibold">PIN</th>
-                      <th className="text-left p-3 font-semibold">Fecha Registro</th>
-                      <th className="text-left p-3 font-semibold">Acciones</th>
+                      <th className="text-left p-3 font-semibold">{t('table.user')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.email')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.phone')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.role')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.status')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.shiftTime')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.pin')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.registrationDate')}</th>
+                      <th className="text-left p-3 font-semibold">{t('table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -476,12 +482,12 @@ export default function UsersPage() {
                           {((user as any).isActive ?? (user as any).IsActive ?? true) ? (
                             <Badge className="bg-success text-white text-xs">
                               <CheckCircle className="h-3 w-3 mr-1" />
-                              Activo
+                              {t('status.active')}
                             </Badge>
                           ) : (
                             <Badge variant="secondary" className="text-xs">
                               <XCircle className="h-3 w-3 mr-1" />
-                              Inactivo
+                              {t('status.inactive')}
                             </Badge>
                           )}
                         </td>
@@ -494,7 +500,7 @@ export default function UsersPage() {
                                 {s.label}
                               </Badge>
                             ) : (
-                              <span className="text-xs text-gray-400 italic">Fuera de turno</span>
+                              <span className="text-xs text-gray-400 italic">{t('shift.offShift')}</span>
                             );
                           })()}
                         </td>
@@ -505,27 +511,27 @@ export default function UsersPage() {
                             // Solo mostrar PIN-relevante para roles que usan el waiter-app o cashier-app
                             const isPinRelevantRole = role === 'Waiter' || role === 'Cashier' || role === 'Manager' || role === 'Admin';
                             if (!isPinRelevantRole) {
-                              return <span className="text-xs text-gray-400 italic">no aplica</span>;
+                              return <span className="text-xs text-gray-400 italic">{t('pin.notApplicable')}</span>;
                             }
                             const hasPin = (user as any).hasPin ?? (user as any).HasPin ?? false;
                             return hasPin ? (
                               <Badge className="bg-emerald-500 text-white text-xs">
                                 <KeyRound className="h-3 w-3 mr-1" />
-                                Configurado
+                                {t('pin.configured')}
                               </Badge>
                             ) : (
                               <Badge variant="secondary" className="text-xs text-amber-700 bg-amber-50 border border-amber-200">
-                                Sin PIN
+                                {t('pin.notSet')}
                               </Badge>
                             );
                           })()}
                         </td>
                         <td className="p-3 text-muted-foreground">
-                          {new Date((user as any).createdAt ?? (user as any).CreatedAt ?? 0).toLocaleDateString('es-DO')}
+                          {new Date((user as any).createdAt ?? (user as any).CreatedAt ?? 0).toLocaleDateString(dl)}
                         </td>
                         <td className="p-3">
                           <div className="flex gap-2 flex-wrap">
-                            <Button variant="outline" size="sm" onClick={() => openEdit(user)}>Editar</Button>
+                            <Button variant="outline" size="sm" onClick={() => openEdit(user)}>{t('actions.edit')}</Button>
                             {(() => {
                               const role = getRole(user);
                               const isPinRelevantRole = role === 'Waiter' || role === 'Cashier' || role === 'Manager' || role === 'Admin';
@@ -537,10 +543,10 @@ export default function UsersPage() {
                                   size="sm"
                                   onClick={() => setPinUser(user)}
                                   className={hasPin ? 'text-emerald-700 border-emerald-200 hover:bg-emerald-50' : 'text-amber-700 border-amber-200 hover:bg-amber-50'}
-                                  title={hasPin ? 'Cambiar o remover PIN' : 'Crear PIN'}
+                                  title={hasPin ? t('pin.titleChange') : t('pin.titleCreate')}
                                 >
                                   <KeyRound className="h-3.5 w-3.5 mr-1" />
-                                  {hasPin ? 'PIN' : '+ PIN'}
+                                  {hasPin ? t('pin.buttonChange') : t('pin.buttonCreate')}
                                 </Button>
                               );
                             })()}
@@ -549,10 +555,10 @@ export default function UsersPage() {
                               size="sm"
                               className="text-red-600 border-red-200 hover:bg-red-50"
                               onClick={() => openDeleteModal(user)}
-                              title="Eliminar o desactivar usuario"
+                              title={t('actions.deleteTitle')}
                             >
                               <Trash2 className="h-3.5 w-3.5 mr-1" />
-                              Eliminar
+                              {t('actions.delete')}
                             </Button>
                           </div>
                         </td>
@@ -578,11 +584,11 @@ export default function UsersPage() {
               {/* Header */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-bold">{editingUser ? 'Editar usuario' : 'Crear nuevo usuario'}</h2>
+                  <h2 className="text-lg font-bold">{editingUser ? t('modal.titleEdit') : t('modal.titleCreate')}</h2>
                   <p className="text-xs text-blue-100 mt-0.5">
                     {editingUser
-                      ? `Actualizando: ${editingUser.firstName} ${editingUser.lastName}`
-                      : 'Llena los campos obligatorios (*) para registrar el empleado'}
+                      ? t('modal.subtitleEdit', { name: `${editingUser.firstName} ${editingUser.lastName}` })
+                      : t('modal.subtitleCreate')}
                   </p>
                 </div>
                 <button
@@ -590,7 +596,7 @@ export default function UsersPage() {
                   onClick={() => !savingUser && setShowUserModal(false)}
                   className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-50"
                   disabled={savingUser}
-                  aria-label="Cerrar"
+                  aria-label={t('modal.closeAriaLabel')}
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -602,7 +608,7 @@ export default function UsersPage() {
                   <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 flex items-start gap-2.5">
                     <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-red-900">No se pudo guardar el usuario</p>
+                      <p className="text-sm font-semibold text-red-900">{t('modal.errorBannerTitle')}</p>
                       <p className="text-xs text-red-700 mt-0.5">{userFormError}</p>
                     </div>
                   </div>
@@ -612,17 +618,17 @@ export default function UsersPage() {
                 <fieldset className="space-y-3" disabled={savingUser}>
                   <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
                     <div className="w-1 h-3.5 bg-blue-500 rounded-full"></div>
-                    Identidad
+                    {t('modal.sectionIdentity')}
                   </legend>
 
                   <div className="grid grid-cols-2 gap-2.5">
                     <div>
                       <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                        Nombre <span className="text-red-500">*</span>
+                        {t('modal.labelFirstName')} <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        placeholder="Ej. María"
+                        placeholder={t('modal.placeholderFirstName')}
                         value={formUser.firstName}
                         onChange={e => setFormUser({ ...formUser, firstName: e.target.value })}
                         className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
@@ -631,11 +637,11 @@ export default function UsersPage() {
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                        Apellido <span className="text-red-500">*</span>
+                        {t('modal.labelLastName')} <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        placeholder="Ej. González"
+                        placeholder={t('modal.placeholderLastName')}
                         value={formUser.lastName}
                         onChange={e => setFormUser({ ...formUser, lastName: e.target.value })}
                         className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
@@ -644,7 +650,7 @@ export default function UsersPage() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Teléfono</label>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">{t('modal.labelPhone')}</label>
                     <input
                       type="tel"
                       placeholder="809-555-0000"
@@ -659,12 +665,12 @@ export default function UsersPage() {
                 <fieldset className="space-y-3 pt-2 border-t border-gray-100" disabled={savingUser}>
                   <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
                     <div className="w-1 h-3.5 bg-emerald-500 rounded-full"></div>
-                    Credenciales
+                    {t('modal.sectionCredentials')}
                   </legend>
 
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Correo electrónico <span className="text-red-500">*</span>
+                      {t('modal.labelEmail')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"
@@ -678,11 +684,11 @@ export default function UsersPage() {
 
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Contraseña {!editingUser && <span className="text-red-500">*</span>}
+                      {t('modal.labelPassword')} {!editingUser && <span className="text-red-500">*</span>}
                     </label>
                     <input
                       type="password"
-                      placeholder={editingUser ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'}
+                      placeholder={editingUser ? t('modal.placeholderPasswordEdit') : t('modal.placeholderPasswordCreate')}
                       value={formUser.password}
                       onChange={e => setFormUser({ ...formUser, password: e.target.value })}
                       className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
@@ -690,8 +696,8 @@ export default function UsersPage() {
                     />
                     <p className="text-[11px] text-gray-500 mt-1">
                       {editingUser
-                        ? 'Solo si quieres cambiarla. Mínimo 8 caracteres.'
-                        : 'Mínimo 8 caracteres. El usuario podrá cambiarla después.'}
+                        ? t('modal.passwordHintEdit')
+                        : t('modal.passwordHintCreate')}
                     </p>
                   </div>
                 </fieldset>
@@ -700,11 +706,11 @@ export default function UsersPage() {
                 <fieldset className="space-y-3 pt-2 border-t border-gray-100" disabled={savingUser}>
                   <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
                     <div className="w-1 h-3.5 bg-purple-500 rounded-full"></div>
-                    Rol y permisos
+                    {t('modal.sectionRole')}
                   </legend>
 
                   <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Rol del empleado</label>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">{t('modal.labelRole')}</label>
                     <select
                       value={formUser.role}
                       onChange={e => setFormUser({ ...formUser, role: e.target.value, assignedZoneId: null })}
@@ -716,18 +722,18 @@ export default function UsersPage() {
 
                   {['Chef', 'KitchenStaff'].includes(formUser.role) && (
                     <div className="bg-amber-50/50 border border-amber-200 rounded-lg p-3">
-                      <label className="text-xs font-semibold text-amber-900 mb-1 block">Cocina asignada</label>
+                      <label className="text-xs font-semibold text-amber-900 mb-1 block">{t('modal.labelKitchenZone')}</label>
                       <select
                         value={formUser.assignedZoneId ?? ''}
                         onChange={e => setFormUser({ ...formUser, assignedZoneId: e.target.value ? Number(e.target.value) : null })}
                         className="w-full border-2 border-amber-200 rounded-lg px-3 py-2 text-sm focus:border-amber-400 focus:outline-none bg-white"
                       >
-                        <option value="">Sin asignar (todas las cocinas)</option>
+                        <option value="">{t('modal.optionNoKitchen')}</option>
                         {kitchenBarZones.filter((z: any) => (z.type ?? z.Type) === 'Kitchen').map((z: any) => (
                           <option key={z.id ?? z.Id} value={z.id ?? z.Id}>{z.name ?? z.Name}</option>
                         ))}
                       </select>
-                      <p className="text-[11px] text-amber-700 mt-1">El chef solo verá pedidos de esta cocina en el KDS.</p>
+                      <p className="text-[11px] text-amber-700 mt-1">{t('modal.kitchenZoneHint')}</p>
                     </div>
                   )}
 
@@ -740,8 +746,8 @@ export default function UsersPage() {
                         className="w-4 h-4 accent-emerald-500"
                       />
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-800">Usuario activo</p>
-                        <p className="text-[11px] text-gray-500">Si está inactivo, no podrá iniciar sesión.</p>
+                        <p className="text-sm font-semibold text-gray-800">{t('modal.activeUserLabel')}</p>
+                        <p className="text-[11px] text-gray-500">{t('modal.activeUserHint')}</p>
                       </div>
                       {formUser.isActive ? (
                         <CheckCircle className="w-5 h-5 text-emerald-500" />
@@ -761,7 +767,7 @@ export default function UsersPage() {
                   disabled={savingUser}
                   className="min-w-[100px]"
                 >
-                  Cancelar
+                  {t('actions.cancel')}
                 </Button>
                 <div className="flex-1"></div>
                 <Button
@@ -772,10 +778,10 @@ export default function UsersPage() {
                   {savingUser ? (
                     <span className="flex items-center gap-2">
                       <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
-                      Guardando…
+                      {t('modal.saving')}
                     </span>
                   ) : (
-                    editingUser ? 'Actualizar usuario' : 'Crear usuario'
+                    editingUser ? t('modal.buttonUpdate') : t('actions.createUser')
                   )}
                 </Button>
               </div>
@@ -819,10 +825,10 @@ export default function UsersPage() {
                 <div className="flex-1">
                   <h2 className="text-lg font-bold">
                     {deletionImpact?.isBlocked
-                      ? 'No se puede eliminar este usuario'
+                      ? t('deleteModal.titleBlocked')
                       : deletionImpact?.willSoftDelete
-                        ? 'Confirmar desactivación'
-                        : 'Confirmar eliminación'}
+                        ? t('deleteModal.titleDeactivate')
+                        : t('deleteModal.titleDelete')}
                   </h2>
                   <p className="text-xs opacity-90 mt-0.5">
                     {getFirstName(deletingUser)} {getLastName(deletingUser)} · {getEmail(deletingUser)}
@@ -834,7 +840,7 @@ export default function UsersPage() {
                 {loadingImpact && (
                   <div className="flex items-center justify-center py-8 text-gray-500">
                     <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                    Analizando dependencias…
+                    {t('deleteModal.analyzingDeps')}
                   </div>
                 )}
 
@@ -845,8 +851,8 @@ export default function UsersPage() {
                     </p>
                     <p className="text-xs text-gray-600">
                       {deletionImpact.isCurrentUser
-                        ? 'Por seguridad, otro administrador debe eliminar tu cuenta.'
-                        : 'El sistema necesita al menos un administrador activo para funcionar.'}
+                        ? t('deleteModal.blockedSelf')
+                        : t('deleteModal.blockedLastAdmin')}
                     </p>
                   </div>
                 )}
@@ -855,14 +861,13 @@ export default function UsersPage() {
                   <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 space-y-2">
                     <p className="text-sm font-semibold text-red-900 flex items-center gap-2">
                       <Trash2 className="w-4 h-4" />
-                      Eliminación permanente
+                      {t('deleteModal.hardDeleteTitle')}
                     </p>
                     <p className="text-xs text-red-800">
-                      Este usuario no tiene historial registrado (sin órdenes, pagos ni audit log).
-                      Será <strong>borrado físicamente</strong> de la base de datos.
+                      {t('deleteModal.hardDeleteDesc')}
                     </p>
                     <p className="text-xs text-red-700">
-                      Su correo <code className="bg-white px-1 rounded">{getEmail(deletingUser)}</code> quedará libre para reusarse.
+                      {t('deleteModal.hardDeleteEmailFree', { email: getEmail(deletingUser) })}
                     </p>
                   </div>
                 )}
@@ -872,71 +877,70 @@ export default function UsersPage() {
                     <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4 space-y-2">
                       <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
                         <ShieldAlert className="w-4 h-4" />
-                        Desactivación (no borrado)
+                        {t('deleteModal.softDeleteTitle')}
                       </p>
                       <p className="text-xs text-amber-800">
-                        Este usuario tiene historial registrado que <strong>no se puede borrar</strong> por
-                        requisitos fiscales DGII. Se hará lo siguiente:
+                        {t('deleteModal.softDeleteDesc')}
                       </p>
                       <ul className="text-xs text-amber-800 space-y-1 ml-4 list-disc">
-                        <li>Se marca como <strong>inactivo</strong> (no podrá iniciar sesión)</li>
-                        <li>Se libera su correo electrónico para que pueda reusarse</li>
-                        <li>Se conservan sus órdenes, pagos y auditoría</li>
-                        <li>Se revoca su PIN y sesiones activas</li>
+                        <li>{t('deleteModal.softDeleteBullet1')}</li>
+                        <li>{t('deleteModal.softDeleteBullet2')}</li>
+                        <li>{t('deleteModal.softDeleteBullet3')}</li>
+                        <li>{t('deleteModal.softDeleteBullet4')}</li>
                       </ul>
                     </div>
 
                     {/* Resumen de dependencias */}
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                       <p className="text-[11px] uppercase tracking-wider font-bold text-gray-500 mb-2">
-                        Historial que se conserva
+                        {t('deleteModal.historyTitle')}
                       </p>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         {deletionImpact.dependencies.orders > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Órdenes</span>
+                            <span className="text-gray-600">{t('deleteModal.depOrders')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.orders}</span>
                           </div>
                         )}
                         {deletionImpact.dependencies.payments > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Pagos</span>
+                            <span className="text-gray-600">{t('deleteModal.depPayments')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.payments}</span>
                           </div>
                         )}
                         {deletionImpact.dependencies.tableSessions > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Sesiones mesa</span>
+                            <span className="text-gray-600">{t('deleteModal.depTableSessions')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.tableSessions}</span>
                           </div>
                         )}
                         {deletionImpact.dependencies.reservations > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Reservas</span>
+                            <span className="text-gray-600">{t('deleteModal.depReservations')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.reservations}</span>
                           </div>
                         )}
                         {deletionImpact.dependencies.auditEvents > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Audit log</span>
+                            <span className="text-gray-600">{t('deleteModal.depAuditLog')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.auditEvents}</span>
                           </div>
                         )}
                         {deletionImpact.dependencies.tableClaimRequests > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Claims mesa</span>
+                            <span className="text-gray-600">{t('deleteModal.depTableClaims')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.tableClaimRequests}</span>
                           </div>
                         )}
                         {deletionImpact.dependencies.virtualTables > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Mesas virtuales</span>
+                            <span className="text-gray-600">{t('deleteModal.depVirtualTables')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.virtualTables}</span>
                           </div>
                         )}
                         {deletionImpact.dependencies.tableTransfers > 0 && (
                           <div className="flex justify-between bg-white rounded px-2 py-1 border border-gray-100">
-                            <span className="text-gray-600">Transfers</span>
+                            <span className="text-gray-600">{t('deleteModal.depTransfers')}</span>
                             <span className="font-semibold">{deletionImpact.dependencies.tableTransfers}</span>
                           </div>
                         )}
@@ -954,7 +958,7 @@ export default function UsersPage() {
                   disabled={confirmingDelete}
                   className="min-w-[100px]"
                 >
-                  {deletionImpact?.isBlocked ? 'Cerrar' : 'Cancelar'}
+                  {deletionImpact?.isBlocked ? t('actions.close') : t('actions.cancel')}
                 </Button>
                 <div className="flex-1"></div>
                 {!loadingImpact && deletionImpact && !deletionImpact.isBlocked && (
@@ -971,12 +975,12 @@ export default function UsersPage() {
                     {confirmingDelete ? (
                       <span className="flex items-center gap-2">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Procesando…
+                        {t('deleteModal.processing')}
                       </span>
                     ) : deletionImpact.willSoftDelete ? (
-                      'Sí, desactivar'
+                      t('deleteModal.confirmDeactivate')
                     ) : (
-                      'Sí, eliminar definitivamente'
+                      t('deleteModal.confirmDelete')
                     )}
                   </Button>
                 )}

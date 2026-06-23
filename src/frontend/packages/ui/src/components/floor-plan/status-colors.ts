@@ -34,6 +34,18 @@ export const STATUS_LABELS: Record<TableStatus, string> = {
   billing: "Por cobrar",
 };
 
+/** Map of TableStatus → display label; all fields required but overridable. */
+export type StatusLabels = Record<TableStatus, string>;
+
+/**
+ * Merge a partial override over the default Spanish STATUS_LABELS.
+ * Returns a complete StatusLabels object — missing keys fall back to Spanish.
+ */
+export function resolveStatusLabels(o?: Partial<StatusLabels>): StatusLabels {
+  if (!o) return STATUS_LABELS;
+  return { ...STATUS_LABELS, ...o };
+}
+
 /** Colores de badge por mozo/sección (estilo FR/RO/KI del screenshot de referencia). */
 export const SERVER_COLORS: Record<string, string> = {
   FR: "#6E5CC0", // morado apagado

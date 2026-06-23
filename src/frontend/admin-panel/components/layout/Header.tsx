@@ -7,6 +7,9 @@ import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
 import { useAdminNotifications, TableClaimNotification } from '@/lib/useAdminNotifications';
+import { useTranslations, useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 const api = axios.create({ baseURL: '' });
 
@@ -32,6 +35,8 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
+  const t = useTranslations('header');
+  const dl = dateLocale(useLocale());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showPanel, setShowPanel] = useState(false);
@@ -60,11 +65,11 @@ export function Header({ title, subtitle }: HeaderProps) {
   const buildClaimNotif = (cr: TableClaimNotification): Notification => ({
     id: cr.id,
     type: 'claim' as const,
-    title: `Mesa ${cr.tableNumber} — solicitud de mesero`,
-    description: `${cr.waiterName} quiere quedarse con esta mesa`,
+    title: t('claimTitle', { tableNumber: cr.tableNumber }),
+    description: t('claimDescription', { waiterName: cr.waiterName }),
     time: cr.timestamp instanceof Date
-      ? cr.timestamp.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })
-      : new Date(cr.timestamp).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }),
+      ? cr.timestamp.toLocaleTimeString(dl, { hour: '2-digit', minute: '2-digit' })
+      : new Date(cr.timestamp).toLocaleTimeString(dl, { hour: '2-digit', minute: '2-digit' }),
     read: cr.read,
     claimData: cr,
   });
@@ -117,9 +122,9 @@ export function Header({ title, subtitle }: HeaderProps) {
           const newNotifs: Notification[] = newOnes.map(r => ({
             id: `claim-poll-${r.id}`,
             type: 'claim' as const,
-            title: `Mesa ${r.tableNumber} — solicitud de mesero`,
-            description: `${r.waiterName} quiere quedarse con esta mesa`,
-            time: new Date(r.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }),
+            title: t('claimTitle', { tableNumber: r.tableNumber }),
+            description: t('claimDescription', { waiterName: r.waiterName }),
+            time: new Date(r.createdAt).toLocaleTimeString(dl, { hour: '2-digit', minute: '2-digit' }),
             read: false,
             claimData: {
               id: `claim-poll-${r.id}`,
@@ -129,7 +134,7 @@ export function Header({ title, subtitle }: HeaderProps) {
               tableId: r.tableId,
               tableNumber: r.tableNumber,
               orderId: r.orderId,
-              message: `${r.waiterName} quiere quedarse con la Mesa ${r.tableNumber}`,
+              message: t('claimMessage', { waiterName: r.waiterName, tableNumber: r.tableNumber }),
               timestamp: new Date(r.createdAt),
               read: false,
             },
@@ -187,9 +192,9 @@ export function Header({ title, subtitle }: HeaderProps) {
         notifs.push({
           id: 'pending-orders',
           type: 'order',
-          title: `${pending.length} pedido${pending.length > 1 ? 's' : ''} sin confirmar`,
-          description: 'Pedidos nuevos esperando confirmación del mesero',
-          time: 'Ahora',
+          title: t('pendingOrdersTitle', { count: pending.length }),
+          description: t('pendingOrdersDescription'),
+          time: t('timeNow'),
           read: readIdsRef.current.has('pending-orders'),
         });
       }
@@ -204,9 +209,9 @@ export function Header({ title, subtitle }: HeaderProps) {
         notifs.push({
           id: 'urgent-kitchen',
           type: 'urgent',
-          title: `${urgent.length} orden${urgent.length > 1 ? 'es' : ''} urgente${urgent.length > 1 ? 's' : ''} en cocina`,
-          description: 'Llevan más de 15 minutos en preparación',
-          time: `Hace ${minElapsed} min`,
+          title: t('urgentOrdersTitle', { count: urgent.length }),
+          description: t('urgentOrdersDescription'),
+          time: t('timeAgoMin', { min: minElapsed }),
           read: readIdsRef.current.has('urgent-kitchen'),
         });
       }
@@ -221,35 +226,35 @@ export function Header({ title, subtitle }: HeaderProps) {
         notifs.push({
           id: 'ready-orders',
           type: 'kitchen',
-          title: `${ready.length} orden${ready.length > 1 ? 'es' : ''} listas para servir`,
-          description: 'Cocina/Bar marcaron pedidos como listos',
-          time: 'Ahora',
+          title: t('readyOrdersTitle', { count: ready.length }),
+          description: t('readyOrdersDescription'),
+          time: t('timeNow'),
           read: readIdsRef.current.has('ready-orders'),
         });
       }
 
       // ── MESAS ──
       const tables: any[] = Array.isArray(tablesRes.data) ? tablesRes.data : [];
-      const occupiedTables = tables.filter(t => (t.status ?? t.Status) === 'Occupied');
+      const occupiedTables = tables.filter(tbl => (tbl.status ?? tbl.Status) === 'Occupied');
       if (occupiedTables.length > 0) {
         notifs.push({
           id: 'occupied-tables',
           type: 'table',
-          title: `${occupiedTables.length} mesa${occupiedTables.length > 1 ? 's' : ''} ocupada${occupiedTables.length > 1 ? 's' : ''}`,
-          description: occupiedTables.slice(0, 3).map(t => `Mesa #${t.tableNumber ?? t.TableNumber}`).join(', ') + (occupiedTables.length > 3 ? '…' : ''),
-          time: 'En curso',
+          title: t('occupiedTablesTitle', { count: occupiedTables.length }),
+          description: occupiedTables.slice(0, 3).map(tbl => `Mesa #${tbl.tableNumber ?? tbl.TableNumber}`).join(', ') + (occupiedTables.length > 3 ? '…' : ''),
+          time: t('timeOngoing'),
           read: readIdsRef.current.has('occupied-tables'),
         });
       }
 
-      const reservedTables = tables.filter(t => (t.status ?? t.Status) === 'Reserved');
+      const reservedTables = tables.filter(tbl => (tbl.status ?? tbl.Status) === 'Reserved');
       if (reservedTables.length > 0) {
         notifs.push({
           id: 'reserved-tables',
           type: 'table',
-          title: `${reservedTables.length} mesa${reservedTables.length > 1 ? 's' : ''} reservada${reservedTables.length > 1 ? 's' : ''}`,
-          description: reservedTables.slice(0, 3).map(t => `Mesa #${t.tableNumber ?? t.TableNumber}`).join(', ') + (reservedTables.length > 3 ? '…' : ''),
-          time: 'Hoy',
+          title: t('reservedTablesTitle', { count: reservedTables.length }),
+          description: reservedTables.slice(0, 3).map(tbl => `Mesa #${tbl.tableNumber ?? tbl.TableNumber}`).join(', ') + (reservedTables.length > 3 ? '…' : ''),
+          time: t('timeToday'),
           read: readIdsRef.current.has('reserved-tables'),
         });
       }
@@ -267,9 +272,9 @@ export function Header({ title, subtitle }: HeaderProps) {
         notifs.push({
           id: 'pending-reservations',
           type: 'reservation',
-          title: `${pendingRes.length} reserva${pendingRes.length > 1 ? 's' : ''} sin confirmar hoy`,
-          description: 'Reservas de hoy pendientes de confirmación',
-          time: 'Hoy',
+          title: t('pendingReservationsTitle', { count: pendingRes.length }),
+          description: t('pendingReservationsDescription'),
+          time: t('timeToday'),
           read: readIdsRef.current.has('pending-reservations'),
         });
       }
@@ -320,7 +325,7 @@ export function Header({ title, subtitle }: HeaderProps) {
       removeRequest(notif.id);
       setNotifications(prev => prev.filter(n => n.id !== notif.id));
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'Error al aprobar la solicitud';
+      const msg = err?.response?.data?.error ?? t('errorApprove');
       alert(msg);
     } finally {
       setRespondingId(null);
@@ -343,7 +348,7 @@ export function Header({ title, subtitle }: HeaderProps) {
       removeRequest(notif.id);
       setNotifications(prev => prev.filter(n => n.id !== notif.id));
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'Error al rechazar la solicitud';
+      const msg = err?.response?.data?.error ?? t('errorReject');
       alert(msg);
     } finally {
       setRespondingId(null);
@@ -373,12 +378,14 @@ export function Header({ title, subtitle }: HeaderProps) {
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Clock className="h-4 w-4" />
         <span className="font-medium">
-          {currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+          {currentTime.toLocaleTimeString(dl, { hour: '2-digit', minute: '2-digit' })}
         </span>
         <span className="hidden md:inline">
-          {currentTime.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+          {currentTime.toLocaleDateString(dl, { weekday: 'short', day: 'numeric', month: 'short' })}
         </span>
       </div>
+
+      <LanguageSwitcher />
 
       {/* Bell + Panel */}
       <div className="relative" ref={panelRef}>
@@ -411,9 +418,9 @@ export function Header({ title, subtitle }: HeaderProps) {
           <div className="absolute right-0 top-12 w-96 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-border z-50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div>
-                <h3 className="font-semibold text-sm">Notificaciones</h3>
+                <h3 className="font-semibold text-sm">{t('panelTitle')}</h3>
                 {unreadCount > 0 && (
-                  <p className="text-xs text-muted-foreground">{unreadCount} sin leer</p>
+                  <p className="text-xs text-muted-foreground">{t('unreadCount', { count: unreadCount })}</p>
                 )}
               </div>
               <div className="flex items-center gap-1">
@@ -422,7 +429,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                     className="text-xs px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-muted-foreground"
                     onClick={markAllRead}
                   >
-                    Marcar todas
+                    {t('markAllRead')}
                   </button>
                 )}
                 <button
@@ -438,8 +445,8 @@ export function Header({ title, subtitle }: HeaderProps) {
               {notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <Bell className="h-10 w-10 mb-3 opacity-20" />
-                  <p className="text-sm font-medium">Todo en orden</p>
-                  <p className="text-xs mt-1">No hay notificaciones pendientes</p>
+                  <p className="text-sm font-medium">{t('emptyState')}</p>
+                  <p className="text-xs mt-1">{t('emptyStateSubtitle')}</p>
                 </div>
               ) : (
                 notifications.map(notif => (
@@ -463,10 +470,10 @@ export function Header({ title, subtitle }: HeaderProps) {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">
-                              Mesa {notif.claimData.tableNumber} — solicitud pendiente
+                              {t('claimCardTitle', { tableNumber: notif.claimData.tableNumber })}
                             </p>
                             <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                              <span className="font-medium">{notif.claimData.waiterName}</span> quiere quedarse con esta mesa
+                              <span className="font-medium">{notif.claimData.waiterName}</span> {t('claimCardDescription')}
                             </p>
                             <p className="text-xs text-gray-400 mt-0.5">{notif.time}</p>
                           </div>
@@ -482,7 +489,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                               ? <Loader2 className="h-3 w-3 animate-spin" />
                               : <CheckCircle2 className="h-3 w-3" />
                             }
-                            Aprobar
+                            {t('approve')}
                           </button>
                           <button
                             onClick={() => handleRejectClaim(notif)}
@@ -490,7 +497,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                             className="flex-1 py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 flex items-center justify-center gap-1 transition-colors"
                           >
                             <XCircle className="h-3 w-3" />
-                            Rechazar
+                            {t('reject')}
                           </button>
                         </div>
                       </div>
@@ -524,7 +531,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 className="text-xs text-primary hover:underline w-full text-center"
                 onClick={() => { setShowPanel(false); window.location.href = '/orders'; }}
               >
-                Ver todas las órdenes →
+                {t('viewAllOrders')}
               </button>
             </div>
           </div>

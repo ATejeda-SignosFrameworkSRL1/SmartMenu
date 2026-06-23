@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +17,7 @@ const api = axios.create({
 });
 
 function AdminDashboardInner() {
+  const t = useTranslations('dashboard');
   const searchParams = useSearchParams();
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -88,38 +90,38 @@ function AdminDashboardInner() {
   const preparingOrders = orders.filter((o: any) => (o.status || o.Status) === 'Preparing');
   
   const stats = [
-    { 
-      label: 'Mesas Disponibles', 
-      value: availableTables.length.toString(), 
+    {
+      label: t('stats.availableTables'),
+      value: availableTables.length.toString(),
       change: `${availableTables.length}/${tables.length}`,
-      icon: LayoutDashboard, 
+      icon: LayoutDashboard,
       color: 'text-success',
       bgColor: 'bg-success/10',
       borderColor: 'border-success/30'
     },
-    { 
-      label: 'Mesas Ocupadas', 
-      value: activeTables.length.toString(), 
-      change: `${tables.length > 0 ? Math.round((activeTables.length / tables.length) * 100) : 0}% ocupación`,
-      icon: Users, 
+    {
+      label: t('stats.occupiedTables'),
+      value: activeTables.length.toString(),
+      change: `${tables.length > 0 ? Math.round((activeTables.length / tables.length) * 100) : 0}% ${t('stats.occupancyLabel')}`,
+      icon: Users,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
       borderColor: 'border-primary/30'
     },
-    { 
-      label: 'Pedidos en Cocina', 
-      value: preparingOrders.length.toString(), 
-      change: 'En preparación',
-      icon: ChefHat, 
+    {
+      label: t('stats.kitchenOrders'),
+      value: preparingOrders.length.toString(),
+      change: t('stats.preparing'),
+      icon: ChefHat,
       color: 'text-warning',
       bgColor: 'bg-warning/10',
       borderColor: 'border-warning/30'
     },
-    { 
-      label: 'Platillos Activos', 
-      value: dishes.filter((d: any) => d.isAvailable ?? d.IsAvailable ?? true).length.toString(), 
-      change: `${dishes.length} total`,
-      icon: Wine, 
+    {
+      label: t('stats.activeDishes'),
+      value: dishes.filter((d: any) => d.isAvailable ?? d.IsAvailable ?? true).length.toString(),
+      change: `${dishes.length} ${t('stats.totalLabel')}`,
+      icon: Wine,
       color: 'text-info',
       bgColor: 'bg-info/10',
       borderColor: 'border-info/30'
@@ -128,35 +130,35 @@ function AdminDashboardInner() {
 
   const bottomStats = [
     {
-      label: 'Órdenes Activas',
+      label: t('bottom.activeOrders'),
       value: orders.length.toString(),
-      subtext: 'del turno',
+      subtext: t('bottom.ofShift'),
       icon: ShoppingBag,
       color: 'text-primary',
       bgColor: 'bg-primary/10'
     },
     {
-      label: 'Ventas del Día',
+      label: t('bottom.salesToday'),
       value: `RD$ ${totalRevenue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
-      subtext: `${transactionCount} ${transactionCount === 1 ? 'pago cobrado' : 'pagos cobrados'}`,
+      subtext: t('bottom.paymentsCollected', { count: transactionCount }),
       icon: DollarSign,
       color: 'text-success',
       bgColor: 'bg-success/10'
     },
     {
-      label: 'Ticket Promedio',
+      label: t('bottom.avgTicket'),
       value: transactionCount > 0 ? `RD$ ${(totalRevenue / transactionCount).toFixed(2)}` : 'RD$ 0.00',
-      subtext: 'por orden',
+      subtext: t('bottom.perOrder'),
       icon: TrendingUp,
       color: 'text-info',
       bgColor: 'bg-info/10'
     },
     {
-      label: 'Tiempo Promedio',
+      label: t('bottom.avgTime'),
       value: dishAvgTimes.length > 0
         ? `${Math.round(dishAvgTimes.reduce((s: number, d: any) => s + (d.avgMinutes ?? 0), 0) / dishAvgTimes.length)} min`
         : '— min',
-      subtext: `${dishAvgTimes.length} platos medidos`,
+      subtext: t('bottom.dishesMeasured', { count: dishAvgTimes.length }),
       icon: Clock,
       color: 'text-warning',
       bgColor: 'bg-warning/10'
@@ -245,9 +247,9 @@ function AdminDashboardInner() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <Clock className="h-5 w-5 text-warning" />
-                    Tiempo Promedio por Plato
+                    {t('avgTimePlate.title')}
                   </CardTitle>
-                  <CardDescription>Tiempo real desde la orden hasta servida (últimos 30 días)</CardDescription>
+                  <CardDescription>{t('avgTimePlate.description')}</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -283,12 +285,12 @@ function AdminDashboardInner() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Órdenes Activas</CardTitle>
-                <CardDescription>Pedidos en curso en tiempo real</CardDescription>
+                <CardTitle>{t('activeOrders.title')}</CardTitle>
+                <CardDescription>{t('activeOrders.description')}</CardDescription>
               </div>
               <Button variant="outline" size="sm" onClick={loadData}>
                 <Clock className="h-4 w-4 mr-2" />
-                Actualizar
+                {t('activeOrders.refresh')}
               </Button>
             </div>
           </CardHeader>
@@ -296,11 +298,11 @@ function AdminDashboardInner() {
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                <p className="text-sm text-muted-foreground">Cargando órdenes...</p>
+                <p className="text-sm text-muted-foreground">{t('activeOrders.loading')}</p>
               </div>
             ) : orders.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted-foreground">No hay órdenes para mostrar</p>
+                <p className="text-muted-foreground">{t('activeOrders.empty')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -319,8 +321,8 @@ function AdminDashboardInner() {
                           <div className={cn('rounded-full h-3 w-3', getStatusColor(status))} />
                         </div>
                         <div>
-                          <p className="font-medium text-sm">Pedido #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase()}</p>
-                          <p className="text-xs text-muted-foreground">Mesa {order.tableNumber ?? order.TableNumber ?? order.tableId ?? order.TableId}</p>
+                          <p className="font-medium text-sm">{t('activeOrders.orderLabel')} #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase()}</p>
+                          <p className="text-xs text-muted-foreground">{t('activeOrders.tableLabel')} {order.tableNumber ?? order.TableNumber ?? order.tableId ?? order.TableId}</p>
                         </div>
                       </div>
                       
@@ -336,7 +338,7 @@ function AdminDashboardInner() {
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">RD$ {Number(total).toFixed(2)}</p>
-                          <p className="text-xs text-muted-foreground">{order.items?.length ?? 0} items</p>
+                          <p className="text-xs text-muted-foreground">{t('activeOrders.itemsCount', { count: order.items?.length ?? 0 })}</p>
                         </div>
                       </div>
                     </div>
@@ -350,32 +352,32 @@ function AdminDashboardInner() {
         {/* Quick Actions */}
         <Card>
           <CardHeader>
-            <CardTitle>Acciones Rápidas</CardTitle>
+            <CardTitle>{t('quickActions.title')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Link href="/menu">
                 <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2">
                   <ShoppingBag className="h-6 w-6" />
-                  <span className="text-sm">Gestionar Menú</span>
+                  <span className="text-sm">{t('quickActions.manageMenu')}</span>
                 </Button>
               </Link>
               <Link href="/tables">
                 <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2">
                   <LayoutDashboard className="h-6 w-6" />
-                  <span className="text-sm">Ver Mesas</span>
+                  <span className="text-sm">{t('quickActions.viewTables')}</span>
                 </Button>
               </Link>
               <Link href="/users">
                 <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2">
                   <Users className="h-6 w-6" />
-                  <span className="text-sm">Personal</span>
+                  <span className="text-sm">{t('quickActions.staff')}</span>
                 </Button>
               </Link>
               <Link href="/reports">
                 <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2">
                   <TrendingUp className="h-6 w-6" />
-                  <span className="text-sm">Reportes</span>
+                  <span className="text-sm">{t('quickActions.reports')}</span>
                 </Button>
               </Link>
             </div>

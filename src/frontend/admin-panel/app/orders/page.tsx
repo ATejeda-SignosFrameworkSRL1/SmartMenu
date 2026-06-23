@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
 import { MainLayout } from '@/components/layout/MainLayout';
 import {
   Clock,
@@ -34,15 +37,6 @@ interface Order {
   }>;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  Pending: 'Pendiente',
-  Confirmed: 'Confirmada',
-  Preparing: 'Preparando',
-  Ready: 'Lista',
-  Served: 'Servida',
-  Completed: 'Completada',
-  Cancelled: 'Cancelada',
-};
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; dot: string; badge: string; badgeText: string }> = {
   Pending:   { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200', dot: 'bg-amber-400',  badge: 'bg-amber-100 border-amber-300',  badgeText: 'text-amber-800' },
@@ -91,6 +85,11 @@ function timeAgo(dateStr: string) {
 }
 
 export default function OrdersPage() {
+  const t = useTranslations('orders');
+  const dl = dateLocale(useLocale());
+
+  const statusLabel = (key: string) => t(`status.${key}` as any, { defaultValue: key });
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -99,8 +98,8 @@ export default function OrdersPage() {
   const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(t);
+    const ticker = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(ticker);
   }, []);
 
   const loadOrders = async () => {
@@ -112,7 +111,7 @@ export default function OrdersPage() {
       const res = await api.get('/api/order/all');
       setOrders(Array.isArray(res.data) ? res.data : []);
     } catch {
-      toast.error('Error al cargar órdenes');
+      toast.error(t('toastLoadError'));
     } finally {
       setLoading(false);
     }
@@ -128,10 +127,10 @@ export default function OrdersPage() {
     setUpdatingId(orderId);
     try {
       await api.put(`/api/order/${orderId}/status`, { newStatus });
-      toast.success(`Estado → ${STATUS_LABELS[newStatus]}`);
+      toast.success(t('toastStatusUpdated', { label: statusLabel(newStatus) }));
       loadOrders();
     } catch {
-      toast.error('Error al actualizar estado');
+      toast.error(t('toastUpdateError'));
     } finally {
       setUpdatingId(null);
     }
@@ -155,17 +154,17 @@ export default function OrdersPage() {
   }, {} as Record<string, number>);
 
   return (
-    <MainLayout title="Gestión de Órdenes">
+    <MainLayout title={t('pageTitle')}>
       <div className="space-y-6">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
-              {showArchived ? 'Órdenes Archivadas' : 'Gestión de Órdenes'}
+              {showArchived ? t('titleArchived') : t('pageTitle')}
             </h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              {baseOrders.length} órdenes {showArchived ? 'archivadas' : 'activas'} · actualiza cada 30 s
+              {t('subtitle', { count: baseOrders.length, mode: showArchived ? t('modeArchived') : t('modeActive') })}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -178,14 +177,14 @@ export default function OrdersPage() {
               }`}
             >
               {showArchived ? <ArrowLeft className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-              {showArchived ? 'Ver Activas' : 'Archivados'}
+              {showArchived ? t('btnViewActive') : t('btnArchived')}
             </button>
             <button
               onClick={loadOrders}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-sm font-medium shadow-sm transition"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Actualizar
+              {t('btnRefresh')}
             </button>
           </div>
         </div>
@@ -200,7 +199,7 @@ export default function OrdersPage() {
                 ? 'bg-gray-900 text-white border-gray-900 shadow-md'
                 : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
           >
-            Todas
+            {t('tabAll')}
             <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${selectedStatus === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>
               {baseOrders.length}
             </span>
@@ -220,7 +219,7 @@ export default function OrdersPage() {
                     : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
               >
                 <span className={`w-2 h-2 rounded-full ${active ? cfg.dot : 'bg-gray-300'}`} />
-                {STATUS_LABELS[status]}
+                {statusLabel(status)}
                 <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${active ? `${cfg.badge} ${cfg.badgeText}` : 'bg-gray-100 text-gray-500'}`}>
                   {count}
                 </span>
@@ -233,12 +232,12 @@ export default function OrdersPage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm">Cargando órdenes…</p>
+            <p className="text-sm">{t('loading')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
             <CheckCircle2 className="h-12 w-12 opacity-30" />
-            <p className="font-medium">No hay órdenes para mostrar</p>
+            <p className="font-medium">{t('emptyState')}</p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
@@ -274,13 +273,13 @@ export default function OrdersPage() {
                       {/* Table */}
                       <div className="flex items-center gap-1.5">
                         <TableProperties className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm font-semibold text-gray-800">Mesa {tableNum}</span>
+                        <span className="text-sm font-semibold text-gray-800">{t('table', { number: tableNum })}</span>
                       </div>
                       {/* Time */}
                       {createdAt && (
                         <div className="flex items-center gap-1.5 text-xs text-gray-400">
                           <Clock className="w-3 h-3" />
-                          <span>{timeAgo(createdAt)} · {new Date(createdAt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                          <span>{timeAgo(createdAt)} · {new Date(createdAt).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                         </div>
                       )}
                     </div>
@@ -289,10 +288,10 @@ export default function OrdersPage() {
                     <div className="flex flex-col items-end gap-2">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${cfg.badge} ${cfg.badgeText}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                        {STATUS_LABELS[status] || status}
+                        {statusLabel(status)}
                       </span>
                       <span className="text-xl font-bold text-gray-900">
-                        RD$ {Number(total).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        RD$ {Number(total).toLocaleString(dl, { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -303,7 +302,7 @@ export default function OrdersPage() {
                   {/* Items */}
                   <div className="px-5 py-3 space-y-1.5 flex-1">
                     {items.length === 0 ? (
-                      <p className="text-xs text-gray-400 italic">Sin artículos</p>
+                      <p className="text-xs text-gray-400 italic">{t('noItems')}</p>
                     ) : (
                       items.map((item: any, idx: number) => (
                         <div key={item.id ?? item.Id ?? idx} className="flex items-center justify-between gap-2">
@@ -316,7 +315,7 @@ export default function OrdersPage() {
                             </span>
                           </div>
                           <span className="text-xs text-gray-400 flex-shrink-0 font-mono">
-                            RD$ {Number(item.subtotal ?? item.Subtotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 0 })}
+                            RD$ {Number(item.subtotal ?? item.Subtotal ?? 0).toLocaleString(dl, { minimumFractionDigits: 0 })}
                           </span>
                         </div>
                       ))
@@ -333,7 +332,7 @@ export default function OrdersPage() {
                     <div className="px-5 py-3 flex gap-2 flex-wrap">
                       {isUpdating ? (
                         <div className="flex items-center gap-2 text-xs text-gray-400">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Actualizando…
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('updating')}
                         </div>
                       ) : (
                         nextStatuses.map(ns => (
@@ -343,7 +342,7 @@ export default function OrdersPage() {
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm
                               ${NEXT_BTN_STYLE[ns] ?? 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
                           >
-                            {STATUS_LABELS[ns]}
+                            {statusLabel(ns)}
                             <ChevronRight className="w-3 h-3" />
                           </button>
                         ))

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Armchair,
   LayoutDashboard,
@@ -60,20 +61,21 @@ function orderHasFoodItem(order: any): boolean {
 }
 
 const mainNavConfig = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard, badgeKey: null },
-  { title: 'Órdenes', url: '/orders', icon: ShoppingBag, badgeKey: 'orders' },
-  { title: 'Menú', url: '/menu', icon: Menu, badgeKey: null },
-  { title: 'Mesas', url: '/tables', icon: MapPin, badgeKey: null },
-  { title: 'Gestión de Salón', url: '/floor-plan', icon: Armchair, badgeKey: null },
-  { title: 'Cocina (KDS)', url: '/kitchen', icon: ChefHat, badgeKey: 'kitchen' },
-  { title: 'Bar', url: '/bar', icon: Wine, badgeKey: 'bar' },
-  { title: 'Reservas', url: '/reservations', icon: CalendarCheck, badgeKey: 'reservations' },
-  { title: 'Mantenimiento', url: '/maintenance', icon: Wrench, badgeKey: null },
-  { title: 'Usuarios', url: '/users', icon: Users, badgeKey: null },
-  { title: 'Reportes', url: '/reports', icon: BarChart3, badgeKey: null }
+  { titleKey: 'nav.dashboard', url: '/', icon: LayoutDashboard, badgeKey: null },
+  { titleKey: 'nav.orders', url: '/orders', icon: ShoppingBag, badgeKey: 'orders' },
+  { titleKey: 'nav.menu', url: '/menu', icon: Menu, badgeKey: null },
+  { titleKey: 'nav.tables', url: '/tables', icon: MapPin, badgeKey: null },
+  { titleKey: 'nav.floorPlan', url: '/floor-plan', icon: Armchair, badgeKey: null },
+  { titleKey: 'nav.kitchen', url: '/kitchen', icon: ChefHat, badgeKey: 'kitchen' },
+  { titleKey: 'nav.bar', url: '/bar', icon: Wine, badgeKey: 'bar' },
+  { titleKey: 'nav.reservations', url: '/reservations', icon: CalendarCheck, badgeKey: 'reservations' },
+  { titleKey: 'nav.maintenance', url: '/maintenance', icon: Wrench, badgeKey: null },
+  { titleKey: 'nav.users', url: '/users', icon: Users, badgeKey: null },
+  { titleKey: 'nav.reports', url: '/reports', icon: BarChart3, badgeKey: null }
 ];
 
 export function AppSidebar() {
+  const t = useTranslations('sidebar');
   const pathname = usePathname();
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
@@ -135,10 +137,10 @@ export function AppSidebar() {
 
   const handleChangePassword = async () => {
     if (!changePwForm.next || changePwForm.next !== changePwForm.confirm) {
-      alert('Las contraseñas no coinciden'); return;
+      alert(t('password.mismatch')); return;
     }
     if (changePwForm.next.length < 6) {
-      alert('La contraseña debe tener al menos 6 caracteres'); return;
+      alert(t('password.tooShort')); return;
     }
     setChangingPw(true);
     try {
@@ -146,10 +148,10 @@ export function AppSidebar() {
         currentPassword: changePwForm.current,
         newPassword: changePwForm.next,
       });
-      alert('Contraseña actualizada correctamente');
+      alert(t('password.updated'));
       setChangePwForm({ current: '', next: '', confirm: '' });
     } catch (e: any) {
-      alert(e?.response?.data?.error || 'Error al cambiar contraseña');
+      alert(e?.response?.data?.error || t('password.updateError'));
     } finally {
       setChangingPw(false);
     }
@@ -184,7 +186,7 @@ export function AppSidebar() {
                 SmartMenu
               </span>
               <span className="text-xs text-sidebar-foreground/60">
-                Sistema de Gestión
+                {t('header.subtitle')}
               </span>
             </div>
           )}
@@ -194,7 +196,7 @@ export function AppSidebar() {
       <SidebarContent className="px-2 py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider mb-2">
-            Operaciones
+            {t('nav.groupLabel')}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -202,7 +204,7 @@ export function AppSidebar() {
                 const isActive = pathname === item.url;
                 const badge = getBadge(item.badgeKey);
                 return (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild>
                       <Link
                         href={item.url}
@@ -215,7 +217,7 @@ export function AppSidebar() {
                         <item.icon className="h-5 w-5 flex-shrink-0" />
                         {!collapsed && (
                           <>
-                            <span className="flex-1">{item.title}</span>
+                            <span className="flex-1">{t(item.titleKey as Parameters<typeof t>[0])}</span>
                             {badge != null && (
                               <Badge
                                 variant="secondary"
@@ -258,7 +260,7 @@ export function AppSidebar() {
               size="icon"
               className="h-8 w-8 text-sidebar-foreground/50 hover:text-sidebar-foreground"
               onClick={() => setShowSettings(true)}
-              title="Configuración"
+              title={t('settings.title')}
             >
               <Settings className="h-4 w-4" />
             </Button>
@@ -274,7 +276,7 @@ export function AppSidebar() {
 
           {/* Header modal */}
           <div className="flex items-center justify-between px-6 py-4 border-b">
-            <h2 className="text-lg font-bold">Configuración de cuenta</h2>
+            <h2 className="text-lg font-bold">{t('settings.accountTitle')}</h2>
             <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
               <X className="h-5 w-5" />
             </button>
@@ -300,26 +302,26 @@ export function AppSidebar() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <KeyRound className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Cambiar contraseña</h3>
+                <h3 className="text-sm font-semibold">{t('password.sectionTitle')}</h3>
               </div>
               <div className="space-y-2">
                 <input
                   type="password"
-                  placeholder="Contraseña actual"
+                  placeholder={t('password.currentPlaceholder')}
                   value={changePwForm.current}
                   onChange={e => setChangePwForm(p => ({ ...p, current: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
                 <input
                   type="password"
-                  placeholder="Nueva contraseña"
+                  placeholder={t('password.newPlaceholder')}
                   value={changePwForm.next}
                   onChange={e => setChangePwForm(p => ({ ...p, next: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
                 <input
                   type="password"
-                  placeholder="Confirmar nueva contraseña"
+                  placeholder={t('password.confirmPlaceholder')}
                   value={changePwForm.confirm}
                   onChange={e => setChangePwForm(p => ({ ...p, confirm: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -330,7 +332,7 @@ export function AppSidebar() {
                   onClick={handleChangePassword}
                   disabled={changingPw || !changePwForm.current || !changePwForm.next}
                 >
-                  {changingPw ? 'Guardando...' : 'Actualizar contraseña'}
+                  {changingPw ? t('password.saving') : t('password.updateButton')}
                 </Button>
               </div>
             </div>
@@ -343,7 +345,7 @@ export function AppSidebar() {
                 onClick={handleLogout}
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                Cerrar sesión
+                {t('logout')}
               </Button>
             </div>
           </div>

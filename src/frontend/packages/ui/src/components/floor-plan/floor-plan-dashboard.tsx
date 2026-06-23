@@ -5,8 +5,61 @@ import { CalendarPlus, Inbox, Palette, Pencil, Phone, Search, Users } from "luci
 
 import { MultiZoneFloorPlanViewer } from "./multi-zone-floor-plan-viewer";
 import { MultiZoneFloorPlanEditor } from "./multi-zone-floor-plan-editor";
-import { STATUS_LABELS, resolveStatusColors, type StatusPaletteOverride } from "./status-colors";
+import { resolveStatusColors, resolveStatusLabels, type StatusLabels, type StatusPaletteOverride } from "./status-colors";
 import type { FloorPlanData, TableStatus } from "./types";
+
+/**
+ * All hardcoded Spanish UI strings rendered by FloorPlanDashboard.
+ * Every field is optional — missing fields fall back to the Spanish default.
+ */
+export interface FloorPlanDashboardMessages {
+  /** Header title of the canvas column. Default: "Plano de planta" */
+  canvasTitle: string;
+  /** Toggle button: live mode. Default: "En Vivo" */
+  modeLive: string;
+  /** Toggle button: designer mode. Default: "Diseñador" */
+  modeDesigner: string;
+  /** Palette editor button label. Default: "Colores" */
+  paletteButton: string;
+  /** Palette editor reset button. Default: "Restablecer" */
+  paletteReset: string;
+  /** Right-panel heading. Default: "Reservaciones" */
+  reservationsTitle: string;
+  /** Summary line: `(zoneName, count, guests) => string`. */
+  reservationsSummary: (zoneName: string, count: number, guests: number) => string;
+  /** Search input placeholder. Default: "Buscar reserva…" */
+  searchPlaceholder: string;
+  /** New reservation button. Default: "Nueva" */
+  newButton: string;
+  /** Empty-state heading when zone has no reservations at all. Default: "Sin reservaciones en esta zona" */
+  emptyZoneTitle: string;
+  /** Empty-state subtext when zone has no reservations at all. Default: "Las nuevas reservas aparecerán aquí" */
+  emptyZoneSub: string;
+  /** Empty-state heading when search has no results. Default: "Sin resultados" */
+  emptySearchTitle: string;
+  /** Empty-state subtext when search has no results. Default: "Probá con otro nombre o mesa" */
+  emptySearchSub: string;
+  /** Prefix label on the table chip inside a reservation card. Default: "Mesa" */
+  tablePrefix: string;
+}
+
+const DEFAULT_DASHBOARD_MESSAGES: FloorPlanDashboardMessages = {
+  canvasTitle: "Plano de planta",
+  modeLive: "En Vivo",
+  modeDesigner: "Diseñador",
+  paletteButton: "Colores",
+  paletteReset: "Restablecer",
+  reservationsTitle: "Reservaciones",
+  reservationsSummary: (zoneName, count, guests) =>
+    `${zoneName} · ${count} ${count === 1 ? "reserva" : "reservas"} · ${guests} comensales`,
+  searchPlaceholder: "Buscar reserva…",
+  newButton: "Nueva",
+  emptyZoneTitle: "Sin reservaciones en esta zona",
+  emptyZoneSub: "Las nuevas reservas aparecerán aquí",
+  emptySearchTitle: "Sin resultados",
+  emptySearchSub: "Probá con otro nombre o mesa",
+  tablePrefix: "Mesa",
+};
 
 /** Paleta para avatares de comensales (hash por nombre). */
 const AVATAR_COLORS = ["#5B61C9", "#3F88C5", "#2F9E78", "#D89A3C", "#D8565C", "#8B79C9", "#C56B9B", "#3E9A93"];
@@ -55,6 +108,10 @@ export interface FloorPlanDashboardProps {
   palette?: StatusPaletteOverride;
   /** Guardar paleta editada. */
   onPaletteChange?: (palette: StatusPaletteOverride) => void;
+  /** Translated status labels (e.g. from next-intl). Missing keys fall back to Spanish. */
+  statusLabels?: Partial<StatusLabels>;
+  /** Translated UI strings. Missing keys fall back to Spanish defaults. */
+  messages?: Partial<FloorPlanDashboardMessages>;
 }
 
 const STATUS_BADGE: Record<ReservationStatus, string> = {
@@ -76,8 +133,10 @@ const STATUS_ACCENT: Record<ReservationStatus, string> = {
  * Derecha: reservaciones de la ZONA ACTIVA (cambian al cambiar de pestaña), agrupadas
  * por hora. Click en mesa ↔ resalta su reservación (estado `selectedTableId`).
  */
-export function FloorPlanDashboard({ data, reservations, onDataChange, height = 750, palette, onPaletteChange }: FloorPlanDashboardProps) {
+export function FloorPlanDashboard({ data, reservations, onDataChange, height = 750, palette, onPaletteChange, statusLabels, messages }: FloorPlanDashboardProps) {
   const colors = resolveStatusColors(palette);
+  const labels = resolveStatusLabels(statusLabels);
+  const msg: FloorPlanDashboardMessages = { ...DEFAULT_DASHBOARD_MESSAGES, ...messages };
   const [mode, setMode] = useState<"live" | "designer">("live");
   const [activeZoneId, setActiveZoneId] = useState(data.zones[0]?.zoneId ?? "");
   const [selectedTableId, setSelectedTableId] = useState<string | number | null>(null);
@@ -131,7 +190,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
       <div className="flex w-[70%] flex-col">
         <div className="border-b border-slate-200">
           <div className="flex items-center justify-between px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-700">Plano de planta</h2>
+            <h2 className="text-sm font-semibold text-slate-700">{msg.canvasTitle}</h2>
             <div className="flex items-center gap-2">
               {mode === "designer" && onPaletteChange && (
                 <button
@@ -143,20 +202,20 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  <Palette className="h-3.5 w-3.5" /> Colores
+                  <Palette className="h-3.5 w-3.5" /> {msg.paletteButton}
                 </button>
               )}
               <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm">
                 <button type="button" onClick={() => setMode("live")} className={modeBtn(mode === "live")}>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    En Vivo
+                    {msg.modeLive}
                   </span>
                 </button>
                 <button type="button" onClick={() => setMode("designer")} className={modeBtn(mode === "designer")}>
                   <span className="inline-flex items-center gap-1.5">
                     <Pencil className="h-3.5 w-3.5" />
-                    Diseñador
+                    {msg.modeDesigner}
                   </span>
                 </button>
               </div>
@@ -172,7 +231,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
                     onChange={(e) => onPaletteChange({ ...(palette ?? {}), [s]: e.target.value })}
                     className="h-7 w-9 cursor-pointer rounded border border-slate-300 bg-white p-0.5"
                   />
-                  {STATUS_LABELS[s]}
+                  {labels[s]}
                 </label>
               ))}
               <button
@@ -180,7 +239,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
                 onClick={() => onPaletteChange({})}
                 className="ml-auto self-center rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50"
               >
-                Restablecer
+                {msg.paletteReset}
               </button>
             </div>
           )}
@@ -224,7 +283,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
                     : `1px solid ${colors[s].stroke}`,
                 }}
               />
-              {STATUS_LABELS[s]}
+              {labels[s]}
             </span>
           ))}
         </div>
@@ -235,13 +294,13 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
         <div className="space-y-3 border-b border-slate-200 px-4 py-3">
           <div>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-800">Reservaciones</h3>
+              <h3 className="text-sm font-bold text-slate-800">{msg.reservationsTitle}</h3>
               <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
                 <Users className="h-3.5 w-3.5" /> {guests}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              {activeZoneName} · {count} {count === 1 ? "reserva" : "reservas"} · {guests} comensales
+              {msg.reservationsSummary(activeZoneName, count, guests)}
             </p>
           </div>
 
@@ -252,7 +311,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar reserva…"
+                placeholder={msg.searchPlaceholder}
                 className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-2.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
               />
             </div>
@@ -261,7 +320,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
               className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
             >
               <CalendarPlus className="h-3.5 w-3.5" />
-              Nueva
+              {msg.newButton}
             </button>
           </div>
         </div>
@@ -271,10 +330,10 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
             <div className="mt-10 flex flex-col items-center text-center text-slate-400">
               <Inbox className="mb-2 h-8 w-8 opacity-50" />
               <p className="text-sm font-medium text-slate-500">
-                {zoneTotal === 0 ? "Sin reservaciones en esta zona" : "Sin resultados"}
+                {zoneTotal === 0 ? msg.emptyZoneTitle : msg.emptySearchTitle}
               </p>
               <p className="mt-0.5 text-xs">
-                {zoneTotal === 0 ? "Las nuevas reservas aparecerán aquí" : "Probá con otro nombre o mesa"}
+                {zoneTotal === 0 ? msg.emptyZoneSub : msg.emptySearchSub}
               </p>
             </div>
           ) : (
@@ -325,7 +384,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
                             </span>
                             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                               <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
-                                Mesa {r.tableId}
+                                {msg.tablePrefix} {r.tableId}
                               </span>
                               <span className="inline-flex items-center gap-1">
                                 <Users className="h-3.5 w-3.5" /> {r.partySize}

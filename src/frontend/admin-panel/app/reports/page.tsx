@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,14 +61,14 @@ interface WaiterReportRow {
   transactionCount: number;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  Pending: 'Pendiente',
-  Confirmed: 'Confirmada',
-  Preparing: 'Preparando',
-  Ready: 'Lista',
-  Served: 'Servida',
-  Completed: 'Completada',
-  Cancelled: 'Cancelada',
+const STATUS_KEYS: Record<string, string> = {
+  Pending: 'statusPending',
+  Confirmed: 'statusConfirmed',
+  Preparing: 'statusPreparing',
+  Ready: 'statusReady',
+  Served: 'statusServed',
+  Completed: 'statusCompleted',
+  Cancelled: 'statusCancelled',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -116,6 +119,8 @@ const CustomTooltipCount = ({ active, payload, label }: any) => {
 };
 
 export default function ReportsPage() {
+  const t = useTranslations('reports');
+  const dl = dateLocale(useLocale());
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [waiterReport, setWaiterReport] = useState<WaiterReportRow[]>([]);
@@ -165,7 +170,7 @@ export default function ReportsPage() {
         order.items?.forEach((item: any) => {
           const dishId = item.dishId ?? item.DishId ?? item.id;
           if (!dishCounts[dishId]) {
-            dishCounts[dishId] = { name: item.dishName ?? item.DishName ?? 'Plato desconocido', quantity: 0, revenue: 0 };
+            dishCounts[dishId] = { name: item.dishName ?? item.DishName ?? t('unknownDish'), quantity: 0, revenue: 0 };
           }
           dishCounts[dishId].quantity += item.quantity ?? 0;
           dishCounts[dishId].revenue += item.subtotal ?? item.Subtotal ?? item.totalPrice ?? 0;
@@ -198,11 +203,11 @@ export default function ReportsPage() {
       if (error?.response?.status === 401) {
         localStorage.removeItem('admin_token');
         localStorage.removeItem('admin_user');
-        toast.error('Sesión expirada. Inicia sesión de nuevo.');
+        toast.error(t('sessionExpired'));
         window.location.href = '/login';
         return;
       }
-      toast.error('Error al cargar reportes');
+      toast.error(t('errorLoading'));
       setReportData(emptyReportData());
     } finally {
       setLoading(false);
@@ -214,10 +219,10 @@ export default function ReportsPage() {
 
   if (loading || !reportData) {
     return (
-      <MainLayout title="Reportes y Estadísticas">
+      <MainLayout title={t('pageTitle')}>
         <div className="flex flex-col items-center justify-center h-64">
           <RefreshCw className="h-8 w-8 animate-spin text-primary mb-2" />
-          <p className="text-muted-foreground">Cargando reportes...</p>
+          <p className="text-muted-foreground">{t('loadingReports')}</p>
         </div>
       </MainLayout>
     );
@@ -225,7 +230,7 @@ export default function ReportsPage() {
 
   // Derived data for charts
   const statusChartData = reportData.ordersByStatus.map(item => ({
-    name: STATUS_LABELS[item.status] || item.status,
+    name: STATUS_KEYS[item.status] ? t(STATUS_KEYS[item.status]) : item.status,
     value: item.count,
     fill: STATUS_COLORS[item.status] || '#94a3b8',
   }));
@@ -247,18 +252,18 @@ export default function ReportsPage() {
   const totalStatusOrders = statusChartData.reduce((s, i) => s + i.value, 0);
 
   return (
-    <MainLayout title="Reportes y Estadísticas">
+    <MainLayout title={t('pageTitle')}>
       <div className="space-y-6">
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Reportes y Estadísticas</h1>
-            <p className="text-muted-foreground">Análisis de ventas y operaciones</p>
+            <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
+            <p className="text-muted-foreground">{t('pageSubtitle')}</p>
           </div>
           <Button onClick={loadReports} variant="outline">
             <RefreshCw className="h-4 w-4 mr-2" />
-            Actualizar
+            {t('refresh')}
           </Button>
         </div>
 
@@ -266,18 +271,18 @@ export default function ReportsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Órdenes Totales</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('kpiTotalOrders')}</CardTitle>
               <ShoppingBag className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{reportData.totalOrders}</div>
-              <p className="text-xs text-muted-foreground">{reportData.ordersToday} hoy</p>
+              <p className="text-xs text-muted-foreground">{t('kpiToday', { count: reportData.ordersToday })}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('kpiTotalRevenue')}</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -285,30 +290,30 @@ export default function ReportsPage() {
                 RD$ {reportData.totalRevenue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground">
-                RD$ {reportData.revenueToday.toLocaleString('es-DO', { minimumFractionDigits: 2 })} hoy
+                {t('kpiRevToday', { amount: `RD$ ${reportData.revenueToday.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` })}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Clientes</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('kpiCustomers')}</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{reportData.totalCustomers}</div>
-              <p className="text-xs text-muted-foreground">Clientes registrados</p>
+              <p className="text-xs text-muted-foreground">{t('kpiCustomersRegistered')}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Platos en Menú</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('kpiDishesOnMenu')}</CardTitle>
               <ChefHat className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{reportData.totalDishes}</div>
-              <p className="text-xs text-muted-foreground">Platos disponibles</p>
+              <p className="text-xs text-muted-foreground">{t('kpiDishesAvailable')}</p>
             </CardContent>
           </Card>
         </div>
@@ -320,11 +325,11 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <BarChart2 className="h-5 w-5 text-primary" />
-              <CardTitle>Órdenes por Estado</CardTitle>
+              <CardTitle>{t('chartOrdersByStatus')}</CardTitle>
             </CardHeader>
             <CardContent>
               {statusChartData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-10">Sin datos</p>
+                <p className="text-sm text-muted-foreground text-center py-10">{t('noData')}</p>
               ) : (
                 <div className="flex flex-col items-center gap-4">
                   <ResponsiveContainer width="100%" height={260}>
@@ -344,7 +349,7 @@ export default function ReportsPage() {
                       </Pie>
                       <Tooltip
                         formatter={(value: number, name: string) => [
-                          `${value} órdenes (${((value / totalStatusOrders) * 100).toFixed(1)}%)`,
+                          `${value} ${t('orders')} (${((value / totalStatusOrders) * 100).toFixed(1)}%)`,
                           name,
                         ]}
                       />
@@ -370,11 +375,11 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <Award className="h-5 w-5 text-primary" />
-              <CardTitle>Top 5 Platos — Unidades Vendidas</CardTitle>
+              <CardTitle>{t('chartTop5Units')}</CardTitle>
             </CardHeader>
             <CardContent>
               {topDishesBarData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-10">Sin datos</p>
+                <p className="text-sm text-muted-foreground text-center py-10">{t('noData')}</p>
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart
@@ -392,7 +397,7 @@ export default function ReportsPage() {
                           return (
                             <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
                               <p className="font-semibold mb-1">{d.fullName}</p>
-                              <p className="text-primary">{d.cantidad} unidades</p>
+                              <p className="text-primary">{d.cantidad} {t('units')}</p>
                               <p className="text-green-600">{formatRD(d.ingresos)}</p>
                             </div>
                           );
@@ -420,11 +425,11 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <TrendingUp className="h-5 w-5 text-primary" />
-              <CardTitle>Top 5 Platos — Ingresos (RD$)</CardTitle>
+              <CardTitle>{t('chartTop5Revenue')}</CardTitle>
             </CardHeader>
             <CardContent>
               {topDishesBarData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-10">Sin datos</p>
+                <p className="text-sm text-muted-foreground text-center py-10">{t('noData')}</p>
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={topDishesBarData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
@@ -432,7 +437,7 @@ export default function ReportsPage() {
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={(v) => `RD$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                     <Tooltip content={<CustomTooltipRevenue />} />
-                    <Bar dataKey="ingresos" name="Ingresos" radius={[6, 6, 0, 0]}>
+                    <Bar dataKey="ingresos" name={t('revenue')} radius={[6, 6, 0, 0]}>
                       {topDishesBarData.map((_, i) => (
                         <Cell key={i} fill={DISH_COLORS[i % DISH_COLORS.length]} />
                       ))}
@@ -447,18 +452,18 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <Users className="h-5 w-5 text-primary" />
-              <CardTitle>Rendimiento de Meseros</CardTitle>
+              <CardTitle>{t('chartWaiterPerformance')}</CardTitle>
             </CardHeader>
             <CardContent>
               {waiterChartData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-10">Sin datos de meseros</p>
+                <p className="text-sm text-muted-foreground text-center py-10">{t('noDataWaiters')}</p>
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
                   <RadarChart data={waiterChartData} margin={{ top: 10, right: 30, left: 30, bottom: 10 }}>
                     <PolarGrid />
                     <PolarAngleAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <Radar name="Transacciones" dataKey="transacciones" stroke="#dc2626" fill="#dc2626" fillOpacity={0.25} />
-                    <Radar name="Ventas (k)" dataKey="ventas" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2}
+                    <Radar name={t('transactions')} dataKey="transacciones" stroke="#dc2626" fill="#dc2626" fillOpacity={0.25} />
+                    <Radar name={t('salesK')} dataKey="ventas" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2}
                       dot={{ r: 3 }}
                     />
                     <Legend />
@@ -475,7 +480,7 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <DollarSign className="h-5 w-5 text-primary" />
-              <CardTitle>Ventas y Propinas por Mesero (RD$)</CardTitle>
+              <CardTitle>{t('chartWaiterSalesTips')}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={260}>
@@ -485,8 +490,8 @@ export default function ReportsPage() {
                   <YAxis tickFormatter={(v) => `RD$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                   <Tooltip content={<CustomTooltipRevenue />} />
                   <Legend />
-                  <Bar dataKey="ventas" name="Ventas" fill="#dc2626" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="propinas" name="Propinas" fill="#f97316" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="ventas" name={t('sales')} fill="#dc2626" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="propinas" name={t('tips')} fill="#f97316" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -496,18 +501,18 @@ export default function ReportsPage() {
         {/* Waiter Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Reporte Detallado de Meseros</CardTitle>
-            <p className="text-sm text-muted-foreground">Ventas y propinas por mesero. Ver detalles para % propina legal y total a pagar.</p>
+            <CardTitle>{t('tableWaiterReportTitle')}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t('tableWaiterReportSubtitle')}</p>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2 font-semibold">Mesero</th>
-                    <th className="text-right p-2 font-semibold">Ventas</th>
-                    <th className="text-right p-2 font-semibold">Propinas</th>
-                    <th className="text-right p-2 font-semibold">Transacciones</th>
+                    <th className="text-left p-2 font-semibold">{t('colWaiter')}</th>
+                    <th className="text-right p-2 font-semibold">{t('sales')}</th>
+                    <th className="text-right p-2 font-semibold">{t('tips')}</th>
+                    <th className="text-right p-2 font-semibold">{t('transactions')}</th>
                     <th className="p-2"></th>
                   </tr>
                 </thead>
@@ -531,7 +536,7 @@ export default function ReportsPage() {
                             }
                           }}
                         >
-                          Ver detalles
+                          {t('viewDetails')}
                         </Button>
                       </td>
                     </tr>
@@ -546,29 +551,32 @@ export default function ReportsPage() {
         {waiterDetail != null && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setWaiterDetail(null)}>
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-              <h3 className="text-xl font-bold mb-2">Detalle: {waiterDetail.waiterName}</h3>
+              <h3 className="text-xl font-bold mb-2">{t('modalDetailTitle', { name: waiterDetail.waiterName })}</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Período: {waiterDetail.from && new Date(waiterDetail.from).toLocaleDateString('es-DO')} — {waiterDetail.to && new Date(waiterDetail.to).toLocaleDateString('es-DO')}
+                {t('modalPeriod', {
+                  from: waiterDetail.from ? new Date(waiterDetail.from).toLocaleDateString(dl) : '',
+                  to: waiterDetail.to ? new Date(waiterDetail.to).toLocaleDateString(dl) : '',
+                })}
               </p>
               <div className="space-y-3">
                 <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span>Ventas totales</span>
+                  <span>{t('modalTotalSales')}</span>
                   <span className="font-bold">RD$ {Number(waiterDetail.totalSales ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span>10% propina legal (referencia)</span>
+                  <span>{t('modalLegalTip')}</span>
                   <span className="font-bold">RD$ {Number(waiterDetail.legalTipTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between p-3 bg-muted rounded-lg">
-                  <span>% que le toca del 10% legal</span>
+                  <span>{t('modalWaiterShare')}</span>
                   <span className="font-bold">{Number(waiterDetail.waiterShareOfLegalPercent ?? 0)}%</span>
                 </div>
                 <div className="flex justify-between p-3 bg-green-100 rounded-lg border border-green-200">
-                  <span>Total propina a pagar al mesero</span>
+                  <span>{t('modalTipToPay')}</span>
                   <span className="font-bold text-green-800">RD$ {Number(waiterDetail.totalTipToPayToWaiter ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
-              <Button className="w-full mt-4" variant="outline" onClick={() => setWaiterDetail(null)}>Cerrar</Button>
+              <Button className="w-full mt-4" variant="outline" onClick={() => setWaiterDetail(null)}>{t('close')}</Button>
             </div>
           </div>
         )}
