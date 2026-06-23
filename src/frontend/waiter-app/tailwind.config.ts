@@ -13,6 +13,14 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        // Inter (vía variable de next/font) + fallbacks CJK del sistema (zh/ja/ko).
+        sans: [
+          'var(--font-inter)', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto',
+          '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', '"Noto Sans CJK SC"',
+          '"Malgun Gothic"', '"Noto Sans JP"', '"Noto Sans KR"', 'sans-serif',
+        ],
+      },
       colors: {
         primary: {
           50: '#f0fdf4',

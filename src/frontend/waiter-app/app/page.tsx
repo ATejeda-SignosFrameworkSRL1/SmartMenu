@@ -11,6 +11,9 @@ import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import { useWaiterNotifications, WaiterNotification } from '@/lib/useWaiterNotifications';
 import { useWaiterFloorPlan } from '@/lib/useWaiterFloorPlan';
+import { useTranslations, useLocale } from 'next-intl';
+import { dateLocale } from '@/i18n/config';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 // Carga dinámica del QrScanner para evitar chunk errors en HTTPS
 const QrScanner = dynamic(() => import('./components/QrScanner').then(mod => ({ default: mod.QrScanner })), {
@@ -95,7 +98,9 @@ function DigitalClock() {
   const m = String(now.getMinutes()).padStart(2, '0');
   const s = String(now.getSeconds()).padStart(2, '0');
   const time = `${h}:${m}:${s}`;
-  const date = now.toLocaleDateString('es-DO', {
+  const tClock = useTranslations();
+  const dlClock = dateLocale(useLocale());
+  const date = now.toLocaleDateString(dlClock, {
     weekday: 'short',
     day: '2-digit',
     month: 'short',
@@ -147,6 +152,8 @@ interface Table {
 }
 
 export default function WaiterPage() {
+  const t = useTranslations();
+  const dl = dateLocale(useLocale());
   const [user, setUser] = useState<any>(null);
   const [tables, setTables] = useState<Table[]>([]);
   const [generalOrders, setGeneralOrders] = useState<Order[]>([]);
@@ -341,13 +348,13 @@ export default function WaiterPage() {
             processedClaimIdsRef.current.add(r.id);
             setClaimedTableIds(prev => new Set(prev).add(r.tableId));
             setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(r.tableId); return s; });
-            toast(`✅ ¡Solicitud aprobada! La Mesa ${r.tableNumber} es tuya.`, {
+            toast(t('notifications.requestApproved', { table: r.tableNumber }), {
               duration: 8000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 700 }
             });
           } else if (r.status === 2 /* Rejected */ && pendingClaimTableIds.has(r.tableId)) {
             processedClaimIdsRef.current.add(r.id);
             setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(r.tableId); return s; });
-            toast(`❌ El admin no aprobó tu solicitud para la Mesa ${r.tableNumber}.`, {
+            toast(t('notifications.requestRejected', { table: r.tableNumber }), {
               duration: 10000, style: { background: '#fef2f2', color: '#991b1b', fontWeight: 700 }
             });
           }
@@ -406,13 +413,13 @@ export default function WaiterPage() {
 
       if (kr && !ks && !notifStateRef.current.kitchenReady.has(oid)) {
         notifStateRef.current.kitchenReady.add(oid);
-        toast(`🍽️ Cocina lista — Mesa ${tn} · Orden #${on}`, {
+        toast(t('notifications.kitchenReady', { table: tn, code: on }), {
           duration: 10000, style: { background: '#fef3c7', color: '#92400e', fontWeight: 700 }
         });
       }
       if (br && !bs && !notifStateRef.current.barReady.has(oid)) {
         notifStateRef.current.barReady.add(oid);
-        toast(`🍹 Bar listo — Mesa ${tn} · Orden #${on}`, {
+        toast(t('notifications.barReady', { table: tn, code: on }), {
           duration: 10000, style: { background: '#f3e8ff', color: '#6b21a8', fontWeight: 700 }
         });
       }
@@ -422,7 +429,7 @@ export default function WaiterPage() {
       const assignedTo = (o as any).assignedWaiterId ?? (o as any).AssignedWaiterId ?? null;
       if (cf && assignedTo === waiterId && !notifStateRef.current.customerFinished.has(oid)) {
         notifStateRef.current.customerFinished.add(oid);
-        toast(`✅ Mesa ${tn} terminó de comer`, {
+        toast(t('notifications.customerFinished', { table: tn }), {
           duration: 9000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 700 }
         });
       }
@@ -492,13 +499,13 @@ export default function WaiterPage() {
   const handleQrScanIdentify = useCallback(async (tableIdOrQrCode: number | string) => {
     // Si es número, buscar por número de mesa o ID
     if (typeof tableIdOrQrCode === 'number') {
-      const t = tables.find(tb => tb.tableNumber === tableIdOrQrCode || tb.id === tableIdOrQrCode);
-      if (t) {
-        setIdentifiedTableId(t.id);
-        toast.success(`Mesa ${t.tableNumber} identificada`);
+      const foundTable = tables.find(tb => tb.tableNumber === tableIdOrQrCode || tb.id === tableIdOrQrCode);
+      if (foundTable) {
+        setIdentifiedTableId(foundTable.id);
+        toast.success(t('identifyTable.identified', { number: foundTable.tableNumber }));
       } else {
         setIdentifiedTableId(tableIdOrQrCode);
-        toast.success('Mesa identificada por ID');
+        toast.success(t('identifyTable.identifiedById'));
       }
     } else {
       // Es un GUID, buscar mesa por qrCode
@@ -514,11 +521,11 @@ export default function WaiterPage() {
           toast.success(`Mesa ${table.tableNumber} identificada`);
         } else {
           console.error('❌ Respuesta sin datos válidos:', table);
-          toast.error('Mesa no encontrada');
+          toast.error(t('scanner.notFoundError'));
         }
       } catch (error) {
         console.error('❌ Error al buscar mesa por QR:', error);
-        toast.error('Error al identificar mesa');
+        toast.error(t('scanner.identifyError'));
       }
     }
     setShowQrModal(false);
@@ -533,8 +540,8 @@ export default function WaiterPage() {
 
     if (typeof tableIdOrQrCode === 'number') {
       // Si es número, ya es tableNumber o tableId
-      const t = tables.find(tb => tb.tableNumber === tableIdOrQrCode || tb.id === tableIdOrQrCode);
-      scannedTableId = t?.id ?? tableIdOrQrCode;
+      const tbl = tables.find(tb => tb.tableNumber === tableIdOrQrCode || tb.id === tableIdOrQrCode);
+      scannedTableId = tbl?.id ?? tableIdOrQrCode;
     } else {
       // Es GUID, resolver a tableId vía API
       try {
@@ -544,21 +551,21 @@ export default function WaiterPage() {
         const table = response.data;
         if (table?.id) scannedTableId = table.id;
       } catch {
-        toast.error('Error al leer el QR. Intenta de nuevo.');
+        toast.error(t('qrVerify.readError'));
         return;
       }
     }
 
     if (scannedTableId == null) {
-      toast.error('QR no reconocido');
+      toast.error(t('qrVerify.notRecognized'));
       return;
     }
 
     if (scannedTableId === qrVerifyContext.tableId) {
-      toast.success(`Mesa ${qrVerifyContext.tableNumber} verificada correctamente`, { duration: 4000 });
+      toast.success(t('qrVerify.verified', { number: qrVerifyContext.tableNumber }), { duration: 4000 });
     } else {
-      const scannedNumber = tables.find(t => t.id === scannedTableId)?.tableNumber ?? scannedTableId;
-      toast.error(`Mesa incorrecta. Escaneaste Mesa ${scannedNumber} pero esta orden es de Mesa ${qrVerifyContext.tableNumber}`, { duration: 6000 });
+      const scannedNumber = tables.find(tbl => tbl.id === scannedTableId)?.tableNumber ?? scannedTableId;
+      toast.error(t('qrVerify.wrongTable', { scanned: scannedNumber, expected: qrVerifyContext.tableNumber }), { duration: 6000 });
     }
     setQrVerifyContext(null);
   }, [qrVerifyContext, tables]);
@@ -582,12 +589,12 @@ export default function WaiterPage() {
           tableNumber = table.tableNumber;
         } else {
           console.error('❌ Respuesta sin tableNumber:', table);
-          toast.error('Mesa no encontrada');
+          toast.error(t('scanner.notFoundError'));
           return;
         }
       } catch (error) {
         console.error('❌ Error al buscar mesa por QR:', error);
-        toast.error('Error al identificar mesa');
+        toast.error(t('scanner.identifyError'));
         return;
       }
     }
@@ -597,7 +604,7 @@ export default function WaiterPage() {
       if (parts.includes(String(tableNumber))) return prev;
       return [...parts, String(tableNumber)].join(', ');
     });
-    toast.success(`Mesa ${tableNumber} añadida`);
+    toast.success(t('identifyTable.tableAdded', { number: tableNumber }));
   }, []);
 
   const handleQrError = useCallback((msg: string) => {
@@ -619,14 +626,14 @@ export default function WaiterPage() {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       await api.put(`/api/virtualtable/${vtId}/deactivate`);
-      toast.success('Mesa virtual deshecha');
+      toast.success(t('virtualTable.undoSuccess'));
       
       // Recargar datos
       await loadVirtualTables();
       await loadData(getUserId(user));
     } catch (e: any) {
       console.error('❌ Error al deshacer mesa virtual:', e);
-      toast.error(e?.response?.data?.error || 'Error al deshacer mesa virtual');
+      toast.error(e?.response?.data?.error || t('virtualTable.undoError'));
     }
   };
 
@@ -649,20 +656,20 @@ export default function WaiterPage() {
   const setBarPreparing = async (orderId: number) => {
     try {
       await api.put(`/api/order/${orderId}/bar-preparing`);
-      toast.success('Marcado como Preparando');
+      toast.success(t('bar.barPreparing'));
       loadBarOrders();
     } catch {
-      toast.error('Error al actualizar');
+      toast.error(t('bar.barPreparingError'));
     }
   };
 
   const setBarReady = async (orderId: number) => {
     try {
       await api.put(`/api/order/${orderId}/bar-ready`);
-      toast.success('Bebidas marcadas como listas');
+      toast.success(t('bar.barReadySuccess'));
       loadBarOrders();
     } catch {
-      toast.error('Error al actualizar');
+      toast.error(t('bar.barReadyError'));
     }
   };
 
@@ -829,12 +836,12 @@ export default function WaiterPage() {
         .filter(r => r._ts > now - 4 * 3600000) // descarta reservas viejas (4h)
         .sort((a, b) => Math.abs(a._ts - now) - Math.abs(b._ts - now))[0];
       if (!candidate) {
-        toast.error('No se encontró reserva activa para esta mesa');
+        toast.error(t('reservation.noActiveReservation'));
         return;
       }
       setReservedInfo(candidate as ReservedTableInfo);
     } catch {
-      toast.error('Error cargando datos de la reserva');
+      toast.error(t('reservation.loadError'));
     } finally {
       setLoadingReservation(false);
     }
@@ -938,20 +945,20 @@ export default function WaiterPage() {
     const raw = qrTableInput.trim().replace(/^table-/i, '');
     const num = parseInt(raw, 10);
     if (!Number.isNaN(num) && num > 0) {
-      const t = tables.find(tb => tb.tableNumber === num || tb.id === num);
-      if (t) {
-        setIdentifiedTableId(t.id);
+      const tb = tables.find(tbl => tbl.tableNumber === num || tbl.id === num);
+      if (tb) {
+        setIdentifiedTableId(tb.id);
         setShowQrModal(false);
         setQrTableInput('');
-        toast.success(`Mesa ${t.tableNumber} identificada`);
+        toast.success(t('identifyTable.identified', { number: tb.tableNumber }));
       } else {
         setIdentifiedTableId(num);
         setShowQrModal(false);
         setQrTableInput('');
-        toast.success('Mesa identificada por ID');
+        toast.success(t('identifyTable.identifiedById'));
       }
     } else {
-      toast.error('Ingresa un número de mesa válido (ej. 5 o table-5)');
+      toast.error(t('identifyTable.invalidNumber'));
     }
   };
 
@@ -959,12 +966,12 @@ export default function WaiterPage() {
     const ids = virtualTableIds.split(/[\s,]+/).map(s => parseInt(s.trim(), 10)).filter(n => !Number.isNaN(n) && n > 0);
 
     if (ids.length === 0) {
-      toast.error('Debes escanear al menos 2 mesas', { duration: 4000 });
+      toast.error(t('virtualTable.minTwoRequired'), { duration: 4000 });
       return;
     }
-    
+
     if (ids.length < 2) {
-      toast.error('Las mesas virtuales requieren mínimo 2 mesas', { duration: 4000 });
+      toast.error(t('virtualTable.minTwoAlert'), { duration: 4000 });
       return;
     }
     
@@ -975,7 +982,7 @@ export default function WaiterPage() {
     
     if (tableObjects.length !== ids.length) {
       const missingIds = ids.filter(id => !tableObjects.some(tb => tb?.tableNumber === id || tb?.id === id));
-      toast.error(`Mesas no encontradas: ${missingIds.join(', ')}`, { duration: 4000 });
+      toast.error(t('virtualTable.tablesNotFound', { ids: missingIds.join(', ') }), { duration: 4000 });
       return;
     }
     
@@ -993,7 +1000,7 @@ export default function WaiterPage() {
       const tableNumbers = alreadyInVirtual.map(t => `#${t.tableNumber}`).join(', ');
       const vtNames = [...new Set(alreadyInVirtual.map(t => t.vtName))].join(', ');
       toast.error(
-        `⚠️ No se puede crear: Las mesas ${tableNumbers} ya pertenecen a la mesa virtual "${vtNames}".\n\nPrimero debes deshacer esa mesa virtual.`, 
+        t('virtualTable.alreadyInVirtual', { tables: tableNumbers, name: vtNames }),
         { duration: 6000 }
       );
       return;
@@ -1007,20 +1014,20 @@ export default function WaiterPage() {
     const tableIdList = tableObjects.map(t => t!.id);
     
     if (tableIdList.length < 2) {
-      toast.error('Debes seleccionar al menos 2 mesas válidas');
+      toast.error(t('virtualTable.minTwoValid'));
       return;
     }
-    
+
     try {
       const token = localStorage.getItem('waiter_token');
       if (!token) {
-        toast.error('No hay token de autenticación');
+        toast.error(t('virtualTable.noAuthToken'));
         console.error('❌ No hay token');
         return;
       }  
       const uid = getUserId(user);
       if (!uid || uid === 0 || Number.isNaN(uid)) {
-        toast.error('Usuario no válido - ID: ' + uid);
+        toast.error(t('virtualTable.invalidUser', { id: uid }));
         console.error('❌ No hay user ID válido:', uid);
         return;
       }
@@ -1043,7 +1050,7 @@ export default function WaiterPage() {
       
       const response = await api.post('/api/virtualtable', payload);
       
-      toast.success(`Mesa virtual creada: ${virtualTableName}`);
+      toast.success(t('virtualTable.createdSuccess', { name: virtualTableName }));
       
       // Cerrar modal y limpiar
       setShowVirtualTableModal(false);
@@ -1072,7 +1079,7 @@ export default function WaiterPage() {
       console.error('❌ Error completo al crear mesa virtual:', e);
       console.error('❌ Error response:', e?.response);
       console.error('❌ Error response data:', e?.response?.data);
-      const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Error al crear mesa virtual';
+      const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || t('virtualTable.createError');
       
       // Mostrar error de manera más visible
       if (errorMsg.includes('ya están en otra mesa virtual') || errorMsg.includes('ya están ocupadas')) {
@@ -1113,13 +1120,13 @@ export default function WaiterPage() {
         processedByWaiterId: uid,
         requiresFiscalReceipt: false,
       }, { headers: { Authorization: `Bearer ${token}` } });
-      toast.success(`Mesa virtual cobrada — RD$ ${Number(res.data?.total ?? 0).toFixed(2)} (${res.data?.ordersPaid ?? 0} órdenes)`, { duration: 6000 });
+      toast.success(t('virtualTable.vtPaidSuccess', { total: Number(res.data?.total ?? 0).toFixed(2), count: res.data?.ordersPaid ?? 0 }), { duration: 6000 });
       setShowVtPayModal(null);
       setShowVirtualTableDetailsModal(null);
       await loadVirtualTables();
       if (uid) await loadData(uid);
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al cobrar la mesa virtual');
+      toast.error(e?.response?.data?.error || t('virtualTable.vtPaidError'));
     } finally {
       setVtPaying(false);
     }
@@ -1130,12 +1137,12 @@ export default function WaiterPage() {
     const orderId = getOrderId(showMoveModal.order);
     try {
       await api.put(`/api/order/${orderId}/move-to-table/${moveTargetTableId}`);
-      toast.success('Comensal movido a la nueva mesa');
+      toast.success(t('moveModal.success'));
       setShowMoveModal(null);
       setMoveTargetTableId(null);
       loadData(getUserId(user!));
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al mover');
+      toast.error(e?.response?.data?.error || t('moveModal.error'));
     }
   };
 
@@ -1169,7 +1176,7 @@ export default function WaiterPage() {
   const confirmTransferSelected = async () => {
     const tableIds = [...selectedTableIds];
     if (tableIds.length === 0 || !transferToWaiterId) {
-      toast.error('Selecciona mesas y mesero destino');
+      toast.error(t('transfer.selectAndWaiter'));
       return;
     }
     setSendingTransfer(true);
@@ -1182,11 +1189,11 @@ export default function WaiterPage() {
         toWaiterId: transferToWaiterId,
         tableIds
       });
-      toast.success(`Solicitud de transferencia enviada (${tableIds.length} mesa${tableIds.length !== 1 ? 's' : ''})`);
+      toast.success(t('transfer.sent', { count: tableIds.length, s: tableIds.length !== 1 ? 's' : '' }));
       exitTransferMode();
       if (user) { loadData(getUserId(user)); loadVirtualTables(); }
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al enviar');
+      toast.error(e?.response?.data?.error || t('transfer.sendError'));
     } finally {
       setSendingTransfer(false);
     }
@@ -1195,21 +1202,21 @@ export default function WaiterPage() {
   const acceptTransfer = async (requestId: number) => {
     try {
       await api.put(`/api/tabletransfer/${requestId}/accept?waiterId=${getUserId(user)}`);
-      toast.success('Transferencia aceptada');
+      toast.success(t('transfer.accepted'));
       loadPendingTransfers();
       loadData(getUserId(user!));
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error');
+      toast.error(e?.response?.data?.error || t('common.error'));
     }
   };
 
   const rejectTransfer = async (requestId: number) => {
     try {
       await api.put(`/api/tabletransfer/${requestId}/reject?waiterId=${getUserId(user)}`);
-      toast.success('Transferencia rechazada');
+      toast.success(t('transfer.rejected'));
       loadPendingTransfers();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error');
+      toast.error(e?.response?.data?.error || t('common.error'));
     }
   };
 
@@ -1226,11 +1233,11 @@ export default function WaiterPage() {
     try {
       // assign-waiter ya pone la orden en Confirmed y la asigna al mesero; evita doble request que podía dejar la mesa en General
       await api.put(`/api/order/${orderId}/assign-waiter/${waiterId}`);
-      toast.success('Orden confirmada y asignada a ti');
+      toast.success(t('orders.confirmed'));
       await loadData(waiterId);
       return true;
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? err?.message ?? 'Error al confirmar orden';
+      const msg = err?.response?.data?.error ?? err?.message ?? t('orders.confirmOrder');
       toast.error(msg);
       return false;
     }
@@ -1240,11 +1247,11 @@ export default function WaiterPage() {
     if (!user) return;
     try {
       await api.put(`/api/order/${orderId}/status`, { newStatus: 'Served' });
-      toast.success('Orden marcada como servida');
+      toast.success(t('orders.markServedSuccess'));
       loadData(getUserId(user));
       loadVirtualTables();
     } catch (error) {
-      toast.error('Error al marcar como servida');
+      toast.error(t('orders.markServedError'));
     }
   };
 
@@ -1252,7 +1259,7 @@ export default function WaiterPage() {
   const markTableAsServed = async (orders: Order[]) => {
     const readyOrders = orders.filter(o => (o as any).status === 'Ready' || (o as any).Status === 'Ready');
     if (readyOrders.length === 0) {
-      toast('No hay órdenes listas para marcar como servidas');
+      toast(t('orders.noReadyOrders'));
       return;
     }
     if (!user) return;
@@ -1260,11 +1267,11 @@ export default function WaiterPage() {
       for (const order of readyOrders) {
         await api.put(`/api/order/${getOrderId(order)}/status`, { newStatus: 'Served' });
       }
-      toast.success(`${readyOrders.length} orden(es) marcada(s) como servida(s)`);
+      toast.success(t('orders.markServedMultiple', { count: readyOrders.length }));
       loadData(getUserId(user));
       loadVirtualTables();
     } catch (error) {
-      toast.error('Error al marcar como servidas');
+      toast.error(t('orders.markServedError'));
     }
   };
 
@@ -1405,17 +1412,17 @@ export default function WaiterPage() {
       const ordenSaldada = res?.data?.completed !== false;
       if (pmSplitType === 'ByComensal' && !ordenSaldada) {
         // Pago parcial por comensal: refrescar partes y MANTENER el modal abierto.
-        toast.success(res?.data?.message ?? 'Parte cobrada.');
+        toast.success(res?.data?.message ?? t('payment.paymentPartial'));
         await loadPaidParts(orderId);
         loadData(getUserId(user));
       } else {
-        toast.success('Cobro registrado. Mesa en limpieza.');
+        toast.success(t('payment.paymentCollected'));
         setShowPaymentModal(false);
         setSelectedOrder(null);
         loadData(getUserId(user));
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'Error al registrar cobro';
+      const msg = err?.response?.data?.error ?? t('payment.confirmPayment');
       toast.error(msg);
     } finally {
       setPmProcessing(false);
@@ -1426,12 +1433,12 @@ export default function WaiterPage() {
     if (!user) return;
     try {
       await api.put(`/api/table/${tableId}/status`, { newStatus: 'Available' });
-      toast.success('Mesa liberada');
+      toast.success(t('tables.releaseTable'));
       // Actualización optimista: marcar la mesa como Available en la UI de inmediato
       setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: 'Available' } : t));
       await loadData(getUserId(user));
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'Error al liberar mesa';
+      const msg = err?.response?.data?.error ?? t('tables.releaseTable');
       toast.error(msg);
     }
   };
@@ -1473,9 +1480,9 @@ export default function WaiterPage() {
     try {
       const res = await api.post('/api/waitershift/start', { waiterId: uid });
       setActiveShift({ id: res.data.id, startTime: res.data.startTime, durationMinutes: 0 });
-      toast.success('Turno iniciado');
+      toast.success(t('shift.startShift'));
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al iniciar turno');
+      toast.error(err?.response?.data?.error || t('shift.startShiftError'));
     }
   };
 
@@ -1493,7 +1500,7 @@ export default function WaiterPage() {
       const res = await api.get(`/api/waitershift/summary/${uid}`);
       setShiftSummary(res.data);
     } catch {
-      toast.error('Error al cargar el resumen del turno');
+      toast.error(t('shift.loadSummaryError'));
     } finally {
       setShiftLoadingModal(false);
     }
@@ -1512,7 +1519,7 @@ export default function WaiterPage() {
       const uid = getUserId(user);
       if (uid) loadData(uid);
     } catch {
-      toast.error('Error al cerrar turno');
+      toast.error(t('shift.endShiftError'));
     }
   };
 
@@ -1541,7 +1548,7 @@ export default function WaiterPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando...</p>
+          <p className="text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -1592,13 +1599,13 @@ export default function WaiterPage() {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 py-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Pedidos en cola: {queueCount}</h2>
-          <p className="text-sm text-gray-600 mb-6">Bebidas pendientes de preparación</p>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">{t('bar.queueCount', { count: queueCount })}</h2>
+          <p className="text-sm text-gray-600 mb-6">{t('bar.pendingDrinks')}</p>
           {queueCount === 0 ? (
             <div className="bg-white rounded-lg shadow p-12 text-center">
               <Wine className="w-20 h-20 text-gray-300 mx-auto mb-4" />
-              <p className="text-lg text-gray-600">No hay bebidas pendientes</p>
-              <p className="text-sm text-gray-500">Los nuevos pedidos aparecerán aquí</p>
+              <p className="text-lg text-gray-600">{t('bar.noPending')}</p>
+              <p className="text-sm text-gray-500">{t('bar.newOrdersHere')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1611,7 +1618,7 @@ export default function WaiterPage() {
                     className={`bg-white rounded-lg shadow border-2 p-4 ${isUrgent ? 'border-red-500 bg-red-50/50' : 'border-amber-200 bg-amber-50/30'}`}
                   >
                     <div className="flex items-center justify-between mb-4 pb-2 border-b">
-                      <span className="text-xl font-bold">Mesa {order.tableNumber ?? order.TableNumber ?? '-'}</span>
+                      <span className="text-xl font-bold">{t('common.table_short', { number: order.tableNumber ?? order.TableNumber ?? '-' })}</span>
                       <span className={`font-mono font-bold px-2 py-1 rounded text-sm ${isUrgent ? 'bg-red-600 text-white' : 'bg-amber-600 text-white'}`}>
                         {elapsed}m
                       </span>
@@ -1631,7 +1638,7 @@ export default function WaiterPage() {
                           className="flex-1 py-2 px-4 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium flex items-center justify-center gap-2"
                         >
                           <Clock className="w-5 h-5" />
-                          Preparando
+                          {t('bar.preparing')}
                         </button>
                       ) : !(order.barReady ?? order.BarReady) ? (
                         <button
@@ -1639,7 +1646,7 @@ export default function WaiterPage() {
                           className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
                         >
                           <Check className="w-5 h-5" />
-                          Listo
+                          {t('bar.ready')}
                         </button>
                       ) : (
                         <button
@@ -1647,7 +1654,7 @@ export default function WaiterPage() {
                           className="flex-1 py-2 px-4 bg-gray-300 text-gray-600 rounded-lg font-medium flex items-center justify-center gap-2 cursor-not-allowed"
                         >
                           <Check className="w-5 h-5" />
-                          Bebidas listas
+                          {t('bar.drinksReady')}
                         </button>
                       )}
                     </div>
@@ -1670,17 +1677,17 @@ export default function WaiterPage() {
             {/* IZQUIERDA: título + Ventas/Propinas */}
             <div className="flex flex-wrap items-center gap-3 sm:gap-5">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Waiter App</h1>
-                <p className="text-sm text-gray-600">Bienvenido, {user?.firstName || user?.name || 'Usuario'}</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('header.title')}</h1>
+                <p className="text-sm text-gray-600">{t('header.welcome', { name: user?.firstName || user?.name || 'Usuario' })}</p>
               </div>
               {/* Estadísticas */}
               <div className="flex gap-2 sm:gap-4">
                 <div className="bg-green-50 px-4 py-2 rounded-lg">
-                  <p className="text-xs text-green-600 font-medium">Ventas</p>
+                  <p className="text-xs text-green-600 font-medium">{t('header.sales')}</p>
                   <p className="text-lg font-bold text-green-700">RD$ {stats.totalSales.toFixed(2)}</p>
                 </div>
                 <div className="bg-blue-50 px-4 py-2 rounded-lg">
-                  <p className="text-xs text-blue-600 font-medium">Propinas</p>
+                  <p className="text-xs text-blue-600 font-medium">{t('header.tips')}</p>
                   <p className="text-lg font-bold text-blue-700">RD$ {stats.totalTips.toFixed(2)}</p>
                 </div>
               </div>
@@ -1691,7 +1698,7 @@ export default function WaiterPage() {
               <button
                 onClick={() => { setShowNotifPanel(v => !v); if (!showNotifPanel) markAllRead(); }}
                 className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                title="Notificaciones"
+                title={t('header.notifications')}
               >
                 <Bell className={`w-6 h-6 ${unreadCount > 0 ? 'text-amber-500 animate-bounce' : 'text-gray-500'}`} />
                 {unreadCount > 0 && (
@@ -1706,19 +1713,20 @@ export default function WaiterPage() {
               {activeShift && (
                 <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-semibold">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                  En turno
+                  {t('header.onShift')}
                 </span>
               )}
 
               {/* Reloj digital — movido a la derecha, antes de Salir */}
               <DigitalClock />
+              <LanguageSwitcher />
 
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
                 <LogOut className="w-4 h-4" />
-                Salir
+                {t('header.logout')}
               </button>
             </div>
           </div>
@@ -1735,14 +1743,13 @@ export default function WaiterPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-white">
-                    {shiftStep === 1 && 'Resumen de Turno'}
-                    {shiftStep === 2 && 'Traspaso de Mesas'}
-                    {shiftStep === 3 && '¡Turno Cerrado!'}
+                    {shiftStep === 1 && t('shift.summaryTitle')}
+                    {shiftStep === 2 && t('shift.handoverTitle')}
+                    {shiftStep === 3 && t('shift.closedTitle')}
                   </h2>
                   {activeShift && shiftStep !== 3 && (
                     <p className="text-sm text-white/80 mt-0.5">
-                      Iniciado a las {new Date(activeShift.startTime).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                      {' · '}{Math.round((Date.now() - new Date(activeShift.startTime).getTime()) / 60000)} min
+                      {t('shift.startedAt', { time: new Date(activeShift.startTime).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true }), minutes: Math.round((Date.now() - new Date(activeShift.startTime).getTime()) / 60000) })}
                     </p>
                   )}
                 </div>
@@ -1766,7 +1773,7 @@ export default function WaiterPage() {
                   {shiftLoadingModal ? (
                     <div className="text-center py-10">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto mb-3" />
-                      <p className="text-sm text-gray-500">Cargando resumen...</p>
+                      <p className="text-sm text-gray-500">{t('shift.loadingSummary')}</p>
                     </div>
                   ) : shiftSummary ? (
                     <>
@@ -1775,7 +1782,7 @@ export default function WaiterPage() {
                         <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-xl p-3">
                           <span className="text-orange-500 text-lg">⚠️</span>
                           <p className="text-sm text-orange-700 font-medium">
-                            Tienes {shiftSummary.pendingBillingCount} mesa{shiftSummary.pendingBillingCount !== 1 ? 's' : ''} con cuenta pendiente de cobro.
+                            {t('tables.pendingBillingAlert', { count: shiftSummary.pendingBillingCount, tables: shiftSummary.pendingBillingCount !== 1 ? 'mesas' : 'mesa' })}
                           </p>
                         </div>
                       )}
@@ -1784,24 +1791,24 @@ export default function WaiterPage() {
                       {shiftSummary.activeTables?.length > 0 ? (
                         <div>
                           <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                            Mesas abiertas ({shiftSummary.activeTables.length})
+                            {t('shift.openTablesList', { count: shiftSummary.activeTables.length })}
                           </p>
                           <div className="space-y-2">
-                            {shiftSummary.activeTables.map((t: any) => (
-                              <div key={t.orderId} className="border border-gray-200 rounded-xl p-3">
+                            {shiftSummary.activeTables.map((tbl: any) => (
+                              <div key={tbl.orderId} className="border border-gray-200 rounded-xl p-3">
                                 <div className="flex items-center justify-between mb-1">
                                   <div className="flex items-center gap-2">
-                                    <span className="font-bold text-gray-800">Mesa {t.tableNumber}</span>
-                                    <span className="text-xs text-gray-400">{t.zoneName}</span>
-                                    {t.hasPendingPayment && (
-                                      <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-semibold">Por cobrar</span>
+                                    <span className="font-bold text-gray-800">Mesa {tbl.tableNumber}</span>
+                                    <span className="text-xs text-gray-400">{tbl.zoneName}</span>
+                                    {tbl.hasPendingPayment && (
+                                      <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-semibold">{t('tables.hasPendingPayment')}</span>
                                     )}
                                   </div>
-                                  <span className="font-bold text-gray-800">${t.total.toFixed(2)}</span>
+                                  <span className="font-bold text-gray-800">${tbl.total.toFixed(2)}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs text-gray-500">
-                                  <span>{t.itemCount} plato{t.itemCount !== 1 ? 's' : ''}{t.customerName ? ` · ${t.customerName}` : ''}</span>
-                                  {t.tip > 0 && <span className="text-emerald-600 font-medium">Propina: ${t.tip.toFixed(2)}</span>}
+                                  <span>{tbl.itemCount} plato{tbl.itemCount !== 1 ? 's' : ''}{tbl.customerName ? ` · ${tbl.customerName}` : ''}</span>
+                                  {tbl.tip > 0 && <span className="text-emerald-600 font-medium">Propina: ${tbl.tip.toFixed(2)}</span>}
                                 </div>
                               </div>
                             ))}
@@ -1809,12 +1816,12 @@ export default function WaiterPage() {
                         </div>
                       ) : (
                         <div className="bg-gray-50 rounded-xl p-4 text-center">
-                          <p className="text-sm text-gray-500">No tienes mesas abiertas.</p>
+                          <p className="text-sm text-gray-500">{t('tables.noOpenTables')}</p>
                         </div>
                       )}
                     </>
                   ) : (
-                    <p className="text-sm text-gray-500 text-center py-6">No se pudo cargar el resumen.</p>
+                    <p className="text-sm text-gray-500 text-center py-6">{t('tables.noSummary')}</p>
                   )}
                 </>
               )}
@@ -1825,8 +1832,7 @@ export default function WaiterPage() {
                   {shiftSummary?.activeTables?.length > 0 ? (
                     <>
                       <p className="text-sm text-gray-600">
-                        Tienes <strong>{shiftSummary.activeTables.length} mesa{shiftSummary.activeTables.length !== 1 ? 's' : ''} abiertas</strong>.
-                        Selecciona a quién se las entregas:
+                        {t('shift.step2Intro', { count: shiftSummary.activeTables.length, s: shiftSummary.activeTables.length !== 1 ? 's' : '' })}
                       </p>
                       <div className="space-y-2">
                         <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
@@ -1834,8 +1840,8 @@ export default function WaiterPage() {
                           <input type="radio" name="shiftTransfer" checked={endShiftTransferTo === null}
                             onChange={() => setEndShiftTransferTo(null)} className="accent-amber-500" />
                           <div>
-                            <p className="text-sm font-semibold text-gray-700">Dejar sin asignar</p>
-                            <p className="text-xs text-gray-400">Cualquier mesero podrá reclamarlas</p>
+                            <p className="text-sm font-semibold text-gray-700">{t('transfer.leaveUnassigned')}</p>
+                            <p className="text-xs text-gray-400">{t('transfer.leaveUnassignedHint')}</p>
                           </div>
                         </label>
                         {waiterList.filter(w => w.id !== getUserId(user)).map(w => (
@@ -1845,7 +1851,7 @@ export default function WaiterPage() {
                               onChange={() => setEndShiftTransferTo(w.id)} className="accent-amber-500" />
                             <div>
                               <p className="text-sm font-semibold text-gray-700">{w.firstName} {w.lastName}</p>
-                              <p className="text-xs text-gray-400">Transferir {shiftSummary.activeTables.length} mesa{shiftSummary.activeTables.length !== 1 ? 's' : ''}</p>
+                              <p className="text-xs text-gray-400">{t('transfer.transferToWaiter', { count: shiftSummary.activeTables.length, s: shiftSummary.activeTables.length !== 1 ? 's' : '' })}</p>
                             </div>
                           </label>
                         ))}
@@ -1854,8 +1860,8 @@ export default function WaiterPage() {
                   ) : (
                     <div className="bg-emerald-50 rounded-xl p-4 text-center">
                       <p className="text-2xl mb-2">✅</p>
-                      <p className="text-sm font-semibold text-emerald-700">No tienes mesas abiertas.</p>
-                      <p className="text-xs text-emerald-600 mt-1">Puedes cerrar el turno directamente.</p>
+                      <p className="text-sm font-semibold text-emerald-700">{t('shift.noOpenTablesStep2')}</p>
+                      <p className="text-xs text-emerald-600 mt-1">{t('shift.canClose')}</p>
                     </div>
                   )}
                 </>
@@ -1866,23 +1872,23 @@ export default function WaiterPage() {
                 <div className="text-center space-y-5">
                   <div className="text-5xl">✅</div>
                   <div>
-                    <p className="text-lg font-bold text-gray-800">Turno cerrado</p>
-                    <p className="text-sm text-gray-500 mt-1">Duración: {shiftResult.durationFormatted}</p>
+                    <p className="text-lg font-bold text-gray-800">{t('shift.closedDuration')}</p>
+                    <p className="text-sm text-gray-500 mt-1">{t('shift.duration', { formatted: shiftResult.durationFormatted })}</p>
                   </div>
                   {shiftResult.transferredTables > 0 ? (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 space-y-1">
                       <p className="text-sm font-bold text-amber-700">
-                        {shiftResult.transferredTables} mesa{shiftResult.transferredTables !== 1 ? 's' : ''} y pedidos activos traspasados
+                        {t('shift.transferredTables', { count: shiftResult.transferredTables, s: shiftResult.transferredTables !== 1 ? 's' : '' })}
                       </p>
                       {shiftResult.transferredTo ? (
-                        <p className="text-sm text-amber-600">Entregadas a <strong>{shiftResult.transferredTo}</strong></p>
+                        <p className="text-sm text-amber-600">{t('shift.deliveredTo', { name: shiftResult.transferredTo })}</p>
                       ) : (
-                        <p className="text-sm text-amber-600">Dejadas disponibles para reclamar</p>
+                        <p className="text-sm text-amber-600">{t('shift.leftAvailable')}</p>
                       )}
                     </div>
                   ) : (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-4">
-                      <p className="text-sm font-semibold text-emerald-700">No había mesas abiertas al cerrar.</p>
+                      <p className="text-sm font-semibold text-emerald-700">{t('shift.noOpenAtClose')}</p>
                     </div>
                   )}
                 </div>
@@ -1894,18 +1900,18 @@ export default function WaiterPage() {
               {shiftStep === 1 && (
                 <>
                   <button onClick={closeShiftModal} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                   <button onClick={() => setShiftStep(2)} disabled={shiftLoadingModal}
                     className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-sm font-semibold disabled:opacity-50">
-                    Continuar →
+                    {t('common.continue')}
                   </button>
                 </>
               )}
               {shiftStep === 2 && (
                 <>
                   <button onClick={() => setShiftStep(1)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">
-                    ← Atrás
+                    {t('common.back')}
                   </button>
                   <button onClick={endShift} className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-sm font-semibold">
                     Confirmar cierre
@@ -1914,7 +1920,7 @@ export default function WaiterPage() {
               )}
               {shiftStep === 3 && (
                 <button onClick={closeShiftModal} className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 text-sm font-semibold">
-                  Listo
+                  {t('common.done')}
                 </button>
               )}
             </div>
@@ -1928,15 +1934,15 @@ export default function WaiterPage() {
           <div className="flex items-center justify-between px-5 py-4 border-b bg-gray-50">
             <div className="flex items-center gap-2">
               <Bell className="w-5 h-5 text-amber-500" />
-              <h2 className="font-bold text-gray-900 text-lg">Notificaciones</h2>
+              <h2 className="font-bold text-gray-900 text-lg">{t('notifications.panelTitle')}</h2>
               {!connected && (
-                <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Sin conexión</span>
+                <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{t('header.noConnection')}</span>
               )}
             </div>
             <div className="flex items-center gap-2">
               {notifications.length > 0 && (
                 <button onClick={clearAll} className="text-xs text-gray-500 hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50">
-                  Limpiar todo
+                  {t('notifications.clearAll')}
                 </button>
               )}
               <button onClick={() => setShowNotifPanel(false)} className="p-1 rounded-lg hover:bg-gray-200 transition-colors">
@@ -1949,8 +1955,8 @@ export default function WaiterPage() {
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-8">
                 <Bell className="w-16 h-16 text-gray-200 mb-4" />
-                <p className="text-gray-500 font-medium">Sin notificaciones</p>
-                <p className="text-sm text-gray-400 mt-1">Las alertas de tus mesas aparecerán aquí</p>
+                <p className="text-gray-500 font-medium">{t('notifications.empty')}</p>
+                <p className="text-sm text-gray-400 mt-1">{t('notifications.emptyHint')}</p>
               </div>
             ) : (
               <div className="divide-y">
@@ -1967,7 +1973,7 @@ export default function WaiterPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 leading-snug">{n.message}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {n.timestamp.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                        {n.timestamp.toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true })}
                       </p>
                     </div>
                     <button
@@ -1996,13 +2002,13 @@ export default function WaiterPage() {
               view === 'general' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            Mesas General ({(() => {
+            {t('nav.generalTables', { count: (() => {
               const vtTableIds = virtualTablesList.flatMap((vt: any) => {
                 const vtTables = Array.isArray(vt?.tables) ? vt.tables : (Array.isArray(vt?.Tables) ? vt.Tables : []);
-                return vtTables.map((t: any) => t?.id ?? t?.Id);
+                return vtTables.map((tbl: any) => tbl?.id ?? tbl?.Id);
               });
               return generalOrders.filter(o => !vtTableIds.includes((o as any).tableId ?? (o as any).TableId)).length;
-            })()})
+            })() })}
           </button>
           <button
             onClick={() => setView('my-tables')}
@@ -2010,7 +2016,7 @@ export default function WaiterPage() {
               view === 'my-tables' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            Mis Mesas ({myOrders.length})
+            {t('nav.myTables', { count: myOrders.length })}
           </button>
           {floorPlanEnabled && (
             <button
@@ -2019,7 +2025,7 @@ export default function WaiterPage() {
                 view === 'plano' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              Plano
+              {t('nav.floorPlan')}
             </button>
           )}
         </div>
@@ -2030,7 +2036,7 @@ export default function WaiterPage() {
           className="ml-auto flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
         >
           <Users className="w-5 h-5" />
-          Crear mesa virtual
+          {t('nav.createVirtualTable')}
         </button>
         {/* CHANGE-TABLE.2: botón eliminado — "Mover comensal a otra mesa" del modal de orden ya cubre el caso. */}
         {/* Transferir mesas — visible SOLO en la vista "Mis Mesas" (un waiter no transfiere mesas
@@ -2052,7 +2058,7 @@ export default function WaiterPage() {
             title={transferMode ? 'Salir del modo transferencia' : 'Transferir mis mesas a otro mesero'}
           >
             <Share2 className="w-5 h-5" />
-            {transferMode ? 'TRANSFIRIENDO… (toca para salir)' : 'TRANSFERIR MESAS'}
+            {transferMode ? t('nav.transferring') : t('nav.transferTables')}
           </button>
         ) : pendingTransfers.length > 0 ? (
           <button
@@ -2062,7 +2068,7 @@ export default function WaiterPage() {
             title="Tienes transferencias pendientes por aceptar"
           >
             <Share2 className="w-5 h-5" />
-            {`Transferencias (${pendingTransfers.length})`}
+            {t('nav.transfers', { count: pendingTransfers.length })}
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">{pendingTransfers.length}</span>
           </button>
         ) : null}
@@ -2073,7 +2079,7 @@ export default function WaiterPage() {
           const dayLabel = selectedDay
             ? (() => {
                 const [y, m, d] = selectedDay.split('-').map(Number);
-                return new Date(y, m - 1, d).toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric', month: 'short' });
+                return new Date(y, m - 1, d).toLocaleDateString(dl, { weekday: 'short', day: 'numeric', month: 'short' });
               })()
             : 'Selecciona';
           return (
@@ -2088,7 +2094,7 @@ export default function WaiterPage() {
               >
                 <Clock className={`w-4 h-4 ${isCustomDay ? 'text-blue-500' : 'text-gray-400'}`} />
                 <span className={`text-xs font-semibold ${isCustomDay ? 'text-blue-700' : 'text-gray-500'}`}>
-                  Reservas
+                  {t('nav.reservations')}
                 </span>
                 <span className={`text-xs font-medium capitalize ${isCustomDay ? 'text-blue-700' : 'text-slate-700'}`}>
                   {dayLabel}
@@ -2096,7 +2102,7 @@ export default function WaiterPage() {
                 {reservedTableIdsInRange.size > 0 && (
                   <span
                     className="ml-0.5 text-[10px] font-bold text-yellow-700 bg-yellow-100 border border-yellow-300 px-1.5 py-0.5 rounded-full"
-                    title={`${reservedTableIdsInRange.size} mesa(s) reservada(s) ese día`}
+                    title={t('datePicker.reservedCount', { count: reservedTableIdsInRange.size })}
                   >
                     {reservedTableIdsInRange.size}
                   </span>
@@ -2116,18 +2122,18 @@ export default function WaiterPage() {
                         type="button"
                         onClick={() => setDpMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
                         className="p-1.5 rounded-lg hover:bg-gray-100"
-                        aria-label="Mes anterior"
+                        aria-label={t('datePicker.prevMonth')}
                       >
                         <ChevronLeft className="w-4 h-4 text-slate-600" />
                       </button>
                       <p className="text-sm font-bold capitalize text-slate-700">
-                        {dpMonth.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' })}
+                        {dpMonth.toLocaleDateString(dl, { month: 'long', year: 'numeric' })}
                       </p>
                       <button
                         type="button"
                         onClick={() => setDpMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
                         className="p-1.5 rounded-lg hover:bg-gray-100"
-                        aria-label="Mes siguiente"
+                        aria-label={t('datePicker.nextMonth')}
                       >
                         <ChevronRight className="w-4 h-4 text-slate-600" />
                       </button>
@@ -2178,14 +2184,14 @@ export default function WaiterPage() {
                         onClick={() => { setSelectedDay(todayKey); setDpMonth(new Date()); setShowDatePicker(false); }}
                         className="text-xs font-semibold text-blue-600 hover:text-blue-700"
                       >
-                        Hoy
+                        {t('common.today')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setShowDatePicker(false)}
                         className="text-xs font-semibold text-slate-500 hover:text-slate-700"
                       >
-                        Cerrar
+                        {t('common.close')}
                       </button>
                     </div>
                   </div>
@@ -2199,7 +2205,7 @@ export default function WaiterPage() {
             onClick={() => { setIdentifiedTableId(null); }}
             className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
           >
-            Cerrar vista mesa
+            {t('nav.closeMesaView')}
           </button>
         )}
       </div>
@@ -2208,13 +2214,13 @@ export default function WaiterPage() {
       {pendingTransfers.length > 0 && (
         <div className="max-w-7xl mx-auto px-4 pb-2">
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="font-medium text-amber-800 mb-2">Transferencias pendientes de aceptar</p>
+            <p className="font-medium text-amber-800 mb-2">{t('transfer.pending')}</p>
             <div className="flex flex-wrap gap-2">
               {pendingTransfers.map((tr: any) => (
                 <div key={tr.id} className="flex items-center gap-2 bg-white rounded px-3 py-2 border">
-                  <span>{tr.fromWaiterName} → Mesas {Array.isArray(tr.tableIds) ? tr.tableIds.join(', ') : ''}</span>
-                  <button onClick={() => acceptTransfer(tr.id)} className="text-green-600 font-medium">Aceptar</button>
-                  <button onClick={() => rejectTransfer(tr.id)} className="text-red-600 font-medium">Rechazar</button>
+                  <span>{t('transfer.from', { from: tr.fromWaiterName, tables: Array.isArray(tr.tableIds) ? tr.tableIds.join(', ') : '' })}</span>
+                  <button onClick={() => acceptTransfer(tr.id)} className="text-green-600 font-medium">{t('transfer.accept')}</button>
+                  <button onClick={() => rejectTransfer(tr.id)} className="text-red-600 font-medium">{t('transfer.reject')}</button>
                 </div>
               ))}
             </div>
@@ -2228,7 +2234,7 @@ export default function WaiterPage() {
           <div className="bg-white rounded-lg shadow border-2 border-indigo-200 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h2 className="text-lg font-bold text-gray-900">
-                Mesa identificada: {tables.find(t => t.id === identifiedTableId)?.tableNumber ?? identifiedTableId}
+                {t('tables.identifiedTable', { number: tables.find(tb => tb.id === identifiedTableId)?.tableNumber ?? identifiedTableId })}
               </h2>
               <div className="flex gap-2">
                 <button
@@ -2236,11 +2242,11 @@ export default function WaiterPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   <Utensils className="w-4 h-4" />
-                  Hacer pedido manual
+                  {t('tables.makeManualOrder')}
                 </button>
               </div>
             </div>
-            <p className="text-sm text-gray-600 mb-2">Pedidos de esta mesa (en tiempo real):</p>
+            <p className="text-sm text-gray-600 mb-2">{t('tables.ordersRealTime')}</p>
             <div className="space-y-2">
               {[...generalOrders, ...myOrders]
                 .filter(o => ((o as any).tableId ?? (o as any).TableId) === identifiedTableId)
@@ -2252,7 +2258,7 @@ export default function WaiterPage() {
                   </div>
                 ))}
               {[...generalOrders, ...myOrders].filter(o => ((o as any).tableId ?? (o as any).TableId) === identifiedTableId).length === 0 && (
-                <p className="text-gray-500 text-sm">No hay pedidos activos en esta mesa.</p>
+                <p className="text-gray-500 text-sm">{t('tables.noActiveOrders')}</p>
               )}
             </div>
           </div>
@@ -2265,8 +2271,8 @@ export default function WaiterPage() {
           // Vista Plano del salón (solo lectura) — click en mesa → ver el pedido
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">Plano del salón</h2>
-              <span className="text-xs text-gray-500">Toca una mesa para ver su pedido</span>
+              <h2 className="text-xl font-bold text-gray-900">{t('tables.floorPlan')}</h2>
+              <span className="text-xs text-gray-500">{t('tables.floorPlanHint')}</span>
             </div>
             <div style={{ height: 560 }} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
               <MultiZoneFloorPlanViewer
@@ -2280,15 +2286,15 @@ export default function WaiterPage() {
                   const tid = Number(id);
                   const order = [...generalOrders, ...myOrders].find((o: any) => Number(o.tableId ?? o.TableId) === tid);
                   if (order) { setOrderModalOrder(order); setShowOrderModal(true); return; }
-                  const t = tables.find((x: any) => Number(x.id) === tid);
-                  if (t) {
-                    if (t.status === 'Reserved') { openReservedTableInfo(t.id); return; }
-                    if (t.status === 'Available') { setConfirmIdentifyTable({ id: t.id, tableNumber: t.tableNumber, zoneName: t.zoneName }); return; }
+                  const tb = tables.find((x: any) => Number(x.id) === tid);
+                  if (tb) {
+                    if (tb.status === 'Reserved') { openReservedTableInfo(tb.id); return; }
+                    if (tb.status === 'Available') { setConfirmIdentifyTable({ id: tb.id, tableNumber: tb.tableNumber, zoneName: tb.zoneName }); return; }
                   }
                   const fpTable = floorPlanData?.zones?.flatMap((z: any) => z.tables ?? []).find((x: any) => Number(x.id) === tid);
                   const attendedBy = fpTable?.waiterName ?? fpTable?.waiter ?? null;
-                  if (attendedBy) toast(`Esta mesa está siendo atendida por ${attendedBy}`, { icon: '🧑‍🍳', duration: 5000 });
-                  else toast('Esta mesa está ocupada', { icon: 'ℹ️' });
+                  if (attendedBy) toast(t('tables.occupiedByWaiter', { name: attendedBy }), { icon: '🧑‍🍳', duration: 5000 });
+                  else toast(t('tables.occupied'), { icon: 'ℹ️' });
                 }}
               />
             </div>
@@ -2320,7 +2326,7 @@ export default function WaiterPage() {
                 return (
                   <>
               <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Todas las Mesas ({tablesNotMine.length})
+                {t('tables.allTables', { count: tablesNotMine.length })}
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {tablesNotMine.map((table) => {
@@ -2357,7 +2363,7 @@ export default function WaiterPage() {
                         <div className="text-3xl font-bold mb-1 flex items-center justify-center gap-1">
                           #{table.tableNumber}
                           {hasUnassigned && (
-                            <span className="text-red-600 animate-pulse" style={{ animationDuration: '0.7s' }} title="Pedido sin asignar">!</span>
+                            <span className="text-red-600 animate-pulse" style={{ animationDuration: '0.7s' }} title={t('tables.newOrder')}>!</span>
                           )}
                         </div>
                         <div className="text-xs text-gray-600 mb-2">{table.zoneName}</div>
@@ -2365,10 +2371,10 @@ export default function WaiterPage() {
                           {hasUnassigned ? (
                             <span className="text-red-600 flex items-center justify-center gap-1 font-semibold">
                               <AlertExclamation />
-                              Pedido nuevo
+                              {t('tables.newOrder')}
                             </span>
                           ) : (
-                            <span className="text-gray-500">Sin orden</span>
+                            <span className="text-gray-500">{t('tables.noOrder')}</span>
                           )}
                         </div>
                       </div>
@@ -2390,13 +2396,13 @@ export default function WaiterPage() {
           // Vista Mis Mesas (Asignadas)
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Mis Mesas Asignadas
+              {t('tables.myAssigned')}
             </h2>
             {/* TAREA 5: banda de ayuda mientras el modo transferencia está activo */}
             {transferMode && (
               <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 flex items-center gap-2 text-sm text-teal-800">
                 <Share2 className="w-4 h-4 flex-shrink-0" />
-                <span>Modo transferencia activo: toca las mesas que quieras transferir. Selecciona el mesero destino abajo y confirma.</span>
+                <span>{t('transfer.transferMode')}</span>
               </div>
             )}
             {(() => {
@@ -2419,7 +2425,7 @@ export default function WaiterPage() {
               return filteredMyOrders.length === 0 ? (
                 <div className="bg-white rounded-lg shadow p-8 text-center">
                   <Utensils className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-600">No tienes mesas asignadas</p>
+                  <p className="text-gray-600">{t('tables.noAssigned')}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -2534,7 +2540,7 @@ export default function WaiterPage() {
                               <span className="text-sm leading-none mt-0.5">{s.icon}</span>
                               <span className="flex-1 text-[11px] font-semibold leading-snug">{nt.message}</span>
                               {tn.length > 1 && <span className="text-[10px] font-bold opacity-70 mt-0.5">+{tn.length - 1}</span>}
-                              <button onClick={(e) => { e.stopPropagation(); markRead(nt.id); }} className="opacity-60 hover:opacity-100 mt-0.5" aria-label="Descartar aviso">
+                              <button onClick={(e) => { e.stopPropagation(); markRead(nt.id); }} className="opacity-60 hover:opacity-100 mt-0.5" aria-label={t('notifications.dismissLabel')}>
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             </div>
@@ -2554,17 +2560,17 @@ export default function WaiterPage() {
                           <div className="mt-2 flex flex-col gap-1">
                             {requestedBill && (
                               <span className="w-full px-2 py-1 rounded-md bg-red-100 text-red-700 text-xs font-bold flex items-center justify-center gap-1 animate-pulse" style={{ animationDuration: '1.2s' }}>
-                                💳 Pidió la cuenta
+                                {t('tables.billRequested')}
                               </span>
                             )}
                             {customerFinished && (
                               <span className="w-full px-2 py-1 rounded-md bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center gap-1">
-                                🔔 Terminó de comer
+                                {t('tables.finishedEating')}
                               </span>
                             )}
                             {showReadyToServe && (
                               <span className="w-full px-2 py-1 rounded-md bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center gap-1">
-                                ✓ Listo para servir
+                                {t('tables.readyToServe')}
                               </span>
                             )}
                           </div>
@@ -2578,14 +2584,14 @@ export default function WaiterPage() {
                               const oid = getOrderId(order);
                               try {
                                 await api.put(`/api/order/${oid}/status`, { newStatus: 'Served' });
-                                toast.success('Orden marcada como servida ✓');
+                                toast.success(t('orders.markServedSuccess'));
                                 loadData(getUserId(user));
                                 loadVirtualTables();
-                              } catch (err: any) { toast.error(err?.response?.data?.error || 'Error al marcar como servida'); }
+                              } catch (err: any) { toast.error(err?.response?.data?.error || t('orders.markServedError')); }
                             }}
                             className="w-full mt-2 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-bold flex items-center justify-center gap-1"
                           >
-                            ✅ Marcar como Servida
+                            {t('tables.markServed')}
                           </button>
                         )}
                         {/* Liberar Mesa: aparece cuando está Served o Completed, habilitado solo si ya cobró */}
@@ -2601,9 +2607,9 @@ export default function WaiterPage() {
                                 ? 'bg-red-500 hover:bg-red-600 text-white cursor-pointer'
                                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                             }`}
-                            title={!isPaid ? 'Debe cobrar antes de liberar la mesa' : ''}
+                            title={!isPaid ? t('tables.releaseTableTitle') : ''}
                           >
-                            🔓 Liberar Mesa{!isPaid ? ' (pendiente cobro)' : ''}
+                            {!isPaid ? t('tables.releaseTablePending') : t('tables.releaseTable')}
                           </button>
                         )}
                       </div>
@@ -2616,7 +2622,7 @@ export default function WaiterPage() {
             {/* Sección Mesas Virtuales */}
             {virtualTablesList.length > 0 && (
               <div className="mt-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">🔗 Mesas Virtuales</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">{t('virtualTable.virtualTables')}</h3>
                 <div className="space-y-3">
                   {virtualTablesList.map((vt: any) => {
                     const vtId = vt?.id ?? vt?.Id;
@@ -2642,10 +2648,10 @@ export default function WaiterPage() {
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <p className="font-bold text-lg text-purple-900">{vtName}</p>
-                            <p className="text-xs text-purple-700">{vtTables.length} mesas unidas</p>
+                            <p className="text-xs text-purple-700">{t('virtualTable.tablesJoined', { count: vtTables.length })}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm text-gray-600">{vtOrders.length} orden(es)</p>
+                            <p className="text-sm text-gray-600">{t('virtualTable.orderCount', { count: vtOrders.length })}</p>
                             <p className="text-xl font-bold text-purple-900">RD$ {totalVT.toFixed(2)}</p>
                           </div>
                         </div>
@@ -2663,9 +2669,9 @@ export default function WaiterPage() {
                         {/* Resumen rápido */}
                         <div className="bg-purple-100 rounded-lg p-2 mb-3 text-xs text-purple-800">
                           {vtOrders.length > 0 ? (
-                            <span>{vtOrders.length} orden(es) activa(s) · Total: RD$ {totalVT.toFixed(2)}</span>
+                            <span>{t('virtualTable.activeOrders', { count: vtOrders.length, amount: totalVT.toFixed(2) })}</span>
                           ) : (
-                            <span>Sin órdenes activas</span>
+                            <span>{t('virtualTable.noActiveOrders')}</span>
                           )}
                         </div>
 
@@ -2681,20 +2687,20 @@ export default function WaiterPage() {
                             }}
                             className="flex-1 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 flex items-center justify-center gap-2"
                           >
-                            Ver detalles
+                            {t('virtualTable.viewDetails')}
                           </button>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              if (confirm(`¿Deshacer la mesa virtual "${vtName}"?`)) {
+                              if (confirm(t('virtualTable.undoConfirm', { name: vtName }))) {
                                 deleteVirtualTable(vtId);
                               }
                             }}
                             className="flex-1 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center justify-center gap-2"
                           >
-                            Deshacer
+                            {t('virtualTable.undo')}
                           </button>
                         </div>
                       </div>
@@ -2719,17 +2725,17 @@ export default function WaiterPage() {
                   <span className="text-red-600 font-bold text-xl animate-pulse" style={{ animationDuration: '0.8s' }}>!</span>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">Pedido sin asignar</h2>
-                  <p className="text-sm text-gray-600">Mesa {orderModalOrder.tableNumber} · Pedido #{shortOrder(orderModalOrder.orderNumber)}</p>
+                  <h2 className="text-xl font-bold text-gray-900">{t('tables.unassignedOrder')}</h2>
+                  <p className="text-sm text-gray-600">{t('tables.tableZone', { number: orderModalOrder.tableNumber, code: shortOrder(orderModalOrder.orderNumber) })}</p>
                   {(orderModalOrder as any).customerName && (
-                    <p className="text-xs text-primary-600 font-medium mt-0.5">Cliente: {(orderModalOrder as any).customerName}</p>
+                    <p className="text-xs text-primary-600 font-medium mt-0.5">{t('tables.clientLabel', { name: (orderModalOrder as any).customerName })}</p>
                   )}
                 </div>
               </div>
               <button
                 onClick={() => setShowOrderModal(false)}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                aria-label="Cerrar"
+                aria-label={t('common.close')}
               >
                 <XCircle className="w-6 h-6" />
               </button>
@@ -2743,7 +2749,7 @@ export default function WaiterPage() {
                   {hasAllergies && allergiesList.length > 0 && (
                     <div className="mb-3 rounded-lg bg-red-50 border border-red-200 p-2 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                      <span className="text-red-800 font-semibold text-sm uppercase">ALERGIA: {allergiesList.join(', ')}</span>
+                      <span className="text-red-800 font-semibold text-sm uppercase">{t('orders.alergy', { list: allergiesList.join(', ') })}</span>
                     </div>
                   )}
                   <div className="mb-4 space-y-2">
@@ -2757,11 +2763,11 @@ export default function WaiterPage() {
                         </div>
                         {(item.notes ?? item.Notes ?? item.customizations ?? item.Customizations ?? item.allergies ?? item.Allergies ?? item.sideDish ?? item.SideDish ?? item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) && (
                           <div className="mt-1 text-xs text-gray-600 space-y-0.5 pl-1 border-l-2 border-amber-200">
-                            {(item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) ? <div>🔥 Preferencia / Término: {item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking}</div> : null}
-                            {item.sideDish ?? item.SideDish ? <div>Guarnición: {item.sideDish ?? item.SideDish}</div> : null}
-                            {item.notes ?? item.Notes ? <div>Notas: {item.notes ?? item.Notes}</div> : null}
-                            {item.customizations ?? item.Customizations ? <div>Personalización: {item.customizations ?? item.Customizations}</div> : null}
-                            {item.allergies ?? item.Allergies ? <div className="text-red-700 font-medium">⚠ Alergia: {item.allergies ?? item.Allergies}</div> : null}
+                            {(item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) ? <div>{t('orders.preference', { value: item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking })}</div> : null}
+                            {item.sideDish ?? item.SideDish ? <div>{t('orders.garnishLabel', { value: item.sideDish ?? item.SideDish })}</div> : null}
+                            {item.notes ?? item.Notes ? <div>{t('orders.noteLabel', { value: item.notes ?? item.Notes })}</div> : null}
+                            {item.customizations ?? item.Customizations ? <div>{t('orders.customization', { value: item.customizations ?? item.Customizations })}</div> : null}
+                            {item.allergies ?? item.Allergies ? <div className="text-red-700 font-medium">{t('orders.allergy_item', { value: item.allergies ?? item.Allergies })}</div> : null}
                           </div>
                         )}
                       </div>
@@ -2794,7 +2800,7 @@ export default function WaiterPage() {
                       title="Abrir cámara para escanear el QR físico de la mesa y verificar antes de tomar"
                     >
                       <QrCode className="w-4 h-4" />
-                      Identificar mesa por QR
+                      {t('tables.identifyByQr')}
                     </button>
                   )}
                   <button
@@ -2807,7 +2813,7 @@ export default function WaiterPage() {
                     }}
                     className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
                   >
-                    {isVirtualTableOrder ? 'Confirmar' : 'Confirmar y Asignar a Mí'}
+                    {isVirtualTableOrder ? t('orders.confirm') : t('orders.confirmAndAssign')}
                   </button>
                 </div>
               );
@@ -2876,8 +2882,8 @@ export default function WaiterPage() {
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">Cobrar — Mesa {selectedOrder.tableNumber}</h2>
-                    <p className="text-sm text-gray-500">Pedido #{shortOrder(selectedOrder.orderNumber)}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{t('payment.title', { number: selectedOrder.tableNumber })}</h2>
+                    <p className="text-sm text-gray-500">{t('payment.orderRef', { code: shortOrder(selectedOrder.orderNumber) })}</p>
                   </div>
                   <button
                     onClick={() => { setShowPaymentModal(false); setSelectedOrder(null); }}
@@ -2897,18 +2903,18 @@ export default function WaiterPage() {
                   if (!hasPrefs) return null;
                   return (
                     <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm space-y-2">
-                      <p className="font-semibold text-indigo-800">Preferencias del cliente</p>
+                      <p className="font-semibold text-indigo-800">{t('payment.clientPrefs')}</p>
                       <div className="flex flex-wrap gap-3 text-indigo-700">
-                        {clientMethod && <span>Método: <strong>{clientMethod === 'Cash' ? 'Efectivo' : clientMethod === 'Card' ? 'Tarjeta' : clientMethod === 'Transfer' ? 'Transferencia' : 'Mixto'}</strong></span>}
-                        {clientTipPct > 0 && <span>Propina: <strong>{clientTipPct}%</strong></span>}
-                        {clientTipPct === 0 && clientTipAmt > 0 && <span>Propina: <strong>RD$ {clientTipAmt.toFixed(2)}</strong></span>}
+                        {clientMethod && <span>{t('payment.method', { method: clientMethod === 'Cash' ? t('payment.methodNameCash') : clientMethod === 'Card' ? t('payment.methodNameCard') : clientMethod === 'Transfer' ? t('payment.methodNameTransfer') : t('payment.methodNameMixed') })}</span>}
+                        {clientTipPct > 0 && <span>{t('payment.tipPct', { pct: clientTipPct })}</span>}
+                        {clientTipPct === 0 && clientTipAmt > 0 && <span>{t('payment.tip', { amount: clientTipAmt.toFixed(2) })}</span>}
                       </div>
                       {clientFiscal && (
                         <div className="flex items-start gap-2 pt-2 border-t border-indigo-200 text-indigo-800">
                           <span className="text-base">📄</span>
                           <div>
-                            <span className="font-semibold">Comprobante fiscal solicitado</span>
-                            {clientRNC && <span className="ml-2 text-indigo-600">RNC: <strong>{clientRNC}</strong></span>}
+                            <span className="font-semibold">{t('payment.fiscalReceipt')}</span>
+                            {clientRNC && <span className="ml-2 text-indigo-600">{t('payment.rnc', { value: clientRNC })}</span>}
                             {clientBiz && <p className="text-indigo-700 font-medium mt-0.5">{clientBiz}</p>}
                           </div>
                         </div>
@@ -2919,7 +2925,7 @@ export default function WaiterPage() {
 
                 {/* Resumen de la orden */}
                 <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Resumen</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.summary')}</p>
                   <div className="space-y-1 max-h-28 overflow-y-auto mb-2">
                     {orderItems.map((item: any, idx: number) => (
                       <div key={item.id ?? idx} className="flex justify-between text-sm text-gray-700">
@@ -2929,25 +2935,25 @@ export default function WaiterPage() {
                     ))}
                   </div>
                   <div className="border-t pt-2 space-y-1 text-sm">
-                    <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>RD$ {orderSubtotal.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-gray-600"><span>ITBIS (18%)</span><span>RD$ {orderTax.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-gray-600"><span>{t('common.subtotal')}</span><span>RD$ {orderSubtotal.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-gray-600"><span>{t('payment.itbis')}</span><span>RD$ {orderTax.toFixed(2)}</span></div>
                     <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t">
-                      <span>Total</span><span className="text-green-700">RD$ {orderTotal.toFixed(2)}</span>
+                      <span>{t('common.total')}</span><span className="text-green-700">RD$ {orderTotal.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* División de cuenta */}
                 <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">División de cuenta</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.splitTitle')}</p>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {([
-                      { value: 'None',         label: 'Cuenta única' },
-                      { value: 'ByComensal',   label: 'Por comensal' },
-                      { value: 'ByTime',       label: 'Por parte' },
-                      { value: 'Proportional', label: 'Proporcional' },
-                      { value: 'ByCategory',   label: 'Por categoría' },
-                    ] as const).map(({ value, label }) => (
+                      { value: 'None' as const,         label: t('payment.splitNone') },
+                      { value: 'ByComensal' as const,   label: t('payment.splitByComensal') },
+                      { value: 'ByTime' as const,       label: t('payment.splitByTime') },
+                      { value: 'Proportional' as const, label: t('payment.splitProportional') },
+                      { value: 'ByCategory' as const,   label: t('payment.splitByCategory') },
+                    ]).map(({ value, label }) => (
                       <button
                         key={value}
                         type="button"
@@ -2974,11 +2980,11 @@ export default function WaiterPage() {
                   {pmSplitType === 'ByComensal' && (
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <label className="text-gray-600">Entre</label>
+                        <label className="text-gray-600">{t('payment.between')}</label>
                         <select value={pmSplitParts} onChange={e => { const n = parseInt(e.target.value) || 2; setPmSplitParts(n); const u = Array.from({ length: n }, (_, i) => i + 1).find(x => !pmPaidParts.includes(x)) ?? 1; setPmPayPartIndex(u); }} className="border text-gray-900 rounded px-2 py-1">
                           {[2,3,4,5,6].map(n => <option key={n} value={n}>{n} personas</option>)}
                         </select>
-                        <span className="text-gray-600">c/u ≈ RD$ {equalShareBC.toFixed(2)}</span>
+                        <span className="text-gray-600">{t('payment.eachApprox', { amount: equalShareBC.toFixed(2) })}</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {Array.from({ length: pmSplitParts }, (_, i) => i + 1).map(n => {
@@ -2987,31 +2993,31 @@ export default function WaiterPage() {
                           return (
                             <button key={n} type="button" disabled={paid} onClick={() => setPmPayPartIndex(n)}
                               className={`px-3 py-1.5 rounded-lg border text-sm ${paid ? 'bg-green-50 border-green-500 text-green-700' : active ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold' : 'border-gray-200 text-gray-700'}`}>
-                              Parte {n}{paid ? ' ✓' : ''}
+                              {paid ? t('payment.partPaid', { n }) : t('payment.partN', { n })}
                             </button>
                           );
                         })}
                       </div>
-                      <p className="text-gray-600">Faltan <strong>{pmSplitParts - pmPaidParts.length}</strong> de {pmSplitParts} · Cobrando parte {pmPayPartIndex}: <strong>RD$ {myPortion.toFixed(2)}</strong></p>
+                      <p className="text-gray-600">{t('payment.partsRemaining', { remaining: pmSplitParts - pmPaidParts.length, total: pmSplitParts, part: pmPayPartIndex, amount: myPortion.toFixed(2) })}</p>
                     </div>
                   )}
 
                   {pmSplitType === 'ByTime' && (
                     <div className="space-y-2 text-sm">
-                      <p className="text-gray-600">Ingresa el monto de cada parte (deben sumar RD$ {orderTotal.toFixed(2)})</p>
+                      <p className="text-gray-600">{t('payment.enterAmounts', { total: orderTotal.toFixed(2) })}</p>
                       <div className="flex gap-2 flex-wrap">
-                        <input type="number" step="0.01" placeholder="Parte 1" value={pmByTimePart1}
+                        <input type="number" step="0.01" placeholder={t('payment.part1')} value={pmByTimePart1}
                           onChange={e => { setPmByTimePart1(e.target.value); setPmByTimePart2((orderTotal - (parseFloat(e.target.value) || 0)).toFixed(2)); }}
                           className="border text-gray-900 rounded px-2 py-1 w-36" />
-                        <input type="number" step="0.01" placeholder="Parte 2" value={pmByTimePart2}
+                        <input type="number" step="0.01" placeholder={t('payment.part2')} value={pmByTimePart2}
                           onChange={e => { setPmByTimePart2(e.target.value); setPmByTimePart1((orderTotal - (parseFloat(e.target.value) || 0)).toFixed(2)); }}
                           className="border text-gray-900 rounded px-2 py-1 w-36" />
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="text-gray-600">Cobrar:</label>
+                        <label className="text-gray-600">{t('payment.collect')}</label>
                         <select value={pmByTimePayPart} onChange={e => setPmByTimePayPart(parseInt(e.target.value) as 1|2)} className="border text-gray-900 rounded px-2 py-1">
-                          <option value={1}>Parte 1 — RD$ {(parseFloat(pmByTimePart1) || 0).toFixed(2)}</option>
-                          <option value={2}>Parte 2 — RD$ {(parseFloat(pmByTimePart2) || 0).toFixed(2)}</option>
+                          <option value={1}>{t('payment.part1Option', { amount: (parseFloat(pmByTimePart1) || 0).toFixed(2) })}</option>
+                          <option value={2}>{t('payment.part2Option', { amount: (parseFloat(pmByTimePart2) || 0).toFixed(2) })}</option>
                         </select>
                       </div>
                     </div>
@@ -3020,12 +3026,12 @@ export default function WaiterPage() {
                   {pmSplitType === 'Proportional' && (
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2">
-                        <label className="text-gray-600">Entre</label>
+                        <label className="text-gray-600">{t('payment.between')}</label>
                         <select value={pmSplitParts} onChange={e => { setPmSplitParts(parseInt(e.target.value) || 2); setPmPropAssign({}); }} className="border text-gray-900 rounded px-2 py-1">
                           {[2,3,4,5,6].map(n => <option key={n} value={n}>{n} personas</option>)}
                         </select>
                       </div>
-                      <p className="text-gray-700 font-medium">Asigna cada ítem:</p>
+                      <p className="text-gray-700 font-medium">{t('payment.assignItems')}</p>
                       <div className="space-y-1 max-h-28 overflow-y-auto">
                         {orderItems.map((item: any, idx: number) => {
                           const id = item.id ?? item.Id ?? idx;
@@ -3033,14 +3039,14 @@ export default function WaiterPage() {
                             <div key={id} className="flex justify-between items-center text-gray-900">
                               <span className="truncate flex-1 text-xs">{item.quantity}x {item.dishName ?? item.DishName}</span>
                               <select value={pmPropAssign[id] ?? 1} onChange={e => setPmPropAssign(prev => ({ ...prev, [id]: parseInt(e.target.value) }))} className="border text-gray-900 rounded px-1 py-0.5 text-xs w-24 ml-2">
-                                {Array.from({ length: pmSplitParts }, (_, i) => i+1).map(n => <option key={n} value={n}>Persona {n}</option>)}
+                                {Array.from({ length: pmSplitParts }, (_, i) => i+1).map(n => <option key={n} value={n}>{t('payment.personN', { n })}</option>)}
                               </select>
                             </div>
                           );
                         })}
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="text-gray-600">Cobrar persona</label>
+                        <label className="text-gray-600">{t('payment.collectPerson')}</label>
                         <select value={pmPayAsPerson} onChange={e => setPmPayAsPerson(parseInt(e.target.value))} className="border text-gray-900 rounded px-2 py-1">
                           {Array.from({ length: pmSplitParts }, (_, i) => i+1).map(n => <option key={n} value={n}>{n}</option>)}
                         </select>
@@ -3051,25 +3057,25 @@ export default function WaiterPage() {
 
                   {pmSplitType === 'ByCategory' && (
                     <div className="space-y-2 text-sm">
-                      <p className="text-gray-700 font-medium">Elige la categoría a cobrar:</p>
+                      <p className="text-gray-700 font-medium">{t('payment.chooseCategory')}</p>
                       <div className="flex flex-wrap gap-2">
                         {Object.entries(catTotals).map(([cat, total]) => (
                           <button key={cat} type="button" onClick={() => setPmPayCategory(cat)}
                             className={`px-3 py-1.5 rounded-lg border text-sm ${pmPayCategory === cat ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}>
-                            {cat}: RD$ {total.toFixed(2)}
+                            {t('payment.chargeCategory', { category: cat, amount: total.toFixed(2) })}
                           </button>
                         ))}
                       </div>
-                      {pmPayCategory && <p className="text-gray-600">Cobrar <strong>{pmPayCategory}</strong>: <strong>RD$ {myPortion.toFixed(2)}</strong></p>}
+                      {pmPayCategory && <p className="text-gray-600">{t('payment.chargeCategory', { category: pmPayCategory, amount: myPortion.toFixed(2) })}</p>}
                     </div>
                   )}
                 </div>
 
                 {/* Propina */}
                 <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Propina</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.tipTitle')}</p>
                   <div className="grid grid-cols-4 gap-2 mb-2">
-                    {[{pct:10,label:'10%'},{pct:15,label:'15%'},{pct:20,label:'20%'},{pct:0,label:'Sin'}].map(({pct,label}) => (
+                    {[{pct:10,label:'10%'},{pct:15,label:'15%'},{pct:20,label:'20%'},{pct:0,label:t('payment.noTip')}].map(({pct,label}) => (
                       <button key={label} type="button"
                         onClick={() => { setPmTipPct(pct); setPmCustomTip(''); }}
                         className={`py-2 rounded-lg border text-sm font-semibold ${pmTipPct === pct && !pmCustomTip ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}>
@@ -3077,25 +3083,25 @@ export default function WaiterPage() {
                       </button>
                     ))}
                   </div>
-                  <input type="number" placeholder="Monto personalizado..." value={pmCustomTip}
+                  <input type="number" placeholder={t('payment.customTipPlaceholder')} value={pmCustomTip}
                     onChange={e => { setPmCustomTip(e.target.value); setPmTipPct(0); }}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-indigo-500" />
                   {tipAmt > 0 && (
                     <div className="mt-2 p-2 bg-green-50 rounded text-sm flex justify-between text-green-800">
-                      <span>Propina</span><span className="font-bold">RD$ {tipAmt.toFixed(2)}</span>
+                      <span>{t('payment.tipRow')}</span><span className="font-bold">RD$ {tipAmt.toFixed(2)}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Método de pago */}
                 <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Método de Pago</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.methodTitle')}</p>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'Cash',     name: 'Efectivo' },
-                      { id: 'Card',     name: 'Tarjeta' },
-                      { id: 'Transfer', name: 'Transferencia' },
-                      { id: 'Mixed',    name: 'Mixto' },
+                      { id: 'Cash',     name: t('payment.methodCash') },
+                      { id: 'Card',     name: t('payment.methodCard') },
+                      { id: 'Transfer', name: t('payment.methodTransfer') },
+                      { id: 'Mixed',    name: t('payment.methodMixed') },
                     ].map(m => (
                       <button key={m.id} type="button" onClick={() => setPmMethod(m.id)}
                         className={`py-2.5 rounded-lg border text-sm font-semibold transition-all ${pmMethod === m.id ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}>
@@ -3106,12 +3112,12 @@ export default function WaiterPage() {
 
                   {pmMethod === 'Mixed' && (
                     <div className="mt-3 space-y-2 text-sm">
-                      <p className="text-gray-600 font-medium">Distribuye el monto por método:</p>
-                      <p className="text-xs text-gray-500">Total a cobrar: RD$ {myPortion.toFixed(2)}</p>
+                      <p className="text-gray-600 font-medium">{t('payment.mixedDistribute')}</p>
+                      <p className="text-xs text-gray-500">{t('payment.mixedTotal', { amount: myPortion.toFixed(2) })}</p>
                       {[
-                        { label: 'Efectivo',       value: pmMixedCash,     setter: setPmMixedCash },
-                        { label: 'Tarjeta',        value: pmMixedCard,     setter: setPmMixedCard },
-                        { label: 'Transferencia',  value: pmMixedTransfer, setter: setPmMixedTransfer },
+                        { label: t('payment.methodNameCash'),      value: pmMixedCash,     setter: setPmMixedCash },
+                        { label: t('payment.methodNameCard'),      value: pmMixedCard,     setter: setPmMixedCard },
+                        { label: t('payment.methodNameTransfer'),  value: pmMixedTransfer, setter: setPmMixedTransfer },
                       ].map(({ label, value, setter }) => (
                         <div key={label} className="flex items-center gap-2">
                           <label className="w-32 text-gray-700">{label}</label>
@@ -3121,8 +3127,8 @@ export default function WaiterPage() {
                         </div>
                       ))}
                       <div className={`flex justify-between font-semibold pt-1 ${Math.abs(mixedTotal - myPortion) < 0.01 ? 'text-green-700' : 'text-red-600'}`}>
-                        <span>Suma ingresada</span>
-                        <span>RD$ {mixedTotal.toFixed(2)} {Math.abs(mixedTotal - myPortion) < 0.01 ? '✓' : `(faltan RD$ ${(myPortion - mixedTotal).toFixed(2)})`}</span>
+                        <span>{t('payment.mixedSumOk')}</span>
+                        <span>RD$ {mixedTotal.toFixed(2)} {Math.abs(mixedTotal - myPortion) < 0.01 ? '✓' : t('payment.mixedMissing', { amount: (myPortion - mixedTotal).toFixed(2) })}</span>
                       </div>
                     </div>
                   )}
@@ -3131,10 +3137,10 @@ export default function WaiterPage() {
                 {/* Total final */}
                 {pmMethod !== 'Mixed' && (
                   <div className="bg-gray-50 rounded-lg p-3 space-y-1">
-                    <div className="flex justify-between text-sm text-gray-700"><span>A cobrar</span><span>RD$ {myPortion.toFixed(2)}</span></div>
-                    {tipAmt > 0 && <div className="flex justify-between text-sm text-green-700"><span>Propina</span><span>RD$ {tipAmt.toFixed(2)}</span></div>}
+                    <div className="flex justify-between text-sm text-gray-700"><span>{t('payment.toPay')}</span><span>RD$ {myPortion.toFixed(2)}</span></div>
+                    {tipAmt > 0 && <div className="flex justify-between text-sm text-green-700"><span>{t('payment.tipRow')}</span><span>RD$ {tipAmt.toFixed(2)}</span></div>}
                     <div className="flex justify-between font-bold text-gray-900 pt-1 border-t border-gray-200">
-                      <span>Total</span><span className="text-indigo-700">RD$ {grandTotal.toFixed(2)}</span>
+                      <span>{t('common.total')}</span><span className="text-indigo-700">RD$ {grandTotal.toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -3147,19 +3153,19 @@ export default function WaiterPage() {
                   onClick={() => { setShowPaymentModal(false); setSelectedOrder(null); }}
                   className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => { if (selectedOrder) collectPayment(selectedOrder); }}
                   disabled={pmProcessing || (pmMethod === 'Mixed' && Math.abs(mixedTotal - myPortion) > 0.01)}
-                  title={pmMethod === 'Mixed' && Math.abs(mixedTotal - myPortion) > 0.01 ? `Los montos del pago mixto deben sumar RD$ ${myPortion.toFixed(2)}` : ''}
+                  title={pmMethod === 'Mixed' && Math.abs(mixedTotal - myPortion) > 0.01 ? t('payment.mixedMismatchTitle', { amount: myPortion.toFixed(2) }) : ''}
                   className="flex-1 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {pmProcessing
-                    ? 'Procesando...'
+                    ? t('common.processing')
                     : (pmMethod === 'Mixed' && Math.abs(mixedTotal - myPortion) > 0.01)
-                      ? `Mixto: falta RD$ ${(myPortion - mixedTotal).toFixed(2)}`
-                      : 'Confirmar cobro'}
+                      ? t('payment.mixedMismatch', { amount: (myPortion - mixedTotal).toFixed(2) })
+                      : t('payment.confirmPayment')}
                 </button>
               </div>
             </div>
@@ -3179,14 +3185,14 @@ export default function WaiterPage() {
           >
             {/* Header con número de mesa grande */}
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white px-6 py-5 text-center">
-              <p className="text-xs uppercase tracking-widest text-indigo-200 mb-1">Atender Mesa</p>
+              <p className="text-xs uppercase tracking-widest text-indigo-200 mb-1">{t('identifyTable.headerLabel')}</p>
               <p className="text-5xl font-black leading-none">#{confirmIdentifyTable.tableNumber}</p>
               <p className="text-sm text-indigo-100 mt-1">{confirmIdentifyTable.zoneName}</p>
             </div>
 
             <div className="px-6 py-5 space-y-4">
               <p className="text-center text-sm text-gray-700">
-                ¿Confirmas que vas a atender esta mesa? El sistema te asignará como mesero responsable.
+                {t('identifyTable.confirm')}
               </p>
 
               <div className="flex flex-col gap-2.5">
@@ -3194,19 +3200,19 @@ export default function WaiterPage() {
                 <button
                   onClick={() => {
                     setIdentifiedTableId(confirmIdentifyTable.id);
-                    toast.success(`Mesa #${confirmIdentifyTable.tableNumber} identificada`);
+                    toast.success(t('identifyTable.identified', { number: confirmIdentifyTable.tableNumber }));
                     setConfirmIdentifyTable(null);
                   }}
                   className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-base font-bold shadow-md flex items-center justify-center gap-2 transition-colors"
                 >
                   <Check className="w-5 h-5" />
-                  Sí, atender esta mesa
+                  {t('identifyTable.yes')}
                 </button>
                 <button
                   onClick={() => setConfirmIdentifyTable(null)}
                   className="w-full py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl text-sm font-medium transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -3231,8 +3237,8 @@ export default function WaiterPage() {
                   <QrCode className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold">Identificar mesa por QR</h3>
-                  <p className="text-xs text-indigo-100">Mesa esperada: <strong>#{qrVerifyContext.tableNumber}</strong></p>
+                  <h3 className="text-base font-bold">{t('qrVerify.title')}</h3>
+                  <p className="text-xs text-indigo-100">{t('qrVerify.expectedTable', { number: qrVerifyContext.tableNumber })}</p>
                 </div>
               </div>
               <button onClick={() => setQrVerifyContext(null)} className="p-1.5 hover:bg-white/10 rounded-lg">
@@ -3243,7 +3249,7 @@ export default function WaiterPage() {
             {/* Body */}
             <div className="p-5 space-y-4">
               <p className="text-xs text-gray-600 leading-relaxed text-center">
-                Apunta la cámara al código QR pegado en la mesa. El sistema verificará si coincide con la mesa de esta orden.
+                {t('qrVerify.hint')}
               </p>
               <QrScanner
                 singleMode
@@ -3265,49 +3271,49 @@ export default function WaiterPage() {
           }}
         >
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Identificar mesa por QR</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{t('qrVerify.title')}</h2>
             {!showQrCamera ? (
               <>
-                <p className="text-sm text-gray-600 mb-4">Escanea el QR con la cámara o ingresa el número (ej. 5 o table-5)</p>
+                <p className="text-sm text-gray-600 mb-4">{t('tables.scanHint')}</p>
                 <button
                   type="button"
                   onClick={() => setShowQrCamera(true)}
                   className="w-full mb-4 py-3 border-2 border-dashed border-indigo-300 rounded-lg text-indigo-600 font-medium flex items-center justify-center gap-2"
                 >
                   <QrCode className="w-5 h-5" />
-                  Abrir cámara para escanear
+                  {t('tables.openCamera')}
                 </button>
                 <input
                   type="text"
                   value={qrTableInput}
                   onChange={e => setQrTableInput(e.target.value)}
-                  placeholder="Número de mesa"
+                  placeholder={t('tables.tableNumberPlaceholder')}
                   className="w-full border border-gray-300 rounded-lg px-4 py-2 mb-4"
                 />
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     type="button"
-                    onClick={(e) => { 
+                    onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setShowQrModal(false); 
-                      setQrTableInput(''); 
-                      setShowQrCamera(false); 
-                    }} 
+                      setShowQrModal(false);
+                      setQrTableInput('');
+                      setShowQrCamera(false);
+                    }}
                     className="flex-1 py-2 border border-gray-300 rounded-lg"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       identifyTableByQr();
-                    }} 
+                    }}
                     className="flex-1 py-2 bg-indigo-600 text-white rounded-lg"
                   >
-                    Identificar
+                    {t('tables.identify')}
                   </button>
                 </div>
               </>
@@ -3319,51 +3325,51 @@ export default function WaiterPage() {
                   onError={handleQrError}
                   onClose={handleQrClose}
                 />
-                <button 
+                <button
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     setShowQrCamera(false);
-                  }} 
+                  }}
                   className="w-full mt-3 py-2 border-2 border-indigo-500 text-indigo-700 rounded-lg font-medium hover:bg-indigo-50"
                 >
-                  Cerrar cámara
+                  {t('tables.closeCamera')}
                 </button>
-                <p className="mt-3 text-xs text-gray-500">O escribe el número manualmente:</p>
+                <p className="mt-3 text-xs text-gray-500">{t('tables.orEnterManually')}</p>
                 <div className="mt-2 flex gap-2">
                   <input
                     type="text"
                     value={qrTableInput}
                     onChange={e => setQrTableInput(e.target.value)}
-                    placeholder="Nº mesa (ej. 5)"
+                    placeholder={t('tables.tableInputPlaceholder')}
                     className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   />
-                  <button 
+                  <button
                     type="button"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       identifyTableByQr();
-                    }} 
+                    }}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm"
                   >
-                    Identificar
+                    {t('tables.identify')}
                   </button>
                 </div>
                 <div className="mt-3 flex justify-center">
-                  <button 
+                  <button
                     type="button"
-                    onClick={(e) => { 
+                    onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setShowQrModal(false); 
-                      setShowQrCamera(false); 
-                      setQrTableInput(''); 
-                    }} 
+                      setShowQrModal(false);
+                      setShowQrCamera(false);
+                      setQrTableInput('');
+                    }}
                     className="px-4 py-2 border border-gray-300 rounded-lg"
                   >
-                    Cerrar modal
+                    {t('tables.closeModal')}
                   </button>
                 </div>
               </>
@@ -3386,8 +3392,8 @@ export default function WaiterPage() {
           >
             {/* Header fijo */}
             <div className="p-6 pb-3 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Crear mesa virtual</h2>
-              <p className="text-sm text-gray-600 mt-1">Escanea QR de cada mesa</p>
+              <h2 className="text-xl font-bold text-gray-900">{t('virtualTable.title')}</h2>
+              <p className="text-sm text-gray-600 mt-1">{t('virtualTable.subtitle')}</p>
             </div>
             
             {/* Contenido scrolleable */}
@@ -3401,7 +3407,7 @@ export default function WaiterPage() {
                   />
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                     <p className="text-xs text-amber-800 font-medium">
-                      Escanea cada mesa. Cuando termines, revisa la lista abajo y haz clic en "Crear mesa virtual".
+                      {t('virtualTable.scanEach')}
                     </p>
                   </div>
                 </div>
@@ -3417,11 +3423,11 @@ export default function WaiterPage() {
                   className="w-full py-3 border-2 border-dashed border-amber-300 rounded-lg text-amber-700 font-medium flex items-center justify-center gap-2 hover:bg-amber-50"
                 >
                   <QrCode className="w-5 h-5" />
-                  Abrir cámara para escanear
+                  {t('tables.openCamera')}
                 </button>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-xs text-blue-800">
-                    <strong>Nota:</strong> Necesitas al menos 2 mesas para crear una mesa virtual.
+                    <strong>Nota:</strong> {t('virtualTable.minTablesNote')}
                   </p>
                 </div>
               </div>
@@ -3429,22 +3435,22 @@ export default function WaiterPage() {
 
               {/* Chips visuales de las mesas añadidas */}
               <div className="mt-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">Mesas seleccionadas:</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">{t('virtualTable.selectedTables')}</p>
                 <div className="flex flex-wrap gap-2 min-h-[60px] p-3 bg-gray-50 rounded-lg border border-gray-200">
                   {virtualTableIds.split(/[\s,]+/).filter(Boolean).map(idStr => {
                     const id = parseInt(idStr, 10);
                     if (Number.isNaN(id)) return null;
-                    const t = tables.find(tb => tb.tableNumber === id || tb.id === id);
-                    if (!t) return (
+                    const tbl = tables.find(tb => tb.tableNumber === id || tb.id === id);
+                    if (!tbl) return (
                       <div key={idStr} className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm">
-                        #{idStr} <span className="text-xs text-gray-500">(no encontrada)</span>
+                        #{idStr} <span className="text-xs text-gray-500">{t('virtualTable.notFound')}</span>
                       </div>
                     );
                     return (
-                      <div key={t.id} className="px-3 py-2 bg-green-50 border-2 border-green-500 rounded-lg">
-                        <div className="text-sm font-bold text-gray-900">#{t.tableNumber}</div>
-                        <div className="text-xs text-gray-600">{t.zoneName}</div>
-                        <div className="text-xs text-green-700 font-medium">En orden</div>
+                      <div key={tbl.id} className="px-3 py-2 bg-green-50 border-2 border-green-500 rounded-lg">
+                        <div className="text-sm font-bold text-gray-900">#{tbl.tableNumber}</div>
+                        <div className="text-xs text-gray-600">{tbl.zoneName}</div>
+                        <div className="text-xs text-green-700 font-medium">{t('virtualTable.inOrder')}</div>
                       </div>
                     );
                   })}
@@ -3457,21 +3463,21 @@ export default function WaiterPage() {
               {/* VT-PAY: selector de mesa pagadora (para el cobro unificado) */}
               {virtualTableIds.split(/[\s,]+/).filter(Boolean).length >= 2 && (
                 <div className="mt-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">💳 Mesa que paga el total (cobro unificado):</p>
+                  <p className="text-sm font-medium text-gray-700 mb-2">{t('virtualTable.payerTableLabel')}</p>
                   <select
                     value={vtPayerTableId ?? ''}
                     onChange={e => setVtPayerTableId(e.target.value ? parseInt(e.target.value, 10) : null)}
                     className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-900 focus:border-amber-400 focus:outline-none"
                   >
-                    <option value="">— Selecciona la mesa pagadora —</option>
+                    <option value="">{t('virtualTable.payerTablePlaceholder')}</option>
                     {virtualTableIds.split(/[\s,]+/).filter(Boolean).map(idStr => {
                       const num = parseInt(idStr, 10);
-                      const t = tables.find(tb => tb.tableNumber === num || tb.id === num);
-                      if (!t) return null;
-                      return <option key={t.id} value={t.id}>Mesa #{t.tableNumber}{t.zoneName ? ` (${t.zoneName})` : ''}</option>;
+                      const tbl = tables.find(tb => tb.tableNumber === num || tb.id === num);
+                      if (!tbl) return null;
+                      return <option key={tbl.id} value={tbl.id}>Mesa #{tbl.tableNumber}{tbl.zoneName ? ` (${tbl.zoneName})` : ''}</option>;
                     })}
                   </select>
-                  <p className="text-xs text-gray-400 mt-1">Esta mesa recibe el comprobante único de todo el grupo.</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('virtualTable.payerTableHint')}</p>
                 </div>
               )}
             </div>
@@ -3489,9 +3495,9 @@ export default function WaiterPage() {
                 }} 
                 className="flex-1 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={(e) => {
                   e.preventDefault();
@@ -3501,7 +3507,7 @@ export default function WaiterPage() {
                 disabled={virtualTableIds.split(/[\s,]+/).filter(Boolean).length < 2}
                 className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Crear mesa virtual ({virtualTableIds.split(/[\s,]+/).filter(Boolean).length} mesas)
+                {t('virtualTable.createBtn', { count: virtualTableIds.split(/[\s,]+/).filter(Boolean).length })}
               </button>
             </div>
           </div>
@@ -3528,19 +3534,19 @@ export default function WaiterPage() {
         const doKitchenServed = async () => {
           try {
             const res = await api.put(`/api/order/${orderId}/kitchen-served`);
-            toast.success('Comida servida ✓');
+            toast.success(t('orders.foodServedSuccess'));
             setMyOrderModalOrder((prev: any) => prev ? { ...prev, ...(res.data ?? {}), kitchenServed: true, KitchenServed: true } : prev);
             loadData(getUserId(user));
-          } catch (e: any) { toast.error(e?.response?.data?.error || 'Error al registrar'); }
+          } catch (e: any) { toast.error(e?.response?.data?.error || t('orders.registerError')); }
         };
 
         const doBarServed = async () => {
           try {
             const res = await api.put(`/api/order/${orderId}/bar-served`);
-            toast.success('Bebidas servidas ✓');
+            toast.success(t('orders.drinksServedSuccess'));
             setMyOrderModalOrder((prev: any) => prev ? { ...prev, ...(res.data ?? {}), barServed: true, BarServed: true } : prev);
             loadData(getUserId(user));
-          } catch (e: any) { toast.error(e?.response?.data?.error || 'Error al registrar'); }
+          } catch (e: any) { toast.error(e?.response?.data?.error || t('orders.registerError')); }
         };
 
         return (
@@ -3550,15 +3556,15 @@ export default function WaiterPage() {
               <div className="flex items-start justify-between p-4 border-b">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xl font-bold">Mesa {order.tableNumber}</span>
+                    <span className="text-xl font-bold">{t('common.table_short', { number: order.tableNumber })}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getOrderStatusColor(order.status)}`}>{order.status}</span>
                   </div>
                   {(order as any).customerName && <p className="text-sm text-primary-600 font-medium">{(order as any).customerName}</p>}
-                  <p className="text-xs text-gray-400 font-mono">Pedido #{shortOrder(order.orderNumber)}</p>
+                  <p className="text-xs text-gray-400 font-mono">{t('common.order_short', { code: shortOrder(order.orderNumber) })}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold">RD$ {((order as any).total ?? 0).toFixed(2)}</p>
-                  <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 mt-1 text-xs">✕ Cerrar</button>
+                  <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 mt-1 text-xs">{t('common.close')}</button>
                 </div>
               </div>
 
@@ -3566,7 +3572,7 @@ export default function WaiterPage() {
               {allAllergies.length > 0 && (
                 <div className="mx-4 mt-3 rounded-lg bg-red-50 border border-red-200 p-2 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                  <span className="text-red-800 font-semibold text-sm uppercase">ALERGIA: {allAllergies.join(', ')}</span>
+                  <span className="text-red-800 font-semibold text-sm uppercase">{t('orders.alergy', { list: allAllergies.join(', ') })}</span>
                 </div>
               )}
 
@@ -3577,13 +3583,13 @@ export default function WaiterPage() {
                     onClick={() => setMyOrderModalTab('kitchen')}
                     className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1 ${myOrderModalTab === 'kitchen' ? 'bg-white shadow text-orange-700' : 'text-gray-500'}`}
                   >
-                    🍽 Cocina {kitchenServed ? '✓' : kitchenReady ? '(Listo)' : ''}
+                    {t('orders.kitchen')} {kitchenServed ? '✓' : kitchenReady ? t('orders.kitchenReady') : ''}
                   </button>
                   <button
                     onClick={() => setMyOrderModalTab('bar')}
                     className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1 ${myOrderModalTab === 'bar' ? 'bg-white shadow text-purple-700' : 'text-gray-500'}`}
                   >
-                    🍹 Bar {barServed ? '✓' : barReady ? '(Listo)' : ''}
+                    {t('orders.bar')} {barServed ? '✓' : barReady ? t('orders.kitchenReady') : ''}
                   </button>
                 </div>
               )}
@@ -3603,9 +3609,9 @@ export default function WaiterPage() {
                       {(item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) && (
                         <div className="text-xs text-orange-600 mt-0.5">🔥 {item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking}</div>
                       )}
-                      {(item.sideDish ?? item.SideDish) && <div className="text-xs text-gray-500 mt-0.5">Guarnición: {item.sideDish ?? item.SideDish}</div>}
-                      {(item.notes ?? item.Notes) && <div className="text-xs text-gray-500 mt-0.5">Nota: {item.notes ?? item.Notes}</div>}
-                      {(item.customizations ?? item.Customizations) && <div className="text-xs text-gray-500 mt-0.5">Personalización: {item.customizations ?? item.Customizations}</div>}
+                      {(item.sideDish ?? item.SideDish) && <div className="text-xs text-gray-500 mt-0.5">{t('orders.garnishLabel', { value: item.sideDish ?? item.SideDish })}</div>}
+                      {(item.notes ?? item.Notes) && <div className="text-xs text-gray-500 mt-0.5">{t('orders.noteLabel', { value: item.notes ?? item.Notes })}</div>}
+                      {(item.customizations ?? item.Customizations) && <div className="text-xs text-gray-500 mt-0.5">{t('orders.customization', { value: item.customizations ?? item.Customizations })}</div>}
                     </div>
                   ));
                 })()}
@@ -3624,7 +3630,7 @@ export default function WaiterPage() {
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }`}
                   >
-                    {kitchenServed ? '✓ Comida ya servida' : kitchenReady ? '🍽 Servir Comida' : '⏳ Cocina aún preparando...'}
+                    {kitchenServed ? t('orders.kitchenServedDone') : kitchenReady ? t('orders.kitchenReadyBtn') : t('orders.kitchenPreparing')}
                   </button>
                 )}
                 {/* Servir Bar */}
@@ -3638,7 +3644,7 @@ export default function WaiterPage() {
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }`}
                   >
-                    {barServed ? '✓ Bebidas ya servidas' : barReady ? '🍹 Servir Bebidas' : '⏳ Bar aún preparando...'}
+                    {barServed ? t('orders.barServedDone') : barReady ? t('orders.barReadyBtn') : t('orders.barPreparing')}
                   </button>
                 )}
               </div>
@@ -3654,7 +3660,7 @@ export default function WaiterPage() {
                   pendingClaimTableIds.has((order as any).tableId ?? (order as any).TableId) ? (
                     <div className="w-full py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm font-semibold flex items-center justify-center gap-2">
                       <Clock className="w-4 h-4 animate-pulse" />
-                      Solicitud pendiente — esperando admin...
+                      {t('orders.orderPending')}
                     </div>
                   ) : (
                     <button
@@ -3669,18 +3675,18 @@ export default function WaiterPage() {
                             orderId: getOrderId(order) || null,
                           });
                           setPendingClaimTableIds(prev => new Set(prev).add(tableId));
-                          toast(`⏳ Solicitud enviada al admin. Espera su respuesta.`, {
+                          toast(t('notifications.requestSent'), {
                             duration: 5000,
                             style: { background: '#eef2ff', color: '#4338ca', fontWeight: 600 }
                           });
                         } catch (err: any) {
-                          toast.error(err?.response?.data?.error || 'Error al enviar la solicitud');
+                          toast.error(err?.response?.data?.error || t('notifications.requestError'));
                         }
                       }}
                       className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center justify-center gap-2"
                     >
                       <Users className="w-4 h-4" />
-                      Quedarme con esta Mesa
+                      {t('orders.keepTable')}
                     </button>
                   )
                 )}
@@ -3692,7 +3698,7 @@ export default function WaiterPage() {
                     className="w-full py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium flex items-center justify-center gap-2"
                   >
                     <ArrowRightLeft className="w-4 h-4" />
-                    Mover comensal a otra mesa
+                    {t('orders.moveCustomer')}
                   </button>
                 )}
 
@@ -3702,7 +3708,7 @@ export default function WaiterPage() {
                     onClick={() => { closeModal(); setSelectedOrder(order); setShowPaymentModal(true); }}
                     className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
                   >
-                    Cobrar (recolectar pago del cliente)
+                    {t('orders.collectPayment')}
                   </button>
                 )}
               </div>
@@ -3723,8 +3729,8 @@ export default function WaiterPage() {
                 <PinOff className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Soltar Mesa {abandonConfirmOrder.tableNumber}</h2>
-                <p className="text-sm text-gray-500">Los pedidos nuevos de esta mesa ya no te llegarán a ti.</p>
+                <h2 className="text-lg font-bold text-gray-900">{t('abandon.title', { number: abandonConfirmOrder.tableNumber })}</h2>
+                <p className="text-sm text-gray-500">{t('abandon.subtitle')}</p>
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-5">
@@ -3735,7 +3741,7 @@ export default function WaiterPage() {
                 onClick={() => setAbandonConfirmOrder(null)}
                 className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 onClick={async () => {
@@ -3743,16 +3749,16 @@ export default function WaiterPage() {
                   const tableId = (abandonConfirmOrder as any).tableId ?? (abandonConfirmOrder as any).TableId;
                   try {
                     await api.put(`/api/order/${oid}/unassign-waiter`);
-                    toast.success(`Ya no estás asignado a Mesa ${abandonConfirmOrder.tableNumber}`);
+                    toast.success(t('abandon.success', { number: abandonConfirmOrder.tableNumber }));
                     setClaimedTableIds(prev => { const s = new Set(prev); s.delete(tableId); return s; });
                     setAbandonConfirmOrder(null);
                   } catch (err: any) {
-                    toast.error(err?.response?.data?.error || 'Error al soltar la mesa');
+                    toast.error(err?.response?.data?.error || t('abandon.error'));
                   }
                 }}
                 className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm"
               >
-                Sí, soltar mesa
+                {t('abandon.confirm')}
               </button>
             </div>
           </div>
@@ -3763,24 +3769,24 @@ export default function WaiterPage() {
       {showMoveModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Mover comensal a otra mesa</h2>
-            <p className="text-sm text-gray-600 mb-4">Pedido #{shortOrder(showMoveModal.order.orderNumber)} · Mesa actual: {showMoveModal.order.tableNumber}</p>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mesa destino</label>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{t('moveModal.title')}</h2>
+            <p className="text-sm text-gray-600 mb-4">{t('moveModal.subtitle', { code: shortOrder(showMoveModal.order.orderNumber), table: showMoveModal.order.tableNumber })}</p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('moveModal.targetLabel')}</label>
             <select
               value={moveTargetTableId ?? ''}
               onChange={e => setMoveTargetTableId(parseInt(e.target.value, 10) || null)}
               className="w-full border border-gray-300 rounded-lg px-4 py-2 mb-4"
             >
-              <option value="">Seleccionar...</option>
+              <option value="">{t('moveModal.targetPlaceholder')}</option>
               {tables
-                .filter(t => t.id !== (showMoveModal.order.tableId ?? (showMoveModal.order as any).TableId))
-                .map(t => (
-                  <option key={t.id} value={t.id}>Mesa {t.tableNumber} - {t.zoneName}</option>
+                .filter(tbl => tbl.id !== (showMoveModal.order.tableId ?? (showMoveModal.order as any).TableId))
+                .map(tbl => (
+                  <option key={tbl.id} value={tbl.id}>{t('moveModal.targetOption', { number: tbl.tableNumber, zone: tbl.zoneName })}</option>
                 ))}
             </select>
             <div className="flex gap-2">
-              <button onClick={() => { setShowMoveModal(null); setMoveTargetTableId(null); }} className="flex-1 py-2 border border-gray-300 rounded-lg">Cancelar</button>
-              <button onClick={moveOrderToTable} disabled={!moveTargetTableId} className="flex-1 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50">Mover</button>
+              <button onClick={() => { setShowMoveModal(null); setMoveTargetTableId(null); }} className="flex-1 py-2 border border-gray-300 rounded-lg">{t('common.cancel')}</button>
+              <button onClick={moveOrderToTable} disabled={!moveTargetTableId} className="flex-1 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50">{t('common.move')}</button>
             </div>
           </div>
         </div>
@@ -3795,7 +3801,7 @@ export default function WaiterPage() {
           <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-2 text-sm font-bold text-teal-700">
               <Share2 className="w-5 h-5" />
-              {selectedTableIds.size} mesa{selectedTableIds.size !== 1 ? 's' : ''} seleccionada{selectedTableIds.size !== 1 ? 's' : ''}
+              {t('transfer.selectedCount', { count: selectedTableIds.size, s: selectedTableIds.size !== 1 ? 's' : '' })}
             </span>
             <select
               value={transferToWaiterId ?? ''}
@@ -3803,7 +3809,7 @@ export default function WaiterPage() {
               aria-label="Mesero destino"
               className="flex-1 min-w-[180px] border border-gray-300 rounded-lg px-4 py-2 text-sm"
             >
-              <option value="">Seleccionar mesero destino...</option>
+              <option value="">{t('transfer.selectWaiterPlaceholder')}</option>
               {waiterList.map(w => (
                 <option key={w.id} value={w.id}>{w.firstName} {w.lastName}</option>
               ))}
@@ -3815,14 +3821,14 @@ export default function WaiterPage() {
               className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold disabled:opacity-50 flex items-center gap-2"
             >
               <Check className="w-5 h-5" />
-              {sendingTransfer ? 'Enviando…' : 'Confirmar transferencia'}
+              {sendingTransfer ? t('common.sending') : t('transfer.confirmTransfer')}
             </button>
             <button
               type="button"
               onClick={exitTransferMode}
               className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -3833,8 +3839,8 @@ export default function WaiterPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl h-[96vh] sm:h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 flex-shrink-0">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900">Menú · Hacer pedido</h2>
-              <p className="text-sm text-gray-500">Mesa {tables.find(t => t.id === manualOrderTableId)?.tableNumber ?? manualOrderTableId}</p>
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">{t('manualOrder.title')}</h2>
+              <p className="text-sm text-gray-500">{t('manualOrder.tableSubtitle', { number: tables.find(tbl => tbl.id === manualOrderTableId)?.tableNumber ?? manualOrderTableId })}</p>
             </div>
             <ManualOrderForm
               tableId={manualOrderTableId}
@@ -3845,7 +3851,7 @@ export default function WaiterPage() {
                 setManualOrderTableId(null);
                 setDishesForManual([]);
                 loadData(getUserId(user!));
-                toast.success('Pedido creado');
+                toast.success(t('manualOrder.orderCreated'));
               }}
               api={api}
             />
@@ -3873,7 +3879,7 @@ export default function WaiterPage() {
                   const vtTables = Array.isArray(showVirtualTableDetailsModal?.tables) 
                     ? showVirtualTableDetailsModal.tables 
                     : (Array.isArray(showVirtualTableDetailsModal?.Tables) ? showVirtualTableDetailsModal.Tables : []);
-                  return `${vtTables.length} mesas unidas`;
+                  return t('virtualTable.tablesJoined', { count: vtTables.length });
                 })()}
               </p>
             </div>
@@ -3886,7 +3892,7 @@ export default function WaiterPage() {
                   : (Array.isArray(showVirtualTableDetailsModal?.Tables) ? showVirtualTableDetailsModal.Tables : []);
                 
                 if (vtTables.length === 0) {
-                  return <div className="p-6 text-center text-gray-500">No hay mesas en esta mesa virtual</div>;
+                  return <div className="p-6 text-center text-gray-500">{t('virtualTable.noTablesInVT')}</div>;
                 }
 
                 const currentTable = vtTables[selectedVTTableIndex] || vtTables[0];
@@ -3941,7 +3947,7 @@ export default function WaiterPage() {
                               }`}
                             >
                               <div className="font-bold">Mesa #{tNumber}</div>
-                              <div className="text-xs">{tOrders.length} orden(es)</div>
+                              <div className="text-xs">{t('virtualTable.orderCount', { count: tOrders.length })}</div>
                             </button>
                           );
                         })}
@@ -3976,7 +3982,7 @@ export default function WaiterPage() {
                                 <div className="text-sm text-primary-700 font-medium mb-1">{(order as any).customerName}</div>
                               )}
                               <div className="text-xs text-gray-500 mb-3">
-                                {new Date(order.createdAt).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                {new Date(order.createdAt).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true })}
                               </div>
 
                               {/* Bloque alergias */}
@@ -4000,11 +4006,11 @@ export default function WaiterPage() {
                                     </div>
                                     {(item.notes ?? item.Notes ?? item.customizations ?? item.Customizations ?? item.allergies ?? item.Allergies ?? item.sideDish ?? item.SideDish ?? item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) && (
                                       <div className="mt-1.5 text-xs text-gray-600 space-y-0.5 pl-1 border-l-2 border-amber-300">
-                                        {(item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) ? <div>🔥 Preferencia / Término: {item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking}</div> : null}
-                                        {item.sideDish ?? item.SideDish ? <div>Guarnición: {item.sideDish ?? item.SideDish}</div> : null}
-                                        {item.notes ?? item.Notes ? <div>Notas: {item.notes ?? item.Notes}</div> : null}
-                                        {item.customizations ?? item.Customizations ? <div>Personalización: {item.customizations ?? item.Customizations}</div> : null}
-                                        {item.allergies ?? item.Allergies ? <div className="text-red-700 font-medium">⚠ Alergia: {item.allergies ?? item.Allergies}</div> : null}
+                                        {(item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking) ? <div>{t('orders.preference', { value: item.preferenceText ?? item.PreferenceText ?? item.meatCooking ?? item.MeatCooking })}</div> : null}
+                                        {item.sideDish ?? item.SideDish ? <div>{t('orders.garnishLabel', { value: item.sideDish ?? item.SideDish })}</div> : null}
+                                        {item.notes ?? item.Notes ? <div>{t('orders.noteLabel', { value: item.notes ?? item.Notes })}</div> : null}
+                                        {item.customizations ?? item.Customizations ? <div>{t('orders.customization', { value: item.customizations ?? item.Customizations })}</div> : null}
+                                        {item.allergies ?? item.Allergies ? <div className="text-red-700 font-medium">{t('orders.allergy_item', { value: item.allergies ?? item.Allergies })}</div> : null}
                                       </div>
                                     )}
                                   </div>
@@ -4012,7 +4018,7 @@ export default function WaiterPage() {
                               </div>
                               
                               <div className="flex justify-between items-center pt-3 border-t-2 border-purple-200">
-                                <span className="font-bold text-gray-700">Total:</span>
+                                <span className="font-bold text-gray-700">{t('common.total')}:</span>
                                 <span className="text-xl font-bold text-purple-900">
                                   RD$ {((order as any).total ?? (order as any).totalAmount ?? 0).toFixed(2)}
                                 </span>
@@ -4026,7 +4032,7 @@ export default function WaiterPage() {
                                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); confirmOrder(order).then(ok => { if (ok && user) { loadData(getUserId(user)); loadVirtualTables(); } }); }}
                                     className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                                   >
-                                    Confirmar (enviar a cocina/bar)
+                                    {t('orders.confirmSend')}
                                   </button>
                                 )}
                                 {['Pending','Confirmed','Preparing','Ready'].includes((order as any).status) && (
@@ -4036,7 +4042,7 @@ export default function WaiterPage() {
                                     className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium flex items-center justify-center gap-2"
                                   >
                                     <ArrowRightLeft className="w-4 h-4" />
-                                    Mover comensal a otra mesa
+                                    {t('orders.moveCustomer')}
                                   </button>
                                 )}
                                 {(order as any).status === 'Ready' && (
@@ -4045,7 +4051,7 @@ export default function WaiterPage() {
                                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); markAsServed(getOrderId(order)); }}
                                     className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
                                   >
-                                    Marcar como Servida
+                                    {t('orders.markAsServedBtn')}
                                   </button>
                                 )}
                                 {((order as any).status === 'Served' || (order as any).status === 'Completed') && (
@@ -4056,7 +4062,7 @@ export default function WaiterPage() {
                                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedOrder(order); setShowPaymentModal(true); setShowVirtualTableDetailsModal(null); }}
                                         className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                                       >
-                                        Cobrar (recolectar pago del cliente)
+                                        {t('orders.collectPayment')}
                                       </button>
                                     )}
                                     <button
@@ -4064,7 +4070,7 @@ export default function WaiterPage() {
                                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); releaseTable((order as any).tableId ?? (order as any).TableId); setShowVirtualTableDetailsModal(null); }}
                                       className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
                                     >
-                                      Liberar mesa
+                                      {t('orders.releaseTableAction')}
                                     </button>
                                   </>
                                 )}
@@ -4075,7 +4081,7 @@ export default function WaiterPage() {
                       ) : (
                         <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
                           <div className="text-4xl mb-2">📋</div>
-                          <div>No hay órdenes activas en esta mesa</div>
+                          <div>{t('orders.noOrdersInTable')}</div>
                         </div>
                       )}
 
@@ -4087,7 +4093,7 @@ export default function WaiterPage() {
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); markTableAsServed(currentTableOrders); }}
                             className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
                           >
-                            Marcar toda la Mesa #{currentTableNumber} como servida
+                            {t('orders.markTableServedBtn', { number: currentTableNumber })}
                           </button>
                         </div>
                       )}
@@ -4098,8 +4104,8 @@ export default function WaiterPage() {
                     <div className="px-6 py-4 border-t-2 border-purple-300 bg-purple-50">
                       <div className="flex justify-between items-center">
                         <div>
-                          <div className="text-xs text-purple-700">Total Mesa Virtual</div>
-                          <div className="text-sm text-purple-800">{vtOrders.length} orden(es) · {vtTables.length} mesa(s)</div>
+                          <div className="text-xs text-purple-700">{t('virtualTable.totalVT')}</div>
+                          <div className="text-sm text-purple-800">{t('virtualTable.vtOrders', { orders: vtOrders.length, tables: vtTables.length })}</div>
                         </div>
                         <span className="text-2xl font-bold text-purple-900">
                           RD$ {totalVT.toFixed(2)}
@@ -4118,7 +4124,7 @@ export default function WaiterPage() {
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); openVtPay(showVirtualTableDetailsModal); }}
                 className="flex-1 py-2.5 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 flex items-center justify-center gap-2"
               >
-                <DollarSign className="w-4 h-4" /> Cobrar mesa virtual
+                <DollarSign className="w-4 h-4" /> {t('virtualTable.collectVT')}
               </button>
               <button
                 type="button"
@@ -4129,7 +4135,7 @@ export default function WaiterPage() {
                 }}
                 className="flex-1 py-2 bg-gray-300 text-gray-800 rounded-lg font-medium hover:bg-gray-400"
               >
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -4141,18 +4147,18 @@ export default function WaiterPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={() => !vtPaying && setShowVtPayModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-emerald-600 px-6 py-4">
-              <h2 className="text-lg font-bold text-white">Cobrar mesa virtual</h2>
-              <p className="text-sm text-emerald-50">{showVtPayModal.vt?.name ?? showVtPayModal.vt?.Name ?? 'Mesa virtual'} · {showVtPayModal.orderCount} orden(es)</p>
+              <h2 className="text-lg font-bold text-white">{t('virtualTable.collectVTTitle')}</h2>
+              <p className="text-sm text-emerald-50">{t('virtualTable.vtSubtitle', { name: showVtPayModal.vt?.name ?? showVtPayModal.vt?.Name ?? 'Mesa virtual', count: showVtPayModal.orderCount })}</p>
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-emerald-50 rounded-xl p-4 flex justify-between items-center">
-                <span className="text-sm font-semibold text-emerald-800">Total a cobrar</span>
+                <span className="text-sm font-semibold text-emerald-800">{t('virtualTable.totalToCharge')}</span>
                 <span className="text-2xl font-bold text-emerald-900">RD$ {Number(showVtPayModal.total).toFixed(2)}</span>
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2">Método de pago</p>
+                <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.methodTitle')}</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {[{id:'Cash',name:'Efectivo'},{id:'Card',name:'Tarjeta'},{id:'Transfer',name:'Transferencia'},{id:'Mixed',name:'Mixto'}].map(m => (
+                  {[{id:'Cash',name:t('payment.methodCash')},{id:'Card',name:t('payment.methodCard')},{id:'Transfer',name:t('payment.methodTransfer')},{id:'Mixed',name:t('payment.methodMixed')}].map(m => (
                     <button key={m.id} type="button" onClick={() => setVtPayMethod(m.id)}
                       className={`py-2.5 rounded-lg border text-sm font-semibold transition-all ${vtPayMethod === m.id ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-700'}`}>
                       {m.name}
@@ -4160,14 +4166,14 @@ export default function WaiterPage() {
                   ))}
                 </div>
               </div>
-              <p className="text-xs text-gray-500">Se genera un comprobante único bajo la mesa pagadora y se cierra la mesa virtual.</p>
+              <p className="text-xs text-gray-500">{t('virtualTable.receiptHint')}</p>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
               <button type="button" disabled={vtPaying} onClick={() => setShowVtPayModal(null)}
-                className="flex-1 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
+                className="flex-1 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50">{t('common.cancel')}</button>
               <button type="button" disabled={vtPaying || showVtPayModal.orderCount === 0} onClick={payVirtualTable}
                 className="flex-1 py-2.5 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50">
-                {vtPaying ? 'Cobrando…' : `Cobrar RD$ ${Number(showVtPayModal.total).toFixed(2)}`}
+                {vtPaying ? t('common.charging') : t('virtualTable.collectBtn', { amount: Number(showVtPayModal.total).toFixed(2) })}
               </button>
             </div>
           </div>
@@ -4189,13 +4195,13 @@ export default function WaiterPage() {
                 <Clock className="w-5 h-5 flex-shrink-0" />
                 <div className="text-center min-w-0">
                   <h3 className="text-lg font-bold leading-tight">
-                    {reservedInfo ? `Mesa #${reservedInfo.tableNumber}` : 'Mesa Reservada'}
+                    {reservedInfo ? t('reservation.title', { number: reservedInfo.tableNumber }) : 'Mesa Reservada'}
                   </h3>
                   {reservedInfo && (
                     <p className="text-xs text-yellow-50/90 leading-tight mt-0.5">
                       {reservedInfo.zoneName}
                       <span className="mx-1.5 opacity-60">·</span>
-                      <span className="font-semibold">Reservada</span>
+                      <span className="font-semibold">{t('reservation.reserved')}</span>
                     </p>
                   )}
                 </div>
@@ -4203,7 +4209,7 @@ export default function WaiterPage() {
               <button
                 onClick={() => setReservedInfo(null)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-white/80 hover:text-white p-1.5 hover:bg-white/10 rounded transition-colors"
-                aria-label="Cerrar"
+                aria-label={t('common.close')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -4211,7 +4217,7 @@ export default function WaiterPage() {
             {loadingReservation && (
               <div className="px-6 py-8 text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto mb-3"></div>
-                <p className="text-sm text-gray-600">Cargando datos de la reserva...</p>
+                <p className="text-sm text-gray-600">{t('reservation.loadingReservation')}</p>
               </div>
             )}
             {reservedInfo && !loadingReservation && (
@@ -4220,17 +4226,17 @@ export default function WaiterPage() {
                 <section className="space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
-                    <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">Cliente</p>
+                    <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">{t('reservation.client')}</p>
                   </div>
                   <p className="text-2xl font-bold text-gray-900 leading-tight">{reservedInfo.customerName}</p>
                   {/* "Contactar" (llamada al cliente) eliminado a pedido. Solo se muestran comensales. */}
                   <div className="text-sm">
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5 flex items-center gap-1">
-                        <Users className="w-3 h-3" />Comensales
+                        <Users className="w-3 h-3" />{t('reservation.guests')}
                       </p>
                       <p className="font-semibold text-gray-900">
-                        {reservedInfo.numberOfGuests} {reservedInfo.numberOfGuests === 1 ? 'persona' : 'personas'}
+                        {t('reservation.guestCount', { count: reservedInfo.numberOfGuests, label: reservedInfo.numberOfGuests === 1 ? t('reservation.guestsOne') : t('reservation.guestsOther') })}
                       </p>
                     </div>
                   </div>
@@ -4240,7 +4246,7 @@ export default function WaiterPage() {
                 <section className="space-y-3 pt-2 border-t border-gray-100">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-4 bg-amber-500 rounded-full"></div>
-                    <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">Reserva</p>
+                    <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">{t('reservation.reservationSection')}</p>
                   </div>
 
                   {/* Hora reservada */}
@@ -4249,16 +4255,16 @@ export default function WaiterPage() {
                       <Clock className="w-5 h-5 text-amber-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-amber-700 font-semibold">Hora reservada</p>
+                      <p className="text-[10px] uppercase tracking-wider text-amber-700 font-semibold">{t('reservation.reservedTime')}</p>
                       <p className="font-bold text-amber-900">
-                        {new Date(reservedInfo.reservationDateTime).toLocaleString('es-DO', {
+                        {new Date(reservedInfo.reservationDateTime).toLocaleString(dl, {
                           weekday: 'short', day: 'numeric', month: 'short',
                           hour: 'numeric', minute: '2-digit', hour12: true
                         })}
                       </p>
                       {reservedInfo.reservedUntil && (
                         <p className="text-xs text-amber-600 mt-0.5">
-                          Mesa bloqueada hasta {new Date(reservedInfo.reservedUntil).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          {t('reservation.blockedUntil', { time: new Date(reservedInfo.reservedUntil).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true }) })}
                         </p>
                       )}
                     </div>
@@ -4271,11 +4277,11 @@ export default function WaiterPage() {
                   <section className="space-y-3 pt-2 border-t border-gray-100">
                     <div className="flex items-center gap-2">
                       <div className="w-1 h-4 bg-orange-500 rounded-full"></div>
-                      <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">Notas del cliente</p>
+                      <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">{t('reservation.clientNotes')}</p>
                     </div>
                     {reservedInfo.specialRequests && (
                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-orange-700 font-semibold mb-1">Solicitudes especiales</p>
+                        <p className="text-[10px] uppercase tracking-wider text-orange-700 font-semibold mb-1">{t('reservation.specialRequests')}</p>
                         <p className="text-sm text-orange-900">{reservedInfo.specialRequests}</p>
                       </div>
                     )}
@@ -4283,7 +4289,7 @@ export default function WaiterPage() {
                       <div className="bg-white border border-gray-200 rounded-lg p-3">
                         <p className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold mb-2 flex items-center gap-1">
                           <Utensils className="w-3 h-3" />
-                          Pre-orden ({reservedInfo.preOrder.items.length} {reservedInfo.preOrder.items.length === 1 ? 'plato' : 'platos'})
+                          {t('reservation.preOrder', { count: reservedInfo.preOrder.items.length, label: reservedInfo.preOrder.items.length === 1 ? t('reservation.preOrderOne') : t('reservation.preOrderOther') })}
                         </p>
                         <ul className="space-y-1">
                           {reservedInfo.preOrder.items.map((it, idx) => (
@@ -4304,7 +4310,7 @@ export default function WaiterPage() {
                 onClick={() => setReservedInfo(null)}
                 className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium"
               >
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -4408,6 +4414,7 @@ function ManualOrderForm({
   api: any;
 }) {
   const [selected, setSelected] = useState<SelectedItem[]>([]);
+  const t = useTranslations();
   // Generador de id de línea (estable entre renders) + línea en edición (null = agregar nueva).
   const lineIdRef = useRef(1);
   const [editingLineId, setEditingLineId] = useState<number | null>(null);
@@ -4491,7 +4498,7 @@ function ManualOrderForm({
       });
       onSuccess();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al crear pedido');
+      toast.error(e?.response?.data?.error || t('manualOrder.createOrderError'));
     } finally {
       setSubmitting(false);
     }
@@ -4612,7 +4619,7 @@ function ManualOrderForm({
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar platos..."
+              placeholder={t('manualOrder.searchPlaceholder')}
               className="w-full h-11 sm:h-12 pl-9 pr-3 border border-gray-300 rounded-xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
@@ -4624,7 +4631,7 @@ function ManualOrderForm({
                 activeCat === MANUAL_TODAS ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Todas
+              {t('common.all')}
             </button>
             {categories.map(cat => (
               <button
@@ -4644,7 +4651,7 @@ function ManualOrderForm({
         {/* Grid de tarjetas */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
           {visibleDishes.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-10">No se encontraron platos.</p>
+            <p className="text-center text-gray-400 text-sm py-10">{t('common.noResults')}</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
               {visibleDishes.map(d => {
@@ -4681,7 +4688,7 @@ function ManualOrderForm({
                         <span className={`inline-flex items-center min-h-[44px] px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
                           qty > 0 ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700'
                         }`}>
-                          {qty > 0 ? `Agregar (${qty})` : 'Agregar'}
+                          {qty > 0 ? t('manualOrder.addBtnWithCount', { count: qty }) : t('manualOrder.addBtn')}
                         </span>
                       </div>
                     </div>
@@ -4696,8 +4703,8 @@ function ManualOrderForm({
       {/* Carrito / Pedido */}
       <div className="lg:w-80 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-gray-100 flex flex-col bg-gray-50 max-h-[42vh] lg:max-h-none">
         <div className="p-4 flex-1 min-h-0 overflow-y-auto">
-          <p className="text-sm font-bold text-gray-700 mb-3">Pedido ({itemCount})</p>
-          {selected.length === 0 && <p className="text-gray-400 text-sm">Añade platos del menú</p>}
+          <p className="text-sm font-bold text-gray-700 mb-3">{t('manualOrder.cart', { count: itemCount })}</p>
+          {selected.length === 0 && <p className="text-gray-400 text-sm">{t('manualOrder.emptyCart')}</p>}
           <div className="space-y-2">
             {(() => {
               // Agrupar por plato → cabecera "N× Plato" con una fila por unidad/línea.
@@ -4720,7 +4727,7 @@ function ManualOrderForm({
                     <span className="mt-0.5 block space-y-0.5">
                       {courseLabel && <span className="block text-[11px] text-gray-400 truncate">⏱ {courseLabel}</span>}
                       {s.sideDish && <span className="block text-[11px] text-gray-400 truncate">🍽 {s.sideDish}</span>}
-                      {s.withAlcohol !== undefined && <span className="block text-[11px] text-gray-400 truncate">{s.withAlcohol ? '🍹 Con alcohol' : '🥤 Sin alcohol'}</span>}
+                      {s.withAlcohol !== undefined && <span className="block text-[11px] text-gray-400 truncate">{s.withAlcohol ? t('manualOrder.withAlcoholShort') : t('manualOrder.withoutAlcoholShort')}</span>}
                       {s.liga && <span className="block text-[11px] text-gray-400 truncate">🥤 {s.liga}</span>}
                       {s.drinkTiming && <span className="block text-[11px] text-gray-400 truncate">⏱ {s.drinkTiming}</span>}
                       {s.customizations && <span className="block text-[11px] text-gray-400 italic truncate">✏ {s.customizations}</span>}
@@ -4743,14 +4750,14 @@ function ManualOrderForm({
                           type="button"
                           onClick={() => { const dd = availableDishes.find(x => x.id === s.dishId); if (dd) openDetail(dd, s); }}
                           className="flex items-center gap-1 text-left flex-1 min-w-0 group"
-                          aria-label={`Editar ${s.name}`}
+                          aria-label={t('manualOrder.editItem', { name: s.name })}
                         >
                           <span className="text-sm font-semibold text-gray-800 truncate group-hover:text-green-700">{s.quantity}x {g.name}</span>
                           {cookLabel && <span className="text-xs text-gray-500 flex-shrink-0">· 🔥 {cookLabel}</span>}
                           <Pencil className="w-3 h-3 text-gray-300 group-hover:text-green-600 flex-shrink-0" />
                         </button>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          <button type="button" onClick={() => decrement(s.lineId)} aria-label="Quitar" className="w-8 h-8 -my-0.5 flex items-center justify-center text-gray-400 hover:text-red-500 font-bold text-lg leading-none">−</button>
+                          <button type="button" onClick={() => decrement(s.lineId)} aria-label={t('manualOrder.removeItem')} className="w-8 h-8 -my-0.5 flex items-center justify-center text-gray-400 hover:text-red-500 font-bold text-lg leading-none">−</button>
                           <span className="text-sm text-gray-900 font-medium tabular-nums">RD$ {(s.price * s.quantity).toFixed(2)}</span>
                         </div>
                       </div>
@@ -4777,16 +4784,16 @@ function ManualOrderForm({
                               type="button"
                               onClick={() => { const dd = availableDishes.find(x => x.id === s.dishId); if (dd) openDetail(dd, s); }}
                               className="flex-1 min-w-0 text-left group"
-                              aria-label={`Editar ${s.name}`}
+                              aria-label={t('manualOrder.editItem', { name: s.name })}
                             >
                               <span className="flex items-center gap-1 flex-wrap">
-                                <span className="text-xs font-semibold text-gray-600 group-hover:text-green-700">Unidad {i + 1}</span>
+                                <span className="text-xs font-semibold text-gray-600 group-hover:text-green-700">{t('manualOrder.unitN', { n: i + 1 })}</span>
                                 {cookLabel && <span className="text-xs text-gray-500">· 🔥 {cookLabel}</span>}
                                 <Pencil className="w-3 h-3 text-gray-300 group-hover:text-green-600 flex-shrink-0" />
                               </span>
                               {prefSummary(s)}
                             </button>
-                            <button type="button" onClick={() => decrement(s.lineId)} aria-label="Quitar" className="w-8 h-8 -my-0.5 flex items-center justify-center text-gray-400 hover:text-red-500 font-bold text-lg leading-none flex-shrink-0">−</button>
+                            <button type="button" onClick={() => decrement(s.lineId)} aria-label={t('manualOrder.removeItem')} className="w-8 h-8 -my-0.5 flex items-center justify-center text-gray-400 hover:text-red-500 font-bold text-lg leading-none flex-shrink-0">−</button>
                           </div>
                         );
                       })}
@@ -4798,13 +4805,13 @@ function ManualOrderForm({
           </div>
         </div>
         <div className="p-4 border-t border-gray-200 bg-white space-y-1">
-          <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>RD$ {subtotal.toFixed(2)}</span></div>
-          <div className="flex justify-between text-sm text-gray-500"><span>ITBIS 18%</span><span>RD$ {tax.toFixed(2)}</span></div>
-          <div className="flex justify-between font-bold text-gray-900 text-base pt-1"><span>Total</span><span>RD$ {total.toFixed(2)}</span></div>
+          <div className="flex justify-between text-sm text-gray-500"><span>{t('common.subtotal')}</span><span>RD$ {subtotal.toFixed(2)}</span></div>
+          <div className="flex justify-between text-sm text-gray-500"><span>{t('manualOrder.itbis')}</span><span>RD$ {tax.toFixed(2)}</span></div>
+          <div className="flex justify-between font-bold text-gray-900 text-base pt-1"><span>{t('common.total')}</span><span>RD$ {total.toFixed(2)}</span></div>
           <div className="flex gap-2 pt-3">
-            <button type="button" onClick={onClose} className="flex-1 min-h-[44px] py-2.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50">Cancelar</button>
+            <button type="button" onClick={onClose} className="flex-1 min-h-[44px] py-2.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50">{t('common.cancel')}</button>
             <button type="button" onClick={submit} disabled={selected.length === 0 || submitting} className="flex-1 min-h-[44px] py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50">
-              {submitting ? 'Creando...' : 'Crear pedido'}
+              {submitting ? t('common.creating') : t('manualOrder.createOrder')}
             </button>
           </div>
         </div>
@@ -4839,7 +4846,7 @@ function ManualOrderForm({
                 type="button"
                 onClick={closeDetail}
                 className="absolute top-3 right-3 p-2 rounded-full bg-white/90 hover:bg-white shadow-lg"
-                aria-label="Cerrar detalle"
+                aria-label={t('manualOrder.closeDetail')}
               >
                 <X className="w-5 h-5 text-gray-700" />
               </button>
@@ -4852,7 +4859,7 @@ function ManualOrderForm({
 
               {/* Selector de cantidad */}
               <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Cantidad</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.detailQtyLabel')}</label>
                 <div className="flex items-center gap-4">
                   <button
                     type="button"
@@ -4889,21 +4896,21 @@ function ManualOrderForm({
                   <>
                     {/* ¿Con o sin alcohol? */}
                     <div className="mt-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">¿Con o sin alcohol?</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.alcoholQuestion')}</label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
                           onClick={() => setDetailWithAlcohol(true)}
                           className={`min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium transition-colors ${detailWithAlcohol === true ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                         >
-                          🍹 Con Alcohol
+                          {t('manualOrder.withAlcohol')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setDetailWithAlcohol(false)}
                           className={`min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium transition-colors ${detailWithAlcohol === false ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                         >
-                          🥤 Sin Alcohol
+                          {t('manualOrder.withoutAlcohol')}
                         </button>
                       </div>
                     </div>
@@ -4911,7 +4918,7 @@ function ManualOrderForm({
                     {/* Liga (solo si con alcohol) */}
                     {isAlcoholic && (
                       <div className="mt-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">¿Con qué liga?</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.ligaTitle')}</label>
                         <div className="grid grid-cols-2 gap-2">
                           {MANUAL_LIGA_OPTIONS.map((opt) => (
                             <button
@@ -4929,12 +4936,12 @@ function ManualOrderForm({
 
                     {/* ¿Cuándo deseas tu bebida? */}
                     <div className="mt-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">¿Cuándo deseas tu bebida?</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.drinkTimingTitle')}</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { key: 'Before', label: '🥗 Con la entrada' },
-                          { key: 'During', label: '🍖 Con el plato fuerte' },
-                          { key: 'After',  label: '🍰 Con el postre' },
+                          { key: 'Before', label: t('manualOrder.drinkBefore') },
+                          { key: 'During', label: t('manualOrder.drinkDuring') },
+                          { key: 'After',  label: t('manualOrder.drinkAfter') },
                         ].map((opt) => (
                           <button
                             key={opt.key}
@@ -4954,7 +4961,7 @@ function ManualOrderForm({
                       <textarea
                         value={detailNotes}
                         onChange={e => setDetailNotes(e.target.value)}
-                        placeholder="Ej: Con hielo, sin hielo, temperatura..."
+                        placeholder={t('manualOrder.drinkNotesPlaceholder')}
                         rows={2}
                         maxLength={512}
                         className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none text-gray-700"
@@ -4966,7 +4973,7 @@ function ManualOrderForm({
                   <>
                     {/* ¿Cuándo lo quieres servir? */}
                     <div className="mt-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">¿Cuándo lo quieres servir?</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.servingTitle')}</label>
                       <div className="grid grid-cols-3 gap-2">
                         {MANUAL_COURSE_OPTIONS.map((opt) => (
                           <button
@@ -4976,8 +4983,8 @@ function ManualOrderForm({
                             className={`flex flex-col items-center justify-center min-h-[44px] px-1.5 py-3 rounded-lg text-sm font-medium transition-colors ${detailCourseTiming === opt.value ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                           >
                             <span className="text-xl mb-1">{opt.icon}</span>
-                            <span className="font-semibold text-xs leading-tight text-center">{opt.label}</span>
-                            <span className={`text-[11px] leading-tight mt-0.5 text-center ${detailCourseTiming === opt.value ? 'text-white/70' : 'text-gray-400'}`}>{opt.desc}</span>
+                            <span className="font-semibold text-xs leading-tight text-center">{opt.value === 0 ? t('manualOrder.courseEntry') : opt.value === 1 ? t('manualOrder.courseMain') : t('manualOrder.courseDessert')}</span>
+                            <span className={`text-[11px] leading-tight mt-0.5 text-center ${detailCourseTiming === opt.value ? 'text-white/70' : 'text-gray-400'}`}>{opt.value === 0 ? t('manualOrder.courseEntryDesc') : opt.value === 1 ? t('manualOrder.courseMainDesc') : t('manualOrder.courseDessertDesc')}</span>
                           </button>
                         ))}
                       </div>
@@ -4986,10 +4993,10 @@ function ManualOrderForm({
                     {/* Configurador POR UNIDAD — toda la comida (entrada/plato fuerte/postre) */}
                     <div className="mt-4">
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <label className="text-sm font-medium text-gray-700">{hasMeat ? 'Cocción por unidad' : 'Detalle por unidad'}</label>
+                        <label className="text-sm font-medium text-gray-700">{hasMeat ? t('manualOrder.cookingPerUnit') : t('manualOrder.detailPerUnit')}</label>
                         {detailUnits.length > 1 && hasMeat && (
                           <div className="flex items-center gap-1">
-                            <span className="text-[11px] text-gray-400 mr-0.5">Todas:</span>
+                            <span className="text-[11px] text-gray-400 mr-0.5">{t('manualOrder.allLabel')}</span>
                             {MANUAL_COOKING_OPTIONS.map(opt => (
                               <button key={opt.key} type="button" onClick={() => applyCookingToAll(opt.key)}
                                 className="px-2 py-1 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-700 transition-colors">
@@ -5003,7 +5010,7 @@ function ManualOrderForm({
                         {detailUnits.map((u, i) => (
                           <div key={i} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
                             <div className="flex items-center gap-2 px-2.5 py-2">
-                              <span className="text-[11px] font-bold text-gray-500 w-[52px] flex-shrink-0">Unidad {i + 1}</span>
+                              <span className="text-[11px] font-bold text-gray-500 w-[52px] flex-shrink-0">{t('manualOrder.unitN', { n: i + 1 })}</span>
                               <div className="flex-1">
                                 {hasMeat ? (
                                   <div className="grid grid-cols-3 gap-1">
@@ -5015,7 +5022,7 @@ function ManualOrderForm({
                                     ))}
                                   </div>
                                 ) : (
-                                  <span className="text-[11px] text-gray-400">Toca ▸ para personalizar esta unidad</span>
+                                  <span className="text-[11px] text-gray-400">{t('manualOrder.tapToCustomize')}</span>
                                 )}
                               </div>
                               <button type="button" onClick={() => setExpandedUnit(expandedUnit === i ? null : i)}
@@ -5027,34 +5034,34 @@ function ManualOrderForm({
                               <div className="px-2.5 pb-2.5 pt-1 space-y-2 border-t border-gray-100 bg-gray-50">
                                 {!isDessert && (
                                   <div>
-                                    <label className="block text-[11px] font-medium text-gray-500 mb-1">Guarnición</label>
+                                    <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('common.garnish')}</label>
                                     <select value={u.sideDish} onChange={e => setUnitField(i, 'sideDish', e.target.value)}
                                       className="w-full h-10 px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-700 bg-white">
-                                      <option value="">Sin preferencia</option>
-                                      <option value="Arroz">Arroz</option>
-                                      <option value="Papas Fritas">Papas Fritas</option>
-                                      <option value="Ensalada">Ensalada</option>
-                                      <option value="Vegetales">Vegetales al Vapor</option>
-                                      <option value="Puré">Puré de Papa</option>
+                                      <option value="">{t('manualOrder.noPreference')}</option>
+                                      <option value="Arroz">{t('manualOrder.garnishArroz')}</option>
+                                      <option value="Papas Fritas">{t('manualOrder.garnishFries')}</option>
+                                      <option value="Ensalada">{t('manualOrder.garnishSalad')}</option>
+                                      <option value="Vegetales">{t('manualOrder.garnishVeg')}</option>
+                                      <option value="Puré">{t('manualOrder.garnishMash')}</option>
                                     </select>
                                   </div>
                                 )}
                                 <div>
-                                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Personalizaciones</label>
+                                  <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('common.customizations')}</label>
                                   <input type="text" value={u.customizations} onChange={e => setUnitField(i, 'customizations', e.target.value)}
-                                    placeholder="Ej: sin cebolla, extra queso" maxLength={512}
+                                    placeholder={t('manualOrder.customizationsPlaceholder')} maxLength={512}
                                     className="w-full h-10 px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-700" />
                                 </div>
                                 <div>
-                                  <label className="block text-[11px] font-medium text-orange-600 mb-1">¿Alergias?</label>
+                                  <label className="block text-[11px] font-medium text-orange-600 mb-1">{t('common.allergies')}</label>
                                   <input type="text" value={u.allergies} onChange={e => setUnitField(i, 'allergies', e.target.value)}
-                                    placeholder="Ej: mariscos, nueces" maxLength={512}
+                                    placeholder={t('manualOrder.allergiesPlaceholder')} maxLength={512}
                                     className="w-full h-10 px-2 border border-orange-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50 text-gray-700" />
                                 </div>
                                 <div>
-                                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Notas</label>
+                                  <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('common.notes')}</label>
                                   <input type="text" value={u.notes} onChange={e => setUnitField(i, 'notes', e.target.value)}
-                                    placeholder="Ej: sin sal, extra salsa" maxLength={512}
+                                    placeholder={t('manualOrder.notesPlaceholder')} maxLength={512}
                                     className="w-full h-10 px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-700" />
                                 </div>
                               </div>
@@ -5063,7 +5070,7 @@ function ManualOrderForm({
                         ))}
                       </div>
                       {detailUnits.length > 1 && (
-                        <p className="text-[11px] text-gray-400 mt-2">Cada unidad va por separado a cocina con su preferencia.</p>
+                        <p className="text-[11px] text-gray-400 mt-2">{t('manualOrder.perUnitHint')}</p>
                       )}
                     </div>
                   </>
@@ -5078,14 +5085,14 @@ function ManualOrderForm({
                 onClick={closeDetail}
                 className="flex-1 min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
                 onClick={confirmDetail}
                 className="flex-1 min-h-[44px] px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors shadow-lg"
               >
-                {editingLineId != null ? 'Guardar' : 'Agregar'} {detailQty > 1 ? `${detailQty} · ` : ''}RD$ {(detailDish.price * detailQty).toFixed(2)}
+                {editingLineId != null ? t('manualOrder.saveBtn') : t('manualOrder.addBtn')} {detailQty > 1 ? `${detailQty} · ` : ''}RD$ {(detailDish.price * detailQty).toFixed(2)}
               </button>
             </div>
           </div>

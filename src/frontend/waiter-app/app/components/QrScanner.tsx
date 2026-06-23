@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 /** Extrae el número de mesa o GUID del contenido del QR */
 export function parseTableIdFromQrContent(text: string): number | string | null {
@@ -42,6 +43,7 @@ interface QrScannerProps {
 type Status = 'init' | 'requesting' | 'ready' | 'error' | 'no-https' | 'no-camera';
 
 export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrScannerProps) {
+  const t = useTranslations('scanner');
   const containerId = useRef(`qr-scanner-${Math.random().toString(36).slice(2)}`).current;
   const [status, setStatus] = useState<Status>('init');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -71,7 +73,7 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
         if (typeof window !== 'undefined' && !window.isSecureContext) {
           if (mountedRef.current) {
             setStatus('no-https');
-            setErrorMessage('El navegador requiere HTTPS para acceder a la cámara.');
+            setErrorMessage(t('permissionDenied'));
           }
           return;
         }
@@ -139,11 +141,11 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
         let newStatus: Status = 'error';
         if (isNotFound) {
           newStatus = 'no-camera';
-          msg = 'No se detectó cámara en este dispositivo. Usa el campo de abajo para ingresar el número de mesa manualmente.';
+          msg = t('noCamera');
         } else if (isNotAllowed) {
-          msg = 'Permiso de cámara denegado. Toca el candado de la URL → Permisos del sitio → Cámara → Permitir, luego recarga.';
+          msg = t('permissionDenied');
         } else {
-          msg = raw || 'No se pudo iniciar la cámara. Usa el campo manual abajo.';
+          msg = raw || t('genericError');
         }
         setStatus(newStatus);
         setErrorMessage(msg);
@@ -184,7 +186,7 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
       onScan(result);
       setManualValue('');
     } else {
-      setErrorMessage('Formato inválido. Ingresa el número de mesa (ej. 5) o el código completo.');
+      setErrorMessage(t('invalidFormat'));
     }
   };
 
@@ -203,14 +205,14 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
       {/* CONTEXTO HTTPS — siempre visible al inicio para diagnóstico */}
       {!isSecureContext && (
         <div className="w-full max-w-[320px] mb-3 bg-amber-50 border border-amber-300 rounded-lg p-2.5 text-xs">
-          <p className="font-bold text-amber-900">⚠️ Conexión sin HTTPS</p>
+          <p className="font-bold text-amber-900">{t('noHttps')}</p>
           <p className="text-amber-700 mt-1">
-            La cámara solo funciona con HTTPS o localhost. Abre la app vía:
+            {t('noHttpsHint')}
           </p>
           <code className="block mt-1 bg-white border border-amber-200 rounded px-2 py-1 text-amber-800 text-[11px]">
             https://waiter.172-31-98-60.nip.io:8443
           </code>
-          <p className="text-amber-600 mt-1 text-[11px]">Acepta el aviso de certificado.</p>
+          <p className="text-amber-600 mt-1 text-[11px]">{t('noHttpsCertHint')}</p>
         </div>
       )}
 
@@ -224,20 +226,20 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
       {(status === 'init' || status === 'requesting') && (
         <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
           <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"></div>
-          Iniciando cámara…
+          {t('loading')}
         </div>
       )}
 
       {status === 'ready' && (
         <p className="mt-3 text-sm text-emerald-600 font-medium flex items-center gap-1.5">
           <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-          {singleMode ? 'Apunta al QR de la mesa' : 'Escanea cada QR (se irán añadiendo)'}
+          {singleMode ? t('ready') : t('readyMulti')}
         </p>
       )}
 
       {(status === 'error' || status === 'no-camera' || status === 'no-https') && (
         <div className="mt-3 w-full max-w-[320px] bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm font-semibold text-red-800 mb-1">No se pudo usar la cámara</p>
+          <p className="text-sm font-semibold text-red-800 mb-1">{t('errorTitle')}</p>
           <p className="text-xs text-red-700">{errorMessage}</p>
           {status !== 'no-camera' && (
             <button
@@ -245,7 +247,7 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
               onClick={handleRetry}
               className="mt-2 text-xs px-2.5 py-1 bg-white border border-red-300 rounded hover:bg-red-50 font-medium text-red-700"
             >
-              ↻ Reintentar cámara
+              {t('retry')}
             </button>
           )}
         </div>
@@ -255,13 +257,13 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
           UX: el waiter puede preferir escribir el número incluso si la cámara funciona */}
       <div className="mt-4 w-full max-w-[320px]">
         <div className="text-center text-xs text-gray-500 mb-2">
-          — o ingresa el número de mesa —
+          {t('manualSeparator')}
         </div>
         <div className="flex gap-2">
           <input
             type="text"
             inputMode="numeric"
-            placeholder="Ej. 5"
+            placeholder={t('manualPlaceholder')}
             value={manualValue}
             onChange={e => setManualValue(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleManualSubmit(); }}
@@ -274,7 +276,7 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
             disabled={!manualValue.trim()}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold disabled:opacity-40"
           >
-            Ir
+            {t('manualGo')}
           </button>
         </div>
       </div>
@@ -282,9 +284,9 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
       {/* Diagnóstico (collapsed by default) — visible solo al desarrollador en console */}
       {lanIpHint && (status === 'error' || status === 'no-camera') && (
         <details className="mt-3 w-full max-w-[320px] text-[11px] text-gray-500">
-          <summary className="cursor-pointer">Info técnica</summary>
-          <p className="mt-1">Host: <code>{currentHostUrl}</code></p>
-          <p>Secure context: <code>{isSecureContext ? 'sí' : 'no'}</code></p>
+          <summary className="cursor-pointer">{t('techInfo')}</summary>
+          <p className="mt-1">{t('host')} <code>{currentHostUrl}</code></p>
+          <p>{t('secureContext')} <code>{isSecureContext ? t('secureYes') : t('secureNo')}</code></p>
           <p>UA: <code className="break-all">{typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 100) : ''}</code></p>
         </details>
       )}
@@ -299,7 +301,7 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
           }}
           className="mt-4 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
         >
-          Cerrar
+          {t('close')}
         </button>
       )}
     </div>

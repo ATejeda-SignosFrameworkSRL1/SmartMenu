@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Delete } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 interface PinPadProps {
   /** Largo del PIN. Default: 6 (alineado con backend). */
@@ -31,11 +32,13 @@ interface PinPadProps {
 export function PinPad({
   length = 6,
   onSubmit,
-  prompt = 'Ingresa tu PIN',
+  prompt,
   error,
   loading = false,
   shuffleKeys = false,
 }: PinPadProps) {
+  const t = useTranslations('pin');
+  const resolvedPrompt = prompt ?? t('prompt');
   const [pin, setPin] = useState('');
 
   // Aleatorizar 0-9 si shuffleKeys está activo
@@ -79,7 +82,7 @@ export function PinPad({
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xs mx-auto">
       <div className="text-center">
-        <p className="text-sm text-gray-600 font-medium">{prompt}</p>
+        <p className="text-sm text-gray-600 font-medium">{resolvedPrompt}</p>
       </div>
 
       {/* Display de N puntos */}
@@ -124,7 +127,7 @@ export function PinPad({
           disabled={loading || pin.length === 0}
           onClick={handleClear}
           className="aspect-square rounded-2xl bg-gray-100 hover:bg-gray-200 text-xs font-semibold text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
-          title="Limpiar todo"
+          title={t('clearTitle')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -141,7 +144,7 @@ export function PinPad({
           disabled={loading || pin.length === 0}
           onClick={handleBackspace}
           className="aspect-square rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
-          title="Borrar último dígito"
+          title={t('backspaceTitle')}
         >
           <Delete className="w-5 h-5" />
         </button>
@@ -150,7 +153,7 @@ export function PinPad({
       {loading && (
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-          Verificando...
+          {t('verifying')}
         </div>
       )}
     </div>

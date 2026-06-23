@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Clock } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 interface InactivityGuardProps {
   /**
@@ -58,6 +59,7 @@ export function InactivityGuard({
   warningSeconds = 15,
 }: InactivityGuardProps) {
   const router = useRouter();
+  const t = useTranslations('inactivity');
   const lastActivityRef = useRef<number>(Date.now());
   const timerRef = useRef<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
@@ -122,10 +124,9 @@ export function InactivityGuard({
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] bg-amber-50 border-2 border-amber-300 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3 animate-pulse">
       <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
       <div className="text-sm">
-        <p className="font-bold text-amber-900">Sesión a punto de expirar</p>
+        <p className="font-bold text-amber-900">{t('warningTitle')}</p>
         <p className="text-xs text-amber-700">
-          Toca cualquier parte para mantenerla activa · cierra en{' '}
-          <span className="font-bold tabular-nums">{secondsLeft}s</span>
+          {t('warningHint', { seconds: secondsLeft })}
         </p>
       </div>
     </div>
