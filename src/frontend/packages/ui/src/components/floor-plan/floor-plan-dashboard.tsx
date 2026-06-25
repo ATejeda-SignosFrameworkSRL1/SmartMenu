@@ -176,6 +176,19 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
     };
   }, [reservations, activeZoneId, query]);
 
+  // Marca las mesas que tienen reserva (cualquier zona) para pintarles el badge de reloj en el plano live.
+  const liveData = useMemo<FloorPlanData>(() => {
+    const reservedIds = new Set(reservations.map((r) => String(r.tableId)));
+    if (reservedIds.size === 0) return data;
+    return {
+      ...data,
+      zones: data.zones.map((z) => ({
+        ...z,
+        tables: z.tables.map((t) => (reservedIds.has(String(t.id)) ? { ...t, hasReservation: true } : t)),
+      })),
+    };
+  }, [data, reservations]);
+
   const modeBtn = (active: boolean) =>
     `rounded-md px-3 py-1 font-medium transition ${
       active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
@@ -248,7 +261,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
         <div className="min-h-0 flex-1 p-4">
           {mode === "live" ? (
             <MultiZoneFloorPlanViewer
-              data={data}
+              data={liveData}
               fill
               fitToContent
               defaultZoneId={activeZoneId}

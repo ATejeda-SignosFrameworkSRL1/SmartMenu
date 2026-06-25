@@ -33,6 +33,8 @@ export interface TableData {
   waiter?: string;
   /** Nombre completo del mesero a cargo (para tooltip). */
   waiterName?: string;
+  /** Si la mesa tiene una reserva (hoy) — dibuja un badge de reloj ámbar en la esquina superior derecha. */
+  hasReservation?: boolean;
 }
 
 /** Tipo de elemento arquitectónico/ambiental fijo del plano. */

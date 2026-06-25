@@ -44,13 +44,24 @@ public class TableReservationController : ControllerBase
     {
         try
         {
-            var reservations = await _context.TableReservations
+            // Filtro opcional por día (?date=yyyy-MM-dd): el plano de salón de admin pide solo las de HOY.
+            // host-app llama SIN ?date → sigue recibiendo todas las reservas activas (sin cambio de comportamiento).
+            IQueryable<TableReservation> query = _context.TableReservations
                 .Include(r => r.Table).ThenInclude(t => t!.Zone)
                 .Include(r => r.RequestedZone)
                 .Include(r => r.CreatedByHost)
                 .Include(r => r.AssignedTables)
                 .Include(r => r.PreOrder).ThenInclude(p => p.Items).ThenInclude(i => i.Dish)
-                .Where(r => !r.IsCancelled)
+                .Where(r => !r.IsCancelled);
+
+            if (!string.IsNullOrWhiteSpace(date) && DateOnly.TryParse(date, out var filterDay))
+            {
+                var dayStart = filterDay.ToDateTime(TimeOnly.MinValue);
+                var dayEnd = dayStart.AddDays(1);
+                query = query.Where(r => r.ReservationDateTime >= dayStart && r.ReservationDateTime < dayEnd);
+            }
+
+            var reservations = await query
                 .OrderBy(r => r.ReservationDateTime)
                 .Select(r => new
                 {

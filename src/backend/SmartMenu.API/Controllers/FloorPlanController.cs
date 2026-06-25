@@ -61,18 +61,19 @@ public class FloorPlanController : ControllerBase
                 .Where(s => zoneIds.Contains(s.ZoneId))
                 .ToListAsync();
 
-            // Status dinámico: una mesa Available con reserva activa solapando [ahora, ahora+60min]
-            // se muestra como Reserved (misma lógica que TableController.GetTables, pero en memoria).
+            // Status dinámico: una mesa Available con reserva activa cuya VENTANA DE BLOQUEO ya empezó
+            // (ReservationDateTime - AdvanceBlockMinutes <= ahora < EndDateTime) se muestra como Reserved.
+            // AdvanceBlockMinutes es POR reserva (default 60); se filtra en memoria porque EF Core no traduce
+            // AddMinutes(-columna). (misma lógica que TableController.GetTables.)
             var nowLocal = RestaurantClock.Now;
-            var horizon = nowLocal.AddMinutes(60);
             var reservedTableIds = (await _context.TableReservations.AsNoTracking()
                     .Where(r => ReservationMath.ActiveStatuses.Contains(r.Status)
                              && r.TableId != null
-                             && r.ReservationDateTime < horizon
                              && nowLocal < r.EndDateTime)
-                    .Select(r => r.TableId!.Value)
-                    .Distinct()
+                    .Select(r => new { TableId = r.TableId!.Value, r.ReservationDateTime, r.AdvanceBlockMinutes })
                     .ToListAsync())
+                .Where(r => nowLocal >= r.ReservationDateTime.AddMinutes(-r.AdvanceBlockMinutes))
+                .Select(r => r.TableId)
                 .ToHashSet();
 
             // Estados en minúscula para alinear con TableData.status del plano (@smartmenu/ui).

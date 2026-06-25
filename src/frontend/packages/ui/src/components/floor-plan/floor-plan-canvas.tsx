@@ -162,6 +162,7 @@ export function FloorPlanCanvas({
           height={t.height}
           radius={t.radius}
           waiter={t.waiter}
+          hasReservation={t.hasReservation}
           name={t.name}
           color={t.color}
           colors={colors}

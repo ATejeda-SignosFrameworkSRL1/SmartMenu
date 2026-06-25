@@ -1,6 +1,6 @@
 "use client";
 
-import { Group, Circle, Rect, Text } from "react-konva";
+import { Group, Circle, Rect, Text, Line } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 
 import { STATUS_COLORS, waiterColor, contrastText, type StatusColor } from "./status-colors";
@@ -28,6 +28,8 @@ export interface TableShapeProps {
   server?: string;
   /** Iniciales del MESERO en vivo a cargo (ej. "KI"); rige el badge superior izquierdo. */
   waiter?: string;
+  /** Si true, dibuja un badge de reloj ámbar (esquina sup. derecha) indicando que la mesa tiene reserva. */
+  hasReservation?: boolean;
   /** Nombre/etiqueta visible (si difiere del número). */
   name?: string;
   /** Color manual de la mesa (hex). Sobrescribe el relleno por estado. */
@@ -62,6 +64,7 @@ export function TableShape({
   height,
   radius = 30,
   waiter,
+  hasReservation = false,
   name,
   color,
   colors,
@@ -181,6 +184,16 @@ export function TableShape({
             align="center"
             verticalAlign="middle"
           />
+        </Group>
+      )}
+
+      {/* Badge de reserva: reloj ámbar en la esquina superior derecha (independiente del estado/color). */}
+      {hasReservation && (
+        <Group x={halfW * 0.78} y={-halfH * 0.78} listening={false}>
+          <Circle radius={9} fill="#f59e0b" stroke="#ffffff" strokeWidth={1.5} shadowColor="#0f172a" shadowBlur={2} shadowOpacity={0.25} />
+          {/* Manecillas del reloj (blancas). */}
+          <Line points={[0, 0, 0, -4]} stroke="#ffffff" strokeWidth={1.4} lineCap="round" />
+          <Line points={[0, 0, 3, 0.5]} stroke="#ffffff" strokeWidth={1.4} lineCap="round" />
         </Group>
       )}
     </Group>

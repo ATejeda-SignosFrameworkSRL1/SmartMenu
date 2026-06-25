@@ -38,18 +38,21 @@ public class TableController : ControllerBase
         try
         {
             // Capacidad dinámica por intervalo: una mesa está Reserved solo si tiene una reserva
-            // ACTIVA asignada cuya VENTANA [inicio, fin) solapa [ahora, ahora+60min] — ya NO se
-            // bloquea el día completo. Hora local del restaurante (las reservas se guardan naive-local).
+            // ACTIVA asignada cuya VENTANA DE BLOQUEO ya empezó (ReservationDateTime - AdvanceBlockMinutes
+            // <= ahora < EndDateTime) — ya NO se bloquea el día completo. AdvanceBlockMinutes es POR reserva
+            // (default 60); se filtra en memoria porque EF Core no traduce AddMinutes(-columna).
+            // Hora local del restaurante (las reservas se guardan naive-local).
             var nowLocal = RestaurantClock.Now;
-            var horizon = nowLocal.AddMinutes(60);
-            var reservedTableIds = await _context.TableReservations
+            var reservedTableIds = (await _context.TableReservations
                 .Where(r => ReservationMath.ActiveStatuses.Contains(r.Status)
                          && r.TableId != null
-                         && r.ReservationDateTime < horizon
                          && nowLocal < r.EndDateTime)
-                .Select(r => r.TableId!.Value)
+                .Select(r => new { TableId = r.TableId!.Value, r.ReservationDateTime, r.AdvanceBlockMinutes })
+                .ToListAsync())
+                .Where(r => nowLocal >= r.ReservationDateTime.AddMinutes(-r.AdvanceBlockMinutes))
+                .Select(r => r.TableId)
                 .Distinct()
-                .ToListAsync();
+                .ToList();
 
             // S2.2 (QA-fix) — read-only: un GET NO debe escribir Status. Se calcula el estado
             // EFECTIVO en memoria (Reserved↔Available según la ventana de reserva), igual que
