@@ -303,45 +303,33 @@ api.qa.smartmenu.local {
 
 # â”€â”€â”€ Staff apps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 admin.qa.smartmenu.local {
-	import tls-long
-	import security-headers
+	import app-with-backend
 	reverse_proxy admin-panel:3001
-	encode gzip zstd
 }
 
 kds.qa.smartmenu.local {
-	import tls-long
-	import security-headers
+	import app-with-backend
 	reverse_proxy kds-app:3002
-	encode gzip zstd
 }
 
 waiter.qa.smartmenu.local {
-	import tls-long
-	import security-headers
+	import app-with-backend
 	reverse_proxy waiter-app:3003
-	encode gzip zstd
 }
 
 host.qa.smartmenu.local {
-	import tls-long
-	import security-headers
+	import app-with-backend
 	reverse_proxy host-app:3004
-	encode gzip zstd
 }
 
 cashier.qa.smartmenu.local {
-	import tls-long
-	import security-headers
+	import app-with-backend
 	reverse_proxy cashier-app:3005
-	encode gzip zstd
 }
 
 reservation.qa.smartmenu.local {
-	import tls-long
-	import security-headers
+	import app-with-backend
 	reverse_proxy reservation-app:3007
-	encode gzip zstd
 }
 
 # ─── Staff hub — landing con QR de cada panel (LAN, scannable desde el cell) ─
