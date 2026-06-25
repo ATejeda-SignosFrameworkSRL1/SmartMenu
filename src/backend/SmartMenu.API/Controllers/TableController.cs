@@ -68,9 +68,7 @@ public class TableController : ControllerBase
                 tableNumber = t.TableNumber,
                 capacity = t.Capacity,
                 zoneName = t.Zone?.Name,
-                status = (t.Status == TableStatus.Available && reservedTableIds.Contains(t.Id)) ? nameof(TableStatus.Reserved)
-                       : (t.Status == TableStatus.Reserved && !reservedTableIds.Contains(t.Id)) ? nameof(TableStatus.Available)
-                       : t.Status.ToString(),
+                status = ReservationMath.EffectiveStatus(t.Status, reservedTableIds.Contains(t.Id)).ToString(),
                 qrCode = t.QRCode,
                 name = t.Name,
                 color = t.Color,

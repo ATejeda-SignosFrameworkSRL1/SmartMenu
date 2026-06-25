@@ -49,6 +49,41 @@ public class ReservationService : IReservationService
         _tableNotifier = tableNotifier;
     }
 
+    /// <summary>
+    /// Difunde por SignalR (/hubs/tables → TableStatusChanged) el estado EFECTIVO actual de la(s)
+    /// mesa(s) afectada(s) por una acción de reserva, para que los planos en vivo (waiter/host/admin)
+    /// reaccionen al instante sin recargar. Aditivo y a prueba de fallos: nunca debe romper la
+    /// operación de reserva. Envía PascalCase (igual que SeatAsync y la API de mesas).
+    /// </summary>
+    private async Task BroadcastTableStatusAsync(IEnumerable<int> tableIds, CancellationToken ct)
+    {
+        var ids = tableIds.Distinct().ToList();
+        if (ids.Count == 0) return;
+        try
+        {
+            var nowLocal = RestaurantClock.Now;
+            var tables = await _context.Tables.AsNoTracking()
+                .Where(t => ids.Contains(t.Id))
+                .Select(t => new { t.Id, t.Status })
+                .ToListAsync(ct);
+            var active = await _context.TableReservations.AsNoTracking()
+                .Where(r => r.TableId != null && ids.Contains(r.TableId.Value)
+                         && ReservationMath.ActiveStatuses.Contains(r.Status)
+                         && nowLocal < r.EndDateTime)
+                .ToListAsync(ct);
+            foreach (var t in tables)
+            {
+                var blocking = active.Any(r => r.TableId == t.Id && ReservationMath.IsBlockingNow(r, nowLocal));
+                var effective = ReservationMath.EffectiveStatus(t.Status, blocking);
+                await _tableNotifier.TableStatusChangedAsync(t.Id, effective.ToString());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo difundir el estado de las mesas {TableIds}", string.Join(",", ids));
+        }
+    }
+
     // ─────────────────────────── Booking público (hold) ───────────────────────────
 
     public async Task<ReservationActionResult> CreateHoldAsync(HoldRequestDto dto, CancellationToken ct = default)
@@ -264,6 +299,8 @@ public class ReservationService : IReservationService
         catch (DbUpdateConcurrencyException) { return Stale(); }
 
         await SafeNotifyAsync(() => _notify.SendConfirmationAsync(res.Id, ct));
+        // Plano en vivo: confirmar puede dejar la mesa como Reservada (si la ventana ya abrió).
+        if (res.TableId.HasValue) await BroadcastTableStatusAsync(new[] { res.TableId.Value }, ct);
         return Ok(res);
     }
 
@@ -317,6 +354,7 @@ public class ReservationService : IReservationService
         }
 
         ApplyRowVersion(res, dto.RowVersion);
+        var previousTableIds = res.AssignedTables.Select(a => a.TableId).ToList();
         _context.ReservationTables.RemoveRange(res.AssignedTables);
         foreach (var tid in tableIds)
             _context.ReservationTables.Add(new ReservationTable { ReservationId = res.Id, TableId = tid });
@@ -332,6 +370,10 @@ public class ReservationService : IReservationService
         try { await _context.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { await tx.RollbackAsync(ct); return Stale(); }
         await tx.CommitAsync(ct);
+
+        // Plano en vivo: difunde el estado efectivo de las mesas viejas (liberadas) y las nuevas
+        // (Reservada si la ventana de bloqueo ya abrió). waiter/host/admin se actualizan sin recargar.
+        await BroadcastTableStatusAsync(previousTableIds.Concat(tableIds), ct);
 
         var r2 = Ok(res);
         r2.AssignedTableIds = tableIds;
@@ -453,6 +495,8 @@ public class ReservationService : IReservationService
         SyncLegacyFlags(res);
         await _context.SaveChangesAsync(ct);
         await SafeNotifyAsync(() => _notify.SendNoShowAsync(res.Id, ct));
+        // Plano en vivo: no-show libera la mesa (vuelve a su estado base).
+        if (res.TableId.HasValue) await BroadcastTableStatusAsync(new[] { res.TableId.Value }, ct);
         return Ok(res);
     }
 
@@ -474,9 +518,12 @@ public class ReservationService : IReservationService
         res.CancelledAt = RestaurantClock.Now;
         res.CancelReason = dto.Reason;
         res.HoldExpiresAt = null;
+        var cancelledTableId = res.TableId;
         SyncLegacyFlags(res);
         try { await _context.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { return Stale(); }
+        // Plano en vivo: al cancelar, la mesa vuelve a su estado base (típicamente Disponible).
+        if (cancelledTableId.HasValue) await BroadcastTableStatusAsync(new[] { cancelledTableId.Value }, ct);
         return Ok(res);
     }
 
@@ -518,6 +565,9 @@ public class ReservationService : IReservationService
         try { await _context.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { await tx.RollbackAsync(ct); return Stale(); }
         await tx.CommitAsync(ct);
+
+        // Plano en vivo: la ventana de bloqueo cambió → recalcular el estado efectivo de la mesa.
+        if (res.TableId.HasValue) await BroadcastTableStatusAsync(new[] { res.TableId.Value }, ct);
 
         var result = Ok(res);
         result.ReservationDateTime = startLocal.ToString("yyyy-MM-ddTHH:mm:ss");

@@ -165,7 +165,14 @@ export default function WaiterPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const [view, setView] = useState<'general' | 'my-tables' | 'plano'>('general');
-  const { data: floorPlanData, palette: floorPlanPalette, enabled: floorPlanEnabled } = useWaiterFloorPlan();
+  // Cambios de mesa del host (vía /hubs/tables) → parchear la grilla principal al instante,
+  // sin depender del poll de 5s (que además se pausa con modales abiertos). PascalCase como el API.
+  const handleTableEvent = useCallback((e: { tableId: number; status?: string }) => {
+    if (!e.status) return;
+    const pascal = e.status.charAt(0).toUpperCase() + e.status.slice(1).toLowerCase();
+    setTables(prev => prev.map(tb => (Number(tb.id) === e.tableId ? { ...tb, status: pascal } : tb)));
+  }, []);
+  const { data: floorPlanData, palette: floorPlanPalette, enabled: floorPlanEnabled } = useWaiterFloorPlan({ onTableEvent: handleTableEvent });
   const [planoSel, setPlanoSel] = useState<string | number | null>(null);
 
   // Si el admin oculta el plano para meseros (switch en Gestión de Salón), salir de la pestaña Plano.

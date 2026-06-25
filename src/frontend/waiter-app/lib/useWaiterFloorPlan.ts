@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
 import { api, ensureFreshToken } from '@/lib/api';
 import type { FloorPlanData, StatusPaletteOverride, TableStatus } from '@smartmenu/ui';
@@ -55,10 +55,17 @@ function normalize(raw: FloorPlanData): FloorPlanData {
  * estado + colores + mesero) con overlay en vivo por /hubs/tables (TableStatusChanged
  * + TableWaiterChanged). Sin edición (no PUT). Espejo ligero de admin/useFloorPlanLive.
  */
-export function useWaiterFloorPlan() {
+export function useWaiterFloorPlan(opts?: {
+  /** Se dispara con cada evento de /hubs/tables, para que la grilla principal se actualice en vivo. */
+  onTableEvent?: (e: { tableId: number; status?: string; waiter?: string | null; waiterName?: string | null }) => void;
+}) {
   const [data, setData] = useState<FloorPlanData>({ zones: [] });
   const [palette, setPalette] = useState<StatusPaletteOverride | undefined>(undefined);
   const [enabled, setEnabled] = useState(true);
+
+  // Callback siempre fresco sin re-crear las conexiones SignalR.
+  const onTableEventRef = useRef(opts?.onTableEvent);
+  useEffect(() => { onTableEventRef.current = opts?.onTableEvent; });
 
   const load = useCallback(async () => {
     try {
@@ -117,11 +124,18 @@ export function useWaiterFloorPlan() {
 
     conn.on('TableStatusChanged', (d: any) => {
       const id = Number(d?.tableId ?? d?.TableId);
-      if (id) applyStatus(id, String(d?.status ?? d?.Status ?? ''));
+      if (!id) return;
+      const status = String(d?.status ?? d?.Status ?? '');
+      applyStatus(id, status);
+      onTableEventRef.current?.({ tableId: id, status });
     });
     conn.on('TableWaiterChanged', (d: any) => {
       const id = Number(d?.tableId ?? d?.TableId);
-      if (id) applyWaiter(id, d?.waiter ?? d?.Waiter ?? null, d?.waiterName ?? d?.WaiterName ?? null);
+      if (!id) return;
+      const waiter = d?.waiter ?? d?.Waiter ?? null;
+      const waiterName = d?.waiterName ?? d?.WaiterName ?? null;
+      applyWaiter(id, waiter, waiterName);
+      onTableEventRef.current?.({ tableId: id, waiter, waiterName });
     });
     conn.on('FloorPlanVisibilityChanged', (d: any) => {
       const w = d?.waiterEnabled ?? d?.WaiterEnabled;
@@ -133,6 +147,36 @@ export function useWaiterFloorPlan() {
       conn.stop().catch(() => {});
     };
   }, [applyStatus, applyWaiter]);
+
+  // Tiempo real: acciones de reserva del host (asignar/confirmar/cancelar/sentar) → refetch del plano,
+  // para reflejar el estado "Reservada" dinámico al instante. Red de seguridad además del push de
+  // TableStatusChanged que el backend ya emite en esas acciones.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('waiter_token');
+    if (!token) return;
+
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl(`${window.location.origin}/hubs/reservations`, {
+        accessTokenFactory: () => ensureFreshToken(),
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+      })
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+      .configureLogging(signalR.LogLevel.Warning)
+      .build();
+
+    const refetch = () => { load(); };
+    conn.on('NewReservation', refetch);
+    conn.on('ReservationConfirmed', refetch);
+    conn.on('ReservationCancelled', refetch);
+    conn.on('ReservationTableAssigned', refetch);
+    conn.on('ReservationSeated', refetch);
+    conn.start().catch(() => {});
+
+    return () => {
+      conn.stop().catch(() => {});
+    };
+  }, [load]);
 
   return { data, palette, enabled, reload: load };
 }

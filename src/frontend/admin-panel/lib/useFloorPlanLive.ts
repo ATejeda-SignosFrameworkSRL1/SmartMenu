@@ -227,17 +227,21 @@ export function useFloorPlanLive() {
     tablesConn.start().catch(() => {});
 
     const resConn = mkConn('/hubs/reservations');
-    const refetch = () => loadReservations();
+    // Refresca el panel de reservas Y el plano (estado "Reservada" dinámico + badge de reserva) al
+    // instante, sin esperar el poll de 10s.
+    const refetch = () => { loadReservations(); loadFloorPlan(); };
     resConn.on('NewReservation', refetch);
     resConn.on('ReservationConfirmed', refetch);
     resConn.on('ReservationCancelled', refetch);
+    resConn.on('ReservationTableAssigned', refetch);
+    resConn.on('ReservationSeated', refetch);
     resConn.start().catch(() => {});
 
     return () => {
       tablesConn.stop().catch(() => {});
       resConn.stop().catch(() => {});
     };
-  }, [applyTableStatus, applyTableWaiter, loadReservations]);
+  }, [applyTableStatus, applyTableWaiter, loadReservations, loadFloorPlan]);
 
   // Guardado del editor (debounced) → PUT /api/floorplan
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
