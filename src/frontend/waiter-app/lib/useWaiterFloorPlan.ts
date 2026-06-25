@@ -141,7 +141,7 @@ export function useWaiterFloorPlan(opts?: {
       const w = d?.waiterEnabled ?? d?.WaiterEnabled;
       if (typeof w === 'boolean') setEnabled(w);
     });
-    conn.start().catch(() => {});
+    conn.start().catch((e) => console.error('[waiter] SignalR /hubs/tables connect failed', e));
 
     return () => {
       conn.stop().catch(() => {});
@@ -171,7 +171,7 @@ export function useWaiterFloorPlan(opts?: {
     conn.on('ReservationCancelled', refetch);
     conn.on('ReservationTableAssigned', refetch);
     conn.on('ReservationSeated', refetch);
-    conn.start().catch(() => {});
+    conn.start().catch((e) => console.error('[waiter] SignalR /hubs/reservations connect failed', e));
 
     return () => {
       conn.stop().catch(() => {});

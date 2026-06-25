@@ -224,7 +224,7 @@ export function useFloorPlanLive() {
       if (typeof h === 'boolean') setHostEnabled(h);
       if (typeof w === 'boolean') setWaiterEnabled(w);
     });
-    tablesConn.start().catch(() => {});
+    tablesConn.start().catch((e) => console.error('[admin] SignalR /hubs/tables connect failed', e));
 
     const resConn = mkConn('/hubs/reservations');
     // Refresca el panel de reservas Y el plano (estado "Reservada" dinámico + badge de reserva) al
@@ -235,7 +235,7 @@ export function useFloorPlanLive() {
     resConn.on('ReservationCancelled', refetch);
     resConn.on('ReservationTableAssigned', refetch);
     resConn.on('ReservationSeated', refetch);
-    resConn.start().catch(() => {});
+    resConn.start().catch((e) => console.error('[admin] SignalR /hubs/reservations connect failed', e));
 
     return () => {
       tablesConn.stop().catch(() => {});

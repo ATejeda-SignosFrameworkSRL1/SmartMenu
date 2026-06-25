@@ -129,7 +129,7 @@ export function useHostFloorPlan() {
       const h = d?.hostEnabled ?? d?.HostEnabled;
       if (typeof h === 'boolean') setEnabled(h);
     });
-    conn.start().catch(() => {});
+    conn.start().catch((e) => console.error('[host] SignalR /hubs/tables connect failed', e));
 
     return () => {
       conn.stop().catch(() => {});
