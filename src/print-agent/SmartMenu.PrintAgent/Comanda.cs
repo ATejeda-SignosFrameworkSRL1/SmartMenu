@@ -57,7 +57,7 @@ public static class Comanda
     {
         b.AlignCenter().Bold(true).DoubleSize(true).Line($"*** {station} ***").DoubleSize(false).Bold(false);
         b.AlignLeft().Line(Rule('=', s));
-        b.Bold(true).Line($"Orden: #{o.OrderNumber}").Bold(false);
+        b.Bold(true).Line($"Orden: #{ShortOrder(o.OrderNumber)}").Bold(false);
         var mesa = o.IsPickup || string.IsNullOrWhiteSpace(o.TableNumber) ? "PARA LLEVAR" : $"Mesa {o.TableNumber}";
         b.DoubleSize(true).Line(mesa).DoubleSize(false);
         b.Line($"Hora: {o.CreatedAt.ToLocalTime():HH:mm  dd/MM}");
@@ -105,6 +105,15 @@ public static class Comanda
     }
 
     private static string Rule(char c, PrintAgentSettings s) => new(c, Math.Max(8, s.PaperWidthChars));
+
+    /// <summary>Codigo corto que ve el staff en la mesa (mismo criterio que shortOrder
+    /// del waiter app: ultimo segmento tras '-', en mayusculas). Ej: ORD-...-de6661 -> DE6661.</summary>
+    private static string ShortOrder(string? orderNumber)
+    {
+        if (string.IsNullOrWhiteSpace(orderNumber)) return "";
+        var parts = orderNumber.Split('-');
+        return parts[^1].ToUpperInvariant();
+    }
 
     private static string? PrettyCourse(string? course) => course switch
     {
