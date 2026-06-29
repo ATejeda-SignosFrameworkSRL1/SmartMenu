@@ -100,10 +100,11 @@ export function useWaiterFloorPlan(opts?: {
     }));
   }, []);
 
-  // Carga inicial + reconcile de respaldo cada 15s.
+  // Carga inicial + reconcile de RESPALDO cada 60s. La vía principal es SignalR (TableStatusChanged
+  // → parche local en applyStatus); el poll solo cubre eventos perdidos / SignalR caído.
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 60000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -148,35 +149,9 @@ export function useWaiterFloorPlan(opts?: {
     };
   }, [applyStatus, applyWaiter]);
 
-  // Tiempo real: acciones de reserva del host (asignar/confirmar/cancelar/sentar) → refetch del plano,
-  // para reflejar el estado "Reservada" dinámico al instante. Red de seguridad además del push de
-  // TableStatusChanged que el backend ya emite en esas acciones.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const token = localStorage.getItem('waiter_token');
-    if (!token) return;
-
-    const conn = new signalR.HubConnectionBuilder()
-      .withUrl(`${window.location.origin}/hubs/reservations`, {
-        accessTokenFactory: () => ensureFreshToken(),
-        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
-      })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(signalR.LogLevel.Warning)
-      .build();
-
-    const refetch = () => { load(); };
-    conn.on('NewReservation', refetch);
-    conn.on('ReservationConfirmed', refetch);
-    conn.on('ReservationCancelled', refetch);
-    conn.on('ReservationTableAssigned', refetch);
-    conn.on('ReservationSeated', refetch);
-    conn.start().catch((e) => console.error('[waiter] SignalR /hubs/reservations connect failed', e));
-
-    return () => {
-      conn.stop().catch(() => {});
-    };
-  }, [load]);
+  // (Se eliminó la suscripción a /hubs/reservations: el estado de mesa — incl. "Reservada"
+  // dinámica — llega por TableStatusChanged en /hubs/tables, que el backend emite SIEMPRE para
+  // toda acción de mesa/reserva. No se necesita recargar el plano por eventos de reserva.)
 
   return { data, palette, enabled, reload: load };
 }

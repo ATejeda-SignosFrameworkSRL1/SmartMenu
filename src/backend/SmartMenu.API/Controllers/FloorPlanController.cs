@@ -79,7 +79,7 @@ public class FloorPlanController : ControllerBase
             // Estados en minúscula para alinear con TableData.status del plano (@smartmenu/ui).
             // Regla compartida con TableController + la difusión por SignalR (ReservationMath).
             string EffectiveStatus(Table t) =>
-                ReservationMath.EffectiveStatus(t.Status, reservedTableIds.Contains(t.Id)).ToString().ToLowerInvariant();
+                TableStatusEvaluator.EffectiveStatus(t.Status, reservedTableIds.Contains(t.Id)).ToString().ToLowerInvariant();
 
             // Mesero EN VIVO a cargo: SOLO en mesas que se están atendiendo (ocupada/por cobrar),
             // así el badge nunca queda pegado en una mesa liberada con la sesión sin cerrar.

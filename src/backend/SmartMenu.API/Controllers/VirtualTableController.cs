@@ -15,27 +15,27 @@ public class VirtualTableController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<VirtualTableController> _logger;
     private readonly ITableRealtimeNotifier _tableNotifier;
+    private readonly ITableStatusBroadcaster _broadcaster;
 
-    public VirtualTableController(ApplicationDbContext context, ILogger<VirtualTableController> logger, ITableRealtimeNotifier tableNotifier)
+    public VirtualTableController(ApplicationDbContext context, ILogger<VirtualTableController> logger, ITableRealtimeNotifier tableNotifier, ITableStatusBroadcaster broadcaster)
     {
         _context = context;
         _logger = logger;
         _tableNotifier = tableNotifier;
+        _broadcaster = broadcaster;
     }
 
-    // Difunde el estado de una mesa al plano en vivo. Aditivo y a prueba de fallos:
-    // un error de SignalR nunca debe romper la operación (ya commiteada).
+    // Difunde el estado EFECTIVO de una mesa al plano en vivo vía el broadcaster único (recalcula
+    // el estado a partir de Table.Status + reservas). El parámetro `status` se ignora para la
+    // emisión (lo computa el broadcaster); se conserva por compatibilidad con los callsites.
+    // Aditivo y a prueba de fallos: nunca debe romper la operación (ya commiteada).
     private async Task NotifyTableAsync(int tableId, string status, bool clearWaiter)
     {
-        try
+        await _broadcaster.BroadcastAsync(tableId);
+        if (clearWaiter)
         {
-            await _tableNotifier.TableStatusChangedAsync(tableId, status);
-            if (clearWaiter)
-                await _tableNotifier.TableWaiterChangedAsync(tableId, null, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "No se pudo difundir el estado de la mesa {TableId}", tableId);
+            try { await _tableNotifier.TableWaiterChangedAsync(tableId, null, null); }
+            catch (Exception ex) { _logger.LogWarning(ex, "No se pudo difundir el mesero de la mesa {TableId}", tableId); }
         }
     }
 

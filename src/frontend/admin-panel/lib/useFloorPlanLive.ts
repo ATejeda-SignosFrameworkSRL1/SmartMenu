@@ -184,8 +184,10 @@ export function useFloorPlanLive() {
       await loadFloorPlan();
       if (alive) await loadReservations();
     })();
-    const t1 = setInterval(reconcileStatuses, 10000);
-    const t2 = setInterval(loadReservations, 20000);
+    // Polling de RESPALDO (60s). La vía principal es SignalR: TableStatusChanged (parche local)
+    // para estado de mesa, y los eventos de reserva para refrescar el panel de reservas.
+    const t1 = setInterval(reconcileStatuses, 60000);
+    const t2 = setInterval(loadReservations, 60000);
     return () => {
       alive = false;
       clearInterval(t1);
@@ -227,9 +229,9 @@ export function useFloorPlanLive() {
     tablesConn.start().catch((e) => console.error('[admin] SignalR /hubs/tables connect failed', e));
 
     const resConn = mkConn('/hubs/reservations');
-    // Refresca el panel de reservas Y el plano (estado "Reservada" dinámico + badge de reserva) al
-    // instante, sin esperar el poll de 10s.
-    const refetch = () => { loadReservations(); loadFloorPlan(); };
+    // Solo refresca el PANEL de reservas (y el badge, que sale de `reservations`). El estado/color
+    // de mesa NO se recarga aquí: llega por TableStatusChanged (/hubs/tables) → parche local.
+    const refetch = () => loadReservations();
     resConn.on('NewReservation', refetch);
     resConn.on('ReservationConfirmed', refetch);
     resConn.on('ReservationCancelled', refetch);

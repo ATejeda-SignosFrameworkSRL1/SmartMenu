@@ -16,13 +16,13 @@ public class TableController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<TableController> _logger;
-    private readonly IHubContext<TableHub> _tableHub;
+    private readonly SmartMenu.Application.Services.ITableStatusBroadcaster _broadcaster;
 
-    public TableController(ApplicationDbContext context, ILogger<TableController> logger, IHubContext<TableHub> tableHub)
+    public TableController(ApplicationDbContext context, ILogger<TableController> logger, SmartMenu.Application.Services.ITableStatusBroadcaster broadcaster)
     {
         _context = context;
         _logger = logger;
-        _tableHub = tableHub;
+        _broadcaster = broadcaster;
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public class TableController : ControllerBase
                 tableNumber = t.TableNumber,
                 capacity = t.Capacity,
                 zoneName = t.Zone?.Name,
-                status = ReservationMath.EffectiveStatus(t.Status, reservedTableIds.Contains(t.Id)).ToString(),
+                status = TableStatusEvaluator.EffectiveStatus(t.Status, reservedTableIds.Contains(t.Id)).ToString(),
                 qrCode = t.QRCode,
                 name = t.Name,
                 color = t.Color,
@@ -193,19 +193,8 @@ public class TableController : ControllerBase
 
             _logger.LogInformation("Table {TableId} created with QR {QR}", table.Id, table.QRCode);
 
-            try
-            {
-                await _tableHub.Clients.All.SendAsync("TableStatusChanged", new
-                {
-                    tableId = table.Id,
-                    status = "Available",
-                    timestamp = DateTime.UtcNow
-                });
-            }
-            catch (Exception exHub)
-            {
-                _logger.LogWarning(exHub, "No se pudo notificar por SignalR");
-            }
+            // Difunde el estado efectivo de la nueva mesa (a prueba de fallos, vía el broadcaster único).
+            await _broadcaster.BroadcastAsync(table.Id);
 
             return Created($"/api/table/{table.Id}", new
             {
@@ -372,19 +361,8 @@ public class TableController : ControllerBase
 
             _logger.LogInformation("Table {TableId} status updated to {Status}", id, dto.NewStatus);
 
-            try
-            {
-                await _tableHub.Clients.All.SendAsync("TableStatusChanged", new
-                {
-                    tableId = id,
-                    status = dto.NewStatus,
-                    timestamp = DateTime.UtcNow
-                });
-            }
-            catch (Exception exHub)
-            {
-                _logger.LogWarning(exHub, "No se pudo notificar TableStatusChanged por SignalR");
-            }
+            // Difunde el estado efectivo de la mesa (a prueba de fallos, vía el broadcaster único).
+            await _broadcaster.BroadcastAsync(id);
 
             return Ok(new
             {

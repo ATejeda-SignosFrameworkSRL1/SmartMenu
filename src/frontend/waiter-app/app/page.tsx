@@ -814,7 +814,7 @@ export default function WaiterPage() {
             loadVirtualTables();
           } else {
           }
-        }, 5000);
+        }, 30000);
     };
 
     initAuth();

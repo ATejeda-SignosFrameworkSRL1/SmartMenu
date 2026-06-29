@@ -39,14 +39,16 @@ public class OrderService : IOrderService
     private readonly ILogger<OrderService> _logger;
     private readonly BillingSettings _billing;
     private readonly ITableRealtimeNotifier _tableNotifier;
+    private readonly ITableStatusBroadcaster _broadcaster;
 
-    public OrderService(IOrderRepository orderRepository, ApplicationDbContext context, ILogger<OrderService> logger, IOptions<BillingSettings> billing, ITableRealtimeNotifier tableNotifier)
+    public OrderService(IOrderRepository orderRepository, ApplicationDbContext context, ILogger<OrderService> logger, IOptions<BillingSettings> billing, ITableRealtimeNotifier tableNotifier, ITableStatusBroadcaster broadcaster)
     {
         _orderRepository = orderRepository;
         _context = context;
         _logger = logger;
         _billing = billing.Value;
         _tableNotifier = tableNotifier;
+        _broadcaster = broadcaster;
     }
 
     public async Task<OrderDto> CreateOrderAsync(CreateOrderDto dto)
@@ -150,7 +152,7 @@ public class OrderService : IOrderService
             {
                 table.Status = TableStatus.Occupied;
                 await _context.SaveChangesAsync();
-                await _tableNotifier.TableStatusChangedAsync(table.Id, nameof(TableStatus.Occupied));
+                await _broadcaster.BroadcastAsync(table.Id);
             }
         }
         
@@ -349,7 +351,7 @@ public class OrderService : IOrderService
             await _orderRepository.UpdateAsync(order);
             if (freedTableId != null)
             {
-                await _tableNotifier.TableStatusChangedAsync(freedTableId.Value, nameof(TableStatus.Available));
+                await _broadcaster.BroadcastAsync(freedTableId.Value);
                 await NotifyTableWaiterAsync(freedTableId.Value, null);
             }
         }
@@ -405,7 +407,7 @@ public class OrderService : IOrderService
         await _orderRepository.UpdateAsync(order);
         if (freedTableId != null)
         {
-            await _tableNotifier.TableStatusChangedAsync(freedTableId.Value, nameof(TableStatus.Available));
+            await _broadcaster.BroadcastAsync(freedTableId.Value);
             await NotifyTableWaiterAsync(freedTableId.Value, null);
         }
         var updated = await _orderRepository.GetByIdWithItemsAsync(id);
@@ -448,7 +450,7 @@ public class OrderService : IOrderService
 
         await _orderRepository.UpdateAsync(order);
         if (nowOccupiedTableId != null)
-            await _tableNotifier.TableStatusChangedAsync(nowOccupiedTableId.Value, nameof(TableStatus.Occupied));
+            await _broadcaster.BroadcastAsync(nowOccupiedTableId.Value);
         if (order.TableId != null)
             await NotifyTableWaiterAsync(order.TableId.Value, waiterId);
     }
@@ -717,10 +719,10 @@ public class OrderService : IOrderService
         // Difundir el cambio de ambas mesas al plano en vivo (aditivo: solo notifica).
         if (oldTableId != null)
         {
-            await _tableNotifier.TableStatusChangedAsync(oldTableId.Value, nameof(TableStatus.Available));
+            await _broadcaster.BroadcastAsync(oldTableId.Value);
             await NotifyTableWaiterAsync(oldTableId.Value, null);
         }
-        await _tableNotifier.TableStatusChangedAsync(newTableId, nameof(TableStatus.Occupied));
+        await _broadcaster.BroadcastAsync(newTableId);
         await NotifyTableWaiterAsync(newTableId, order.AssignedWaiterId);
     }
 

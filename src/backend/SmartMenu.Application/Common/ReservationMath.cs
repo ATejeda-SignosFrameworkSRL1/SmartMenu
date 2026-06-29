@@ -49,27 +49,6 @@ public static class ReservationMath
         r.IsConfirmed = r.Status is ReservationStatus.Confirmed or ReservationStatus.Seated or ReservationStatus.Completed;
     }
 
-    /// <summary>
-    /// ¿Esta reserva BLOQUEA su mesa AHORA? La ventana de bloqueo abre AdvanceBlockMinutes
-    /// antes de la hora reservada y cierra al terminar la estadía:
-    /// [ReservationDateTime - AdvanceBlockMinutes, EndDateTime). Usar SOLO con reservas en
-    /// ActiveStatuses y con mesa asignada. `nowLocal` = hora local del restaurante.
-    /// </summary>
-    public static bool IsBlockingNow(TableReservation r, DateTime nowLocal)
-        => nowLocal >= r.ReservationDateTime.AddMinutes(-r.AdvanceBlockMinutes)
-           && nowLocal < r.EndDateTime;
-
-    /// <summary>
-    /// Estado EFECTIVO de una mesa combinando su estado base con la reserva dinámica:
-    /// Available + reserva bloqueando ahora → Reserved; Reserved sin reserva bloqueando → Available;
-    /// en cualquier otro caso, el estado base. Único lugar donde se define esta regla — reusar en
-    /// FloorPlanController, TableController y la difusión por SignalR. Cada caller formatea el casing
-    /// (`.ToString()` PascalCase para SignalR/API de mesas; `.ToLowerInvariant()` para el plano).
-    /// </summary>
-    public static TableStatus EffectiveStatus(TableStatus baseStatus, bool hasActiveReservationNow)
-    {
-        if (baseStatus == TableStatus.Available && hasActiveReservationNow) return TableStatus.Reserved;
-        if (baseStatus == TableStatus.Reserved && !hasActiveReservationNow) return TableStatus.Available;
-        return baseStatus;
-    }
+    // El cálculo del estado EFECTIVO de la mesa (IsBlockingNow / EffectiveStatus) vive ahora en
+    // TableStatusEvaluator (mismo namespace) — único lugar de esa regla.
 }

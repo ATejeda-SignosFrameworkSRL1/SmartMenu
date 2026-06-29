@@ -95,10 +95,11 @@ export function useHostFloorPlan() {
     }));
   }, []);
 
-  // Carga inicial + reconcile de respaldo cada 15s.
+  // Carga inicial + reconcile de RESPALDO cada 60s. La vía principal es SignalR
+  // (TableStatusChanged → parche local en applyStatus).
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 60000);
     return () => clearInterval(t);
   }, [load]);
 

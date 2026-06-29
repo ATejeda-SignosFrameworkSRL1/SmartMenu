@@ -18,12 +18,14 @@ public class TableSessionController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<TableSessionController> _logger;
     private readonly ITableRealtimeNotifier _tableNotifier;
+    private readonly ITableStatusBroadcaster _broadcaster;
 
-    public TableSessionController(ApplicationDbContext context, ILogger<TableSessionController> logger, ITableRealtimeNotifier tableNotifier)
+    public TableSessionController(ApplicationDbContext context, ILogger<TableSessionController> logger, ITableRealtimeNotifier tableNotifier, ITableStatusBroadcaster broadcaster)
     {
         _context = context;
         _logger = logger;
         _tableNotifier = tableNotifier;
+        _broadcaster = broadcaster;
     }
 
     private int CurrentUserId()
@@ -111,7 +113,7 @@ public class TableSessionController : ControllerBase
             table.Status = TableStatus.Occupied;
 
             await _context.SaveChangesAsync();
-            await _tableNotifier.TableStatusChangedAsync(table.Id, nameof(TableStatus.Occupied));
+            await _broadcaster.BroadcastAsync(table.Id);
 
             return Ok(new { id = session.Id, message = "Sesión creada exitosamente" });
         }
@@ -142,7 +144,7 @@ public class TableSessionController : ControllerBase
             session.Table.Status = TableStatus.Available;
 
             await _context.SaveChangesAsync();
-            await _tableNotifier.TableStatusChangedAsync(session.TableId, nameof(TableStatus.Available));
+            await _broadcaster.BroadcastAsync(session.TableId);
             await _tableNotifier.TableWaiterChangedAsync(session.TableId, null, null);
 
             return Ok(new { message = "Sesión cerrada exitosamente" });
@@ -211,7 +213,7 @@ public class TableSessionController : ControllerBase
 
             await _context.SaveChangesAsync();
             if (nowOccupied)
-                await _tableNotifier.TableStatusChangedAsync(table.Id, nameof(TableStatus.Occupied));
+                await _broadcaster.BroadcastAsync(table.Id);
             await _tableNotifier.TableWaiterChangedAsync(table.Id, waiterInitials, waiterFullName);
 
             return Ok(new { id = session.Id, message = "Mesa tomada exitosamente" });

@@ -30,6 +30,7 @@ public class ReservationService : IReservationService
     private readonly IDepositService _deposit;
     private readonly ILogger<ReservationService> _logger;
     private readonly ITableRealtimeNotifier _tableNotifier;
+    private readonly ITableStatusBroadcaster _broadcaster;
 
     public ReservationService(
         ApplicationDbContext context,
@@ -38,7 +39,8 @@ public class ReservationService : IReservationService
         INotificationService notify,
         IDepositService deposit,
         ILogger<ReservationService> logger,
-        ITableRealtimeNotifier tableNotifier)
+        ITableRealtimeNotifier tableNotifier,
+        ITableStatusBroadcaster broadcaster)
     {
         _context = context;
         _availability = availability;
@@ -47,42 +49,15 @@ public class ReservationService : IReservationService
         _deposit = deposit;
         _logger = logger;
         _tableNotifier = tableNotifier;
+        _broadcaster = broadcaster;
     }
 
     /// <summary>
-    /// Difunde por SignalR (/hubs/tables → TableStatusChanged) el estado EFECTIVO actual de la(s)
-    /// mesa(s) afectada(s) por una acción de reserva, para que los planos en vivo (waiter/host/admin)
-    /// reaccionen al instante sin recargar. Aditivo y a prueba de fallos: nunca debe romper la
-    /// operación de reserva. Envía PascalCase (igual que SeatAsync y la API de mesas).
+    /// Difunde el estado EFECTIVO de la(s) mesa(s) afectada(s) por una acción de reserva, vía el
+    /// punto único <see cref="ITableStatusBroadcaster"/> (calcula efectivo + emite TableStatusChanged).
     /// </summary>
-    private async Task BroadcastTableStatusAsync(IEnumerable<int> tableIds, CancellationToken ct)
-    {
-        var ids = tableIds.Distinct().ToList();
-        if (ids.Count == 0) return;
-        try
-        {
-            var nowLocal = RestaurantClock.Now;
-            var tables = await _context.Tables.AsNoTracking()
-                .Where(t => ids.Contains(t.Id))
-                .Select(t => new { t.Id, t.Status })
-                .ToListAsync(ct);
-            var active = await _context.TableReservations.AsNoTracking()
-                .Where(r => r.TableId != null && ids.Contains(r.TableId.Value)
-                         && ReservationMath.ActiveStatuses.Contains(r.Status)
-                         && nowLocal < r.EndDateTime)
-                .ToListAsync(ct);
-            foreach (var t in tables)
-            {
-                var blocking = active.Any(r => r.TableId == t.Id && ReservationMath.IsBlockingNow(r, nowLocal));
-                var effective = ReservationMath.EffectiveStatus(t.Status, blocking);
-                await _tableNotifier.TableStatusChangedAsync(t.Id, effective.ToString());
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "No se pudo difundir el estado de las mesas {TableIds}", string.Join(",", ids));
-        }
-    }
+    private Task BroadcastTableStatusAsync(IEnumerable<int> tableIds, CancellationToken ct)
+        => _broadcaster.BroadcastAsync(tableIds, ct);
 
     // ─────────────────────────── Booking público (hold) ───────────────────────────
 
@@ -458,7 +433,7 @@ public class ReservationService : IReservationService
         // Plano en vivo: al sentar la reserva la mesa queda ocupada (aditivo; no afecta el seat).
         try
         {
-            await _tableNotifier.TableStatusChangedAsync(tableId.Value, nameof(TableStatus.Occupied));
+            await _broadcaster.BroadcastAsync(tableId.Value, ct);
             if (session.AssignedWaiterId != null)
             {
                 var w = await _context.Users.AsNoTracking()

@@ -21,14 +21,16 @@ public class PaymentController : ControllerBase
     private readonly IHubContext<OrderHub> _hub;
     private readonly SmartMenu.Application.Services.IAuditService _audit;
     private readonly SmartMenu.Application.Services.ITableRealtimeNotifier _tableNotifier;
+    private readonly SmartMenu.Application.Services.ITableStatusBroadcaster _broadcaster;
 
-    public PaymentController(ApplicationDbContext context, ILogger<PaymentController> logger, IHubContext<OrderHub> hub, SmartMenu.Application.Services.IAuditService audit, SmartMenu.Application.Services.ITableRealtimeNotifier tableNotifier)
+    public PaymentController(ApplicationDbContext context, ILogger<PaymentController> logger, IHubContext<OrderHub> hub, SmartMenu.Application.Services.IAuditService audit, SmartMenu.Application.Services.ITableRealtimeNotifier tableNotifier, SmartMenu.Application.Services.ITableStatusBroadcaster broadcaster)
     {
         _context = context;
         _logger = logger;
         _hub = hub;
         _audit = audit;
         _tableNotifier = tableNotifier;
+        _broadcaster = broadcaster;
     }
 
     // S1.3 — quien procesa el pago siempre es el usuario autenticado.
@@ -128,7 +130,7 @@ public class PaymentController : ControllerBase
             await tx.CommitAsync();
 
             if (billingTableId != null)
-                await _tableNotifier.TableStatusChangedAsync(billingTableId.Value, nameof(Domain.Enums.TableStatus.Billing));
+                await _broadcaster.BroadcastAsync(billingTableId.Value);
 
             _logger.LogInformation("Payment {PaymentId} created for Order {OrderId} by processor {ProcessorId}, Method: {Method}, Amount: {Amount}",
                 payment.Id, dto.OrderId, processorId, dto.PaymentMethod, dto.Amount);
@@ -363,7 +365,7 @@ public class PaymentController : ControllerBase
             // Plano en vivo: la mesa pasó a "Por cobrar" (aditivo; no afecta el flujo del cliente).
             if (billingTableId != null)
             {
-                try { await _tableNotifier.TableStatusChangedAsync(billingTableId.Value, nameof(Domain.Enums.TableStatus.Billing)); }
+                try { await _broadcaster.BroadcastAsync(billingTableId.Value); }
                 catch (Exception ex) { _logger.LogWarning(ex, "No se pudo difundir Billing de la mesa {TableId}", billingTableId); }
             }
 
@@ -576,7 +578,7 @@ public class PaymentController : ControllerBase
 
             if (cleaningTableId != null)
             {
-                await _tableNotifier.TableStatusChangedAsync(cleaningTableId.Value, nameof(Domain.Enums.TableStatus.Cleaning));
+                await _broadcaster.BroadcastAsync(cleaningTableId.Value);
                 await _tableNotifier.TableWaiterChangedAsync(cleaningTableId.Value, null, null);
             }
 

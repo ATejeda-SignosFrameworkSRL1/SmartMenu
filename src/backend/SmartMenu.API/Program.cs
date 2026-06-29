@@ -202,6 +202,8 @@ builder.Services.AddScoped<SmartMenu.Application.Services.IAuthService, SmartMen
 // Sprint 4.2 — Audit log de acciones sensibles (DGII trazabilidad)
 builder.Services.AddScoped<SmartMenu.Application.Services.IAuditService, SmartMenu.Infrastructure.Services.AuditService>();
 builder.Services.AddSingleton<SmartMenu.Application.Services.ITableRealtimeNotifier, SmartMenu.API.Hubs.TableRealtimeNotifier>();
+// Punto único de difusión de estado de mesa (calcula efectivo + emite TableStatusChanged).
+builder.Services.AddScoped<SmartMenu.Application.Services.ITableStatusBroadcaster, SmartMenu.Infrastructure.Services.TableStatusBroadcaster>();
 builder.Services.AddScoped<SmartMenu.Application.Services.IOrderService, SmartMenu.Infrastructure.Services.OrderService>();
 // Reservas — capacidad dinámica por intervalo: seams de comunicaciones y depósitos (stubs en MVP).
 builder.Services.AddScoped<SmartMenu.Application.Services.INotificationService, SmartMenu.Infrastructure.Services.LoggingNotificationService>();

@@ -552,7 +552,7 @@ export default function HostApp() {
     loadData();
     loadReservations();
 
-    const interval = setInterval(loadData, 5000);
+    const interval = setInterval(loadData, 30000);
     const reservInterval = setInterval(loadReservations, 30000);
     return () => { clearInterval(interval); clearInterval(reservInterval); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
