@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace SmartMenu.API.Hubs;
 
-[Authorize(Roles = "Admin,Manager,Host,Hostess")]
+[Authorize(Roles = "Admin,Manager,Host,Hostess,Waiter")]
 public class ReservationHub : Hub
 {
     public async Task NotifyNewReservation(object reservationData)

@@ -8,7 +8,8 @@ const AlertExclamation = () => (
   <span className="inline-flex items-center justify-center text-red-600 font-bold text-xl animate-pulse" style={{ animationDuration: '0.8s' }}>!</span>
 );
 import toast from 'react-hot-toast';
-import { api } from '@/lib/api';
+import { api, ensureFreshToken } from '@/lib/api';
+import * as signalR from '@microsoft/signalr';
 import { useWaiterNotifications, WaiterNotification } from '@/lib/useWaiterNotifications';
 import { useWaiterFloorPlan } from '@/lib/useWaiterFloorPlan';
 import { useTranslations, useLocale } from 'next-intl';
@@ -268,6 +269,9 @@ export default function WaiterPage() {
   const [dpMonth, setDpMonth] = useState<Date>(() => new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [reservedTableIdsInRange, setReservedTableIdsInRange] = useState<Set<number>>(new Set());
+  // Se incrementa con cada evento de /hubs/reservations para re-disparar el cálculo del set
+  // (dominio reservas). NO toca el estado de mesa (eso viaja por /hubs/tables → TableStatusChanged).
+  const [resVersion, setResVersion] = useState(0);
 
   // Carga las reservas y computa el set de tableIds reservados ese día
   useEffect(() => {
@@ -294,7 +298,40 @@ export default function WaiterPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedDay]);
+  }, [selectedDay, resVersion]);
+
+  // Tiempo real (dominio RESERVAS): re-suscribe a /hubs/reservations SOLO para mantener
+  // sincronizado reservedTableIdsInRange. En cada cambio de reserva incrementa resVersion, lo que
+  // re-dispara el GET /api/tablereservation de arriba (la LISTA de reservas, no el plano). NO usa
+  // loadFloorPlan ni recarga: el estado de mesa sigue llegando por /hubs/tables (TableStatusChanged).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('waiter_token');
+    if (!token) return;
+
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl(`${window.location.origin}/hubs/reservations`, {
+        accessTokenFactory: () => ensureFreshToken(),
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+      })
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+      .configureLogging(signalR.LogLevel.Warning)
+      .build();
+
+    const bump = () => setResVersion((v) => v + 1);
+    conn.on('NewReservation', bump);
+    conn.on('ReservationConfirmed', bump);
+    conn.on('ReservationCancelled', bump);
+    conn.on('ReservationTableAssigned', bump);
+    conn.on('ReservationRescheduled', bump);
+    conn.on('ReservationSeated', bump);
+    conn.on('ReservationNoShow', bump);
+    conn.start().catch((e) => console.error('[waiter] SignalR /hubs/reservations connect failed', e));
+
+    return () => {
+      conn.stop().catch(() => {});
+    };
+  }, []);
   const [myOrderModalOrder, setMyOrderModalOrder] = useState<Order | null>(null);
   const [myOrderModalTab, setMyOrderModalTab] = useState<'kitchen' | 'bar'>('kitchen');
   const [abandonConfirmOrder, setAbandonConfirmOrder] = useState<Order | null>(null);
