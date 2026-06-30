@@ -20,7 +20,7 @@ try {
 }
 
 // Server IP (dotted). Override via argv[2]. nip.io needs the dashed form.
-const ip = process.argv[2] || '172.31.98.50';
+const ip = process.argv[2] || '192.168.1.26';
 const dashed = ip.replace(/\./g, '-');
 // DNS-free: IP cruda + puerto por panel. El cell NO necesita resolver nip.io
 // (su router suele bloquear DNS que apunta a IP privada). Solo acepta el cert una vez.

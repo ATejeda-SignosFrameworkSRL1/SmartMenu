@@ -28,10 +28,10 @@ x-frontend-base: &frontend-base
     # QR-FIX.2 — URL del client-app PWA usada al generar QRs de mesas.
     # Debe ser alcanzable desde el celular del cliente (NO localhost).
     # Usamos nip.io porque:
-    #   - 172-31-98-50.nip.io resuelve a 172.31.98.50 sin que el cell configure DNS
+    #   - 192-168-1-26.nip.io resuelve a 192.168.1.26 sin que el cell configure DNS
     #   - Caddy genera cert válido por hostname (SNI), evita errores SChannel
     #   - Si tu IP cambia, actualiza este valor + rebuild admin-panel
-    NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-50.nip.io:8443"
+    NEXT_PUBLIC_CLIENT_URL: ""
 
 services:
   # ─── SQL Server ─────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ services:
       args:
         APP_PORT: "3000"
         # QR-MOBILE.1 — URL alcanzable desde celular usada en los QRs físicos de mesas
-        NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-50.nip.io:8443"
+        NEXT_PUBLIC_CLIENT_URL: ""
     image: smartmenu-qa/client-app:latest
     container_name: smartmenu-qa-client
 
@@ -149,7 +149,7 @@ services:
         APP_PORT: "3001"
         # QR-FIX.2 — URL del client-app PWA usada al generar QRs físicos de mesas.
         # Debe ser alcanzable desde el celular del cliente (NO localhost).
-        NEXT_PUBLIC_CLIENT_URL: "https://client.172-31-98-50.nip.io:8443"
+        NEXT_PUBLIC_CLIENT_URL: ""
     image: smartmenu-qa/admin-panel:latest
     container_name: smartmenu-qa-admin
 
@@ -197,6 +197,12 @@ services:
   caddy:
     image: caddy:2.8-alpine
     container_name: smartmenu-qa-caddy
+    environment:
+      # IP LAN de la PC (dotted + dashed para nip.io). Si tu PC cambia de red,
+      # corre docker/qa/update-lan-ip.ps1 (detecta la IP nueva) y luego
+      # `docker compose -f docker-compose.qa.yml up -d caddy`. NO requiere rebuild.
+      QA_LAN_IP: "${QA_LAN_IP:-192.168.1.26}"
+      QA_LAN_NIP: "${QA_LAN_NIP:-192-168-1-26}"
     ports:
       - "8443:443"            # HTTPS público (landing + qa.smartmenu.local)
       - "8080:80"             # HTTP (redirige a HTTPS si se quita disable_redirects)

@@ -28,7 +28,7 @@ const api = axios.create({
  * QR-FIX.2 — URL base del client-app para QRs físicos.
  *
  * Prioridad:
- *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://172.31.98.50:8443).
+ *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://192.168.1.26:8443).
  *      Esta es la opción CORRECTA para producción/QA — sobreescribe todo.
  *   2. Fallback runtime: derivar del hostname actual.
  *      - Si admin está en https://localhost:8444 → cambiar a https://localhost:8451 (client Caddy)
@@ -61,10 +61,11 @@ function deriveClientUrl(): string {
     }
   }
 
-  // IP directa (192.168.x, 172.x, 10.x) — mismo host
-  // El stack QA expone client-app en :8443 (block qa.smartmenu.local, localhost:8451, IP:8443)
+  // IP directa (192.168.x, 172.x, 10.x) — mismo host, puerto del client (:8451).
+  // Caddy sirve el client en :8451 para CUALQUIER IP (bloque ":8451"), asi el QR
+  // funciona aunque cambie la IP de la PC: solo abre el admin por su IP actual.
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-    return `${protocol}//${hostname}:8443`;
+    return `${protocol}//${hostname}:8451`;
   }
 
   // Fallback genérico: mismo origin (puede no funcionar, pero al menos no rompe)

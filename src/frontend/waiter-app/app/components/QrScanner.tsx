@@ -210,7 +210,7 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
             {t('noHttpsHint')}
           </p>
           <code className="block mt-1 bg-white border border-amber-200 rounded px-2 py-1 text-amber-800 text-[11px]">
-            https://waiter.172-31-98-50.nip.io:8443
+            https://waiter.192-168-1-26.nip.io:8443
           </code>
           <p className="text-amber-600 mt-1 text-[11px]">{t('noHttpsCertHint')}</p>
         </div>

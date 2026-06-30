@@ -10,7 +10,7 @@ import { Loader2, Grid3X3 } from 'lucide-react';
  * URL base usada al codificar los QR físicos.
  * Debe ser alcanzable desde el CELULAR del cliente — NUNCA localhost.
  * Prioridad:
- *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://client.172-31-98-50.nip.io:8443)
+ *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://client.192-168-1-26.nip.io:8443)
  *   2. Fallback runtime: derivar del hostname actual
  *      - Si hostname=localhost → usar hardcoded LAN nip.io
  *      - Si hostname=client.X.nip.io → mismo origin (ya es accesible)
@@ -25,7 +25,7 @@ function deriveQrBaseUrl(): string {
 
   // Localhost: el QR sería inalcanzable desde celular → usar nip.io hardcoded
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'https://client.172-31-98-50.nip.io:8443';
+    return 'https://client.192-168-1-26.nip.io:8443';
   }
 
   // Cualquier otro host (nip.io, IP LAN, dominio real) → mismo origin

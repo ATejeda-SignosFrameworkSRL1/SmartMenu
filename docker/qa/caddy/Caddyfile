@@ -25,7 +25,7 @@
 # QA-fix: emisor interno con certs de 90 dias (2160h) firmados directo por el root CA.
 # Evita el ERR_CERT_DATE_INVALID que causaban los leaf de ~12h al quedar el stack inactivo.
 # Se IMPORTA en TODOS los sitios; debe ser identico en todos para no crear politicas de
-# certificado ambiguas para los hostnames compartidos (localhost / 172.31.98.50).
+# certificado ambiguas para los hostnames compartidos (localhost / {$QA_LAN_IP}).
 (tls-long) {
 	tls {
 		issuer internal {
@@ -66,7 +66,7 @@ http://localhost http://*.qa.smartmenu.local {
 }
 
 # â”€â”€â”€ HTTP plano vÃ­a LAN IP (legado â€” se queda como fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-http://172.31.98.50 {
+http://{$QA_LAN_IP} {
 	encode gzip
 	@apipath path /api/* /uploads/* /hubs/*
 	reverse_proxy @apipath backend:8080
@@ -74,13 +74,13 @@ http://172.31.98.50 {
 }
 
 # â”€â”€â”€ nip.io HTTPS â€” URLs limpias, accesibles desde cualquier device LAN â”€â”€â”€
-# *.172-31-98-50.nip.io resuelve a 172.31.98.50 sin tocar hosts file.
+# *.{$QA_LAN_NIP}.nip.io resuelve a {$QA_LAN_IP} sin tocar hosts file.
 # Cert sigue siendo self-signed (Caddy CA local) â€” el cell mostrarÃ¡ warning
 # una sola vez por hostname. Para evitar warning instala
 # docker/qa/caddy-root-ca.crt en el cell, o usa Let's Encrypt con port
 # forwarding 80/443 â†’ 8080/8443.
 
-dev.172-31-98-50.nip.io, client.172-31-98-50.nip.io {
+dev.{$QA_LAN_NIP}.nip.io, client.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -89,14 +89,14 @@ dev.172-31-98-50.nip.io, client.172-31-98-50.nip.io {
 	reverse_proxy client-app:3000
 }
 
-api.172-31-98-50.nip.io {
+api.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
 	reverse_proxy backend:8080
 }
 
-admin.172-31-98-50.nip.io {
+admin.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -105,7 +105,7 @@ admin.172-31-98-50.nip.io {
 	reverse_proxy admin-panel:3001
 }
 
-kds.172-31-98-50.nip.io {
+kds.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -114,7 +114,7 @@ kds.172-31-98-50.nip.io {
 	reverse_proxy kds-app:3002
 }
 
-waiter.172-31-98-50.nip.io {
+waiter.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -123,7 +123,7 @@ waiter.172-31-98-50.nip.io {
 	reverse_proxy waiter-app:3003
 }
 
-host.172-31-98-50.nip.io {
+host.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -132,7 +132,7 @@ host.172-31-98-50.nip.io {
 	reverse_proxy host-app:3004
 }
 
-cashier.172-31-98-50.nip.io {
+cashier.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -141,7 +141,7 @@ cashier.172-31-98-50.nip.io {
 	reverse_proxy cashier-app:3005
 }
 
-reservation.172-31-98-50.nip.io {
+reservation.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -213,8 +213,8 @@ HTML 200
 # Tres maneras de acceder al PWA del cliente:
 #   - qa.smartmenu.local:8443   (con hosts file en la PC)
 #   - localhost:8451            (acceso local sin hosts file / MCP)
-#   - 172.31.98.50:8443         (LAN IP â€” QR scannable desde el cell)
-qa.smartmenu.local, localhost:8451, 172.31.98.50:8443 {
+#   - {$QA_LAN_IP}:8443         (LAN IP â€” QR scannable desde el cell)
+qa.smartmenu.local, localhost:8451, {$QA_LAN_IP}:8451 {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -238,37 +238,37 @@ qa.smartmenu.local, localhost:8451, 172.31.98.50:8443 {
 	reverse_proxy @apipath backend:8080
 }
 
-localhost:8444, 172.31.98.50:8444 {
+localhost:8444, {$QA_LAN_IP}:8444 {
 	import app-with-backend
 	reverse_proxy admin-panel:3001
 }
 
-localhost:8445, 172.31.98.50:8445 {
+localhost:8445, {$QA_LAN_IP}:8445 {
 	import app-with-backend
 	reverse_proxy kds-app:3002
 }
 
-localhost:8446, 172.31.98.50:8446 {
+localhost:8446, {$QA_LAN_IP}:8446 {
 	import app-with-backend
 	reverse_proxy waiter-app:3003
 }
 
-localhost:8447, 172.31.98.50:8447 {
+localhost:8447, {$QA_LAN_IP}:8447 {
 	import app-with-backend
 	reverse_proxy host-app:3004
 }
 
-localhost:8448, 172.31.98.50:8448 {
+localhost:8448, {$QA_LAN_IP}:8448 {
 	import app-with-backend
 	reverse_proxy cashier-app:3005
 }
 
-localhost:8449, 172.31.98.50:8449 {
+localhost:8449, {$QA_LAN_IP}:8449 {
 	import app-with-backend
 	reverse_proxy reservation-app:3007
 }
 
-localhost:8450 {
+localhost:8450, {$QA_LAN_IP}:8450 {
 	import tls-long
 	import security-headers
 	reverse_proxy backend:8080
@@ -277,7 +277,7 @@ localhost:8450 {
 
 # Bar Display = segundo origen del KDS (mismo app, distinto origen).
 # Permite tener Cocina (chef) en :8445 y Bar (bartender) en :8455 logueados a la vez.
-localhost:8455, 172.31.98.50:8455 {
+localhost:8455, {$QA_LAN_IP}:8455 {
 	import app-with-backend
 	reverse_proxy kds-app:3002
 }
@@ -335,8 +335,8 @@ reservation.qa.smartmenu.local {
 # ─── Staff hub — landing con QR de cada panel (LAN, scannable desde el cell) ─
 # Pagina estatica servida desde /srv/hub (bind-mount docker/qa/staff-hub).
 # Lista todos los paneles de rol con su URL nip.io + QR + credenciales seed.
-# Accesible desde cualquier device de la LAN: https://hub.172-31-98-50.nip.io:8443
-hub.172-31-98-50.nip.io {
+# Accesible desde cualquier device de la LAN: https://hub.{$QA_LAN_NIP}.nip.io:8443
+hub.{$QA_LAN_NIP}.nip.io {
 	import tls-long
 	import security-headers
 	encode gzip zstd
