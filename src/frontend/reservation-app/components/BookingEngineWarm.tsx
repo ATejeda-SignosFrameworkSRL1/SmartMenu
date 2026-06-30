@@ -13,6 +13,8 @@ import {
   getSlots, holdSlot, confirmPublic, createZoneRequest, getZones, OCCASIONS,
   type Availability, type Slot, type BookingResult, type ZoneOption,
 } from '@/lib/booking-api';
+import { composePhone, DEFAULT_COUNTRY_ISO } from '@/lib/countryCodes';
+import PhonePrefixSelect from '@/components/PhonePrefixSelect';
 
 type Step = 1 | 2 | 3 | 4;
 function tomorrowStr(): string {
@@ -70,6 +72,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
   const [holding, setHolding] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);   // prefijo telefónico internacional
   const [email, setEmail] = useState('');
   const [occasion, setOccasion] = useState(0);
   const [notes, setNotes] = useState('');
@@ -165,7 +168,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
         if (!zoneId) { toast.error(t('toastPickZone')); return; }
         const r = await createZoneRequest({
           date, time: areaTime, guests, zoneId,
-          customerName: name.trim(), customerPhone: phone.trim(),
+          customerName: name.trim(), customerPhone: composePhone(countryIso, phone),
           customerEmail: email.trim() || undefined,
           occasionType: occasion, specialRequests: notes.trim() || undefined,
         });
@@ -176,7 +179,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
       const r = await confirmPublic(hold.reservationId, {
         confirmationCode: hold.confirmationCode,
         customerName: name.trim(),
-        customerPhone: phone.trim(),
+        customerPhone: composePhone(countryIso, phone),
         customerEmail: email.trim() || undefined,
         occasionType: occasion,
         specialRequests: notes.trim() || undefined,
@@ -195,7 +198,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
 
   function reset() {
     setStep(1); setSelectedTime(null); setHold(null); setResult(null);
-    setName(''); setPhone(''); setEmail(''); setOccasion(0); setNotes('');
+    setName(''); setPhone(''); setCountryIso(DEFAULT_COUNTRY_ISO); setEmail(''); setOccasion(0); setNotes('');
     setZoneId(null);
   }
 
@@ -541,7 +544,10 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('namePh')} className="warm-inp" />
             </WarmField>
             <WarmField icon={<Phone className="w-4 h-4" />} label={t('phoneLabel')} required>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder={t('phonePh')} className="warm-inp" />
+              <div className="flex gap-2">
+                <PhonePrefixSelect value={countryIso} onChange={setCountryIso} variant="warm" />
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder={t('phonePh')} className="warm-inp flex-1 min-w-0" />
+              </div>
             </WarmField>
           </div>
           <WarmField icon={<Mail className="w-4 h-4" />} label={t('emailLabel')}>

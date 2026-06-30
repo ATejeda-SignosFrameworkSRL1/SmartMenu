@@ -12,6 +12,8 @@ import {
   getSlots, holdSlot, confirmPublic, OCCASIONS,
   type Availability, type Slot, type BookingResult,
 } from '@/lib/booking-api';
+import { composePhone, DEFAULT_COUNTRY_ISO } from '@/lib/countryCodes';
+import PhonePrefixSelect from '@/components/PhonePrefixSelect';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -54,6 +56,7 @@ export default function BookPage() {
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);   // prefijo telefónico internacional
   const [email, setEmail] = useState('');
   const [occasion, setOccasion] = useState(0);
   const [notes, setNotes] = useState('');
@@ -158,7 +161,7 @@ export default function BookPage() {
       const r = await confirmPublic(hold.reservationId, {
         confirmationCode: hold.confirmationCode,
         customerName: name.trim(),
-        customerPhone: phone.trim(),
+        customerPhone: composePhone(countryIso, phone),
         customerEmail: email.trim() || undefined,
         occasionType: occasion,
         specialRequests: notes.trim() || undefined,
@@ -180,7 +183,7 @@ export default function BookPage() {
 
   function reset() {
     setStep(1); setSelectedTime(null); setHold(null); setResult(null);
-    setName(''); setPhone(''); setEmail(''); setOccasion(0); setNotes('');
+    setName(''); setPhone(''); setCountryIso(DEFAULT_COUNTRY_ISO); setEmail(''); setOccasion(0); setNotes('');
   }
 
   const mmss = secondsLeft != null && secondsLeft > 0
@@ -336,7 +339,10 @@ export default function BookPage() {
               <input value={name} onChange={(e) => setName(e.target.value)} className="inp" placeholder={t('namePh')} />
             </Field>
             <Field icon={<Phone className="w-4 h-4" />} label={t('phoneLabel')} required>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className="inp" placeholder={t('phonePhAlt')} />
+              <div className="flex gap-2">
+                <PhonePrefixSelect value={countryIso} onChange={setCountryIso} variant="slate" />
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className="inp flex-1 min-w-0" placeholder={t('phonePhAlt')} />
+              </div>
             </Field>
             <Field icon={<Mail className="w-4 h-4" />} label={t('emailLabel')}>
               <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" className="inp" placeholder={t('emailPh')} />
