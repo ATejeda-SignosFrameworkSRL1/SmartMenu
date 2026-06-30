@@ -28,7 +28,7 @@ const api = axios.create({
  * QR-FIX.2 — URL base del client-app para QRs físicos.
  *
  * Prioridad:
- *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://172.31.98.60:8443).
+ *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://172.31.98.50:8443).
  *      Esta es la opción CORRECTA para producción/QA — sobreescribe todo.
  *   2. Fallback runtime: derivar del hostname actual.
  *      - Si admin está en https://localhost:8444 → cambiar a https://localhost:8451 (client Caddy)
