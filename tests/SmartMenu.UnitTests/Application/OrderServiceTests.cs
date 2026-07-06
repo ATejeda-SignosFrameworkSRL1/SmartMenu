@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using SmartMenu.Application.DTOs;
 using SmartMenu.Application.Repositories;
+using SmartMenu.Application.Services;
 using SmartMenu.Application.Settings;
 using SmartMenu.Domain.Entities;
 using SmartMenu.Domain.Enums;
@@ -39,7 +41,9 @@ public class OrderServiceTests
             repo.Object,
             db,
             NullLogger<OrderService>.Instance,
-            Options.Create(billing ?? new BillingSettings()));
+            Options.Create(billing ?? new BillingSettings()),
+            Mock.Of<ITableRealtimeNotifier>(),
+            Mock.Of<ITableStatusBroadcaster>());
         return (svc, repo, db);
     }
 
@@ -421,5 +425,40 @@ public class OrderServiceTests
 
         order.CustomerFinishedEating.Should().BeTrue();
         order.FinishedEatingAt.Should().NotBeNull();
+    }
+
+    // ─── IsDrinkDish (b09cdf6: match por palabra completa + plurales) ──────
+    // Un falso positivo enciende los flags Bar* y la orden queda esperando un
+    // bartender que nunca la verá. Mantener en sync con isDrinkItem (frontends)
+    // y Comanda.IsDrink (print-agent).
+    [Theory]
+    // Falsos positivos históricos del match por substring — son comida:
+    [InlineData("Ensalada de aguacate", false)] // 'agua' no matchea 'aguacate'
+    [InlineData("Macarrones", false)]           // 'ron' no matchea 'macarrones'
+    [InlineData("Cocada", false)]               // 'coca' no matchea 'cocada'
+    // Bebidas reales — palabra exacta, plural y frase multi-palabra:
+    [InlineData("Mojito Clásico", true)]
+    [InlineData("Coca Cola", true)]
+    [InlineData("Piña Colada", true)]
+    [InlineData("Pina Colada", true)]  // sin ñ: 'colada' sigue siendo palabra completa
+    [InlineData("Cervezas", true)]     // plural en -s
+    [InlineData("Rones añejos", true)] // plural en -es
+    [InlineData("Jugo de china", true)]
+    [InlineData(null, false)]
+    [InlineData("   ", false)]
+    public void IsDrinkDish_matches_whole_words_and_plurals_only(string? dishName, bool expected)
+    {
+        InvokeIsDrinkDish(dishName).Should().Be(expected, "'{0}' clasificado incorrectamente", dishName);
+    }
+
+    // Helper privado puro de OrderService: se invoca por reflexión para fijar el
+    // contrato del matcher sin abrir la visibilidad en producción.
+    private static bool InvokeIsDrinkDish(string? dishName)
+    {
+        var mi = typeof(OrderService).GetMethod("IsDrinkDish",
+                BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException(
+                "OrderService.IsDrinkDish no existe — ¿renombrado? Actualizar este test.");
+        return (bool)mi.Invoke(null, new object?[] { dishName })!;
     }
 }

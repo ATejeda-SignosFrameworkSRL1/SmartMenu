@@ -2,10 +2,9 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using SmartMenu.API.Middleware;
 using SmartMenu.Application.Exceptions;
 
@@ -17,20 +16,32 @@ namespace SmartMenu.UnitTests.Middleware;
 /// </summary>
 public class ExceptionHandlingMiddlewareTests
 {
+    /// <summary>
+    /// El middleware ya no depende de IHostEnvironment: expone detalles SOLO si
+    /// DetailedErrors=true en configuración. null = clave ausente (default real).
+    /// </summary>
+    private static IConfiguration BuildConfig(bool? detailedErrors = null)
+    {
+        var builder = new ConfigurationBuilder();
+        if (detailedErrors is not null)
+            builder.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DetailedErrors"] = detailedErrors.Value.ToString()
+            });
+        return builder.Build();
+    }
+
     private static async Task<(int Status, string Body, string? ContentType)> RunMiddleware(
         Exception toThrow,
-        bool isDevelopment = false)
+        bool? detailedErrors = null)
     {
         var ctx = new DefaultHttpContext();
         ctx.Response.Body = new MemoryStream();
         ctx.Request.Method = "GET";
         ctx.Request.Path = "/test";
 
-        var env = new Mock<IHostEnvironment>();
-        env.SetupGet(e => e.EnvironmentName).Returns(isDevelopment ? "Development" : "Production");
-
         RequestDelegate next = _ => throw toThrow;
-        var mw = new ExceptionHandlingMiddleware(next, NullLogger<ExceptionHandlingMiddleware>.Instance, env.Object);
+        var mw = new ExceptionHandlingMiddleware(next, NullLogger<ExceptionHandlingMiddleware>.Instance, BuildConfig(detailedErrors));
         await mw.Invoke(ctx);
 
         ctx.Response.Body.Position = 0;
@@ -140,18 +151,29 @@ public class ExceptionHandlingMiddlewareTests
     }
 
     [Fact]
-    public async Task Generic_Exception_in_production_hides_internal_details()
+    public async Task Generic_Exception_by_default_hides_internal_details()
     {
-        var (status, body, _) = await RunMiddleware(new Exception("secret stack trace info"), isDevelopment: false);
+        // Sin clave DetailedErrors en config → default false. QA corre como
+        // Development y tampoco debe filtrar internals (por eso se desacopló del entorno).
+        var (status, body, _) = await RunMiddleware(new Exception("secret stack trace info"));
         status.Should().Be(500);
         body.Should().Contain("Error interno del servidor.");
         body.Should().NotContain("secret stack trace info"); // no filtrar internals
     }
 
     [Fact]
-    public async Task Generic_Exception_in_development_shows_stack_for_debugging()
+    public async Task Generic_Exception_with_DetailedErrors_false_hides_internal_details()
     {
-        var (status, body, _) = await RunMiddleware(new Exception("dev-only-detail"), isDevelopment: true);
+        var (status, body, _) = await RunMiddleware(new Exception("secret stack trace info"), detailedErrors: false);
+        status.Should().Be(500);
+        body.Should().Contain("Error interno del servidor.");
+        body.Should().NotContain("secret stack trace info");
+    }
+
+    [Fact]
+    public async Task Generic_Exception_with_DetailedErrors_true_shows_detail_for_debugging()
+    {
+        var (status, body, _) = await RunMiddleware(new Exception("dev-only-detail"), detailedErrors: true);
         status.Should().Be(500);
         body.Should().Contain("dev-only-detail");
     }
@@ -172,11 +194,9 @@ public class ExceptionHandlingMiddlewareTests
     {
         var ctx = new DefaultHttpContext();
         ctx.Response.Body = new MemoryStream();
-        var env = new Mock<IHostEnvironment>();
-        env.SetupGet(e => e.EnvironmentName).Returns("Production");
         var called = false;
         RequestDelegate next = _ => { called = true; return Task.CompletedTask; };
-        var mw = new ExceptionHandlingMiddleware(next, NullLogger<ExceptionHandlingMiddleware>.Instance, env.Object);
+        var mw = new ExceptionHandlingMiddleware(next, NullLogger<ExceptionHandlingMiddleware>.Instance, BuildConfig());
         await mw.Invoke(ctx);
         called.Should().BeTrue();
         // Sin excepción: status no se toca (queda en default 200).
