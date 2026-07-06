@@ -106,3 +106,6 @@ tmp/
 temp/
 *.tmp
 *.tsbuildinfo
+
+# Worktrees scratch de Claude Code (checkouts temporales, nunca commitear)
+.claude/worktrees/
