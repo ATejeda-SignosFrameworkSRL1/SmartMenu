@@ -81,6 +81,11 @@ interface Reservation {
   createdByHostName?: string | null;
 }
 
+// Estados TERMINALES de una reserva: no se gestionan en las vistas operativas
+// (ni lista ni calendario). Quedan en la BD para historial/reportes, pero no
+// deben aparecer como reservas "vivas". Fuente unica usada por la lista y por CalendarView.
+const TERMINAL_RESERVATION_STATUS = new Set(['Cancelled', 'Completed', 'NoShow', 'Expired']);
+
 const OCCASION_LABELS: Record<number, { label: string; icon: string; color: string }> = {
   0: { label: 'Casual', icon: '', color: 'bg-slate-100 text-slate-600 border-slate-200' },
   1: { label: 'Cumpleaños', icon: '🎂', color: 'bg-pink-100 text-pink-700 border-pink-200' },
@@ -769,7 +774,7 @@ export default function HostApp() {
 
   // Panel operativo: ocultar reservas TERMINALES (cancelada/completada/no-show/expirada);
   // solo se gestionan las activas. Así al cancelar una reserva desaparece de la lista.
-  const TERMINAL_RESERVATION_STATUS = new Set(['Cancelled', 'Completed', 'NoShow', 'Expired']);
+  // (TERMINAL_RESERVATION_STATUS es ahora de modulo — compartido con CalendarView.)
   const activeReservations = reservations.filter(
     (r) => !r.isCancelled && !TERMINAL_RESERVATION_STATUS.has(r.status || '')
   );
@@ -2476,7 +2481,9 @@ export default function HostApp() {
 
       {/* RESCHEDULE: Modal CalendarDay — al hacer click en día del calendario */}
       {calendarDaySelected && (() => {
+        // Mismo filtro terminal que el grid del calendario y la lista operativa.
         const dayReservas = reservations.filter(r => {
+          if (r.isCancelled || TERMINAL_RESERVATION_STATUS.has(r.status || '')) return false;
           const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
           return k === calendarDaySelected;
         });
@@ -2887,13 +2894,18 @@ function CalendarView({
   const todayKey = today.toLocaleDateString('sv-SE');
   const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
 
-  // Agrupar reservas por día YYYY-MM-DD
-  const byDate = reservations.reduce<Record<string, Reservation[]>>((acc, r) => {
-    const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
-    if (!acc[k]) acc[k] = [];
-    acc[k].push(r);
-    return acc;
-  }, {});
+  // Agrupar reservas por día YYYY-MM-DD.
+  // Ocultar las TERMINALES (cancelada/completada/no-show/expirada) igual que la lista
+  // operativa: una reserva marcada NoShow/Cancelled ya no debe aparecer en el calendario
+  // (antes se colaban y ademas se contaban como "pendiente" por !isConfirmed).
+  const byDate = reservations
+    .filter((r) => !r.isCancelled && !TERMINAL_RESERVATION_STATUS.has(r.status || ''))
+    .reduce<Record<string, Reservation[]>>((acc, r) => {
+      const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
+      if (!acc[k]) acc[k] = [];
+      acc[k].push(r);
+      return acc;
+    }, {});
 
   // Construir grid del mes: empieza el primer día calendario de la semana
   const firstDay = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
