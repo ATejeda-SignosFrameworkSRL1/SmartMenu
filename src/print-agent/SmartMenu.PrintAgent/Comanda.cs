@@ -21,7 +21,16 @@ public static class Comanda
     {
         if (string.IsNullOrWhiteSpace(dishName)) return false;
         var name = dishName.Trim().ToLowerInvariant();
-        return DrinkKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase));
+        // Match por PALABRA completa (con plurales), no substring: 'agua' no debe
+        // matchear 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con
+        // OrderService.IsDrinkDish del backend y el isDrinkItem de los frontends.
+        var words = System.Text.RegularExpressions.Regex
+            .Split(name, "[^a-záéíóúüñ]+")
+            .Where(w => w.Length > 0)
+            .ToHashSet();
+        return DrinkKeywords.Any(k => k.Contains(' ')
+            ? name.Contains(k, StringComparison.Ordinal)
+            : words.Contains(k) || words.Contains(k + "s") || words.Contains(k + "es"));
     }
 
     /// <summary>Ticket de una sola estacion (COCINA o BAR).</summary>

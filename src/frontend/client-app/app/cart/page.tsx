@@ -99,9 +99,17 @@ function CartPageInner() {
       return;
     }
 
-    const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // Nunca enviar a una mesa por defecto: sin mesa escaneada el pedido
+    // llegaria (y se cobraria) a la Mesa 1 fisica de otro comensal.
+    if (!tableId) {
+      toast.error(tt('noTableSelected'));
+      router.push('/table');
+      return;
+    }
+
+    const sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     createOrderMutation.mutate({
-      tableId: tableId || 1,
+      tableId,
       sessionId,
       customerName: customerName?.trim() || undefined,
       specialInstructions: specialInstructions || undefined,
@@ -180,7 +188,7 @@ function CartPageInner() {
           <div className="space-y-4">
             {items.map((item) => (
               <div
-                key={item.dishId}
+                key={item.lineId ?? item.dishId}
                 className="flex items-center gap-4 pb-4 border-b last:border-b-0"
               >
                 {/* Item Info */}
@@ -199,14 +207,14 @@ function CartPageInner() {
                 {/* Quantity Controls */}
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => updateQuantity(item.dishId, Math.max(1, item.quantity - 1))}
+                    onClick={() => updateQuantity(item.lineId!, Math.max(1, item.quantity - 1))}
                     className="p-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-primary-600 hover:text-white transition-colors"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
                   <span className="w-8 text-center font-semibold text-gray-700">{item.quantity}</span>
                   <button
-                    onClick={() => updateQuantity(item.dishId, item.quantity + 1)}
+                    onClick={() => updateQuantity(item.lineId!, item.quantity + 1)}
                     className="p-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-primary-600 hover:text-white transition-colors"
                   >
                     <Plus className="w-4 h-4" />
@@ -222,7 +230,7 @@ function CartPageInner() {
 
                 {/* Remove Button */}
                 <button
-                  onClick={() => removeItem(item.dishId)}
+                  onClick={() => removeItem(item.lineId!)}
                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -255,7 +263,7 @@ function CartPageInner() {
             {items.map((item) => {
               const hasDetails = item.notes || item.specialInstructions || item.customizations || item.allergies || item.meatCooking || item.sideDish || item.drinkTiming;
               return (
-                <div key={item.dishId} className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+                <div key={item.lineId ?? item.dishId} className="rounded-lg bg-gray-50 border border-gray-200 p-4">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-semibold text-gray-900">

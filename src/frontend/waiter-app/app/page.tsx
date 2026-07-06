@@ -52,7 +52,12 @@ interface Order {
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  return DRINK_KEYWORDS.some(k => name.includes(k));
+  // Match por PALABRA completa (con plurales), no substring: 'agua' no debe matchear
+  // 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con KDS/admin/client y backend.
+  const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
+  return DRINK_KEYWORDS.some(k =>
+    k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
+  );
 }
 // Código de pedido corto y legible para el mesero: ORD-20260611144054-7cfdfa → "7CFDFA"
 const shortOrder = (on?: string | null) => ((on ?? '').split('-').pop() ?? '').toUpperCase();
@@ -3749,7 +3754,7 @@ export default function WaiterPage() {
                 {/* Cobrar */}
                 {(order.status === 'Served' || order.status === 'Completed') && !(order as Order).paymentCollectedByWaiter && (
                   <button
-                    onClick={() => { closeModal(); setSelectedOrder(order); setShowPaymentModal(true); }}
+                    onClick={() => { closeModal(); openPaymentModal(order); }}
                     className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
                   >
                     {t('orders.collectPayment')}
@@ -4103,7 +4108,7 @@ export default function WaiterPage() {
                                     {!(order as any).paymentCollectedByWaiter && (
                                       <button
                                         type="button"
-                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedOrder(order); setShowPaymentModal(true); setShowVirtualTableDetailsModal(null); }}
+                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); openPaymentModal(order as Order); setShowVirtualTableDetailsModal(null); }}
                                         className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                                       >
                                         {t('orders.collectPayment')}

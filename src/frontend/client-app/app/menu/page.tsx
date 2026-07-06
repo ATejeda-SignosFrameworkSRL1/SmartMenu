@@ -7,6 +7,7 @@ import { ShoppingCart, Search, ChefHat, Clock, ArrowLeft, ClipboardList } from '
 import { motion } from 'framer-motion';
 import type { Dish, Category } from '@/types';
 import { useMenu, useDishTags } from '@/lib/hooks';
+import { apiClient } from '@/lib/api';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { DishModal } from '@/components/DishModal';
@@ -93,11 +94,19 @@ function MenuPageInner() {
     const candidateId = activeOrderParam || localStorage.getItem('current_order_id');
     if (!candidateId) return;
 
-    // Verificar que la orden siga activa (no completada ni cancelada ni pagada)
-    fetch(`/api/orders/${candidateId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((order: any) => {
-        if (!order) { localStorage.removeItem('current_order_id'); return; }
+    // Clave corrupta (no numerica): limpiarla en vez de pedir /api/order/NaN (400) por siempre.
+    const orderIdNum = Number(candidateId);
+    if (!Number.isInteger(orderIdNum) || orderIdNum <= 0) {
+      localStorage.removeItem('current_order_id');
+      return;
+    }
+
+    // Verificar que la orden siga activa (no completada ni cancelada ni pagada).
+    // Ruta real del backend: GET /api/order/{id} (singular, AllowAnonymous).
+    let cancelled = false;
+    apiClient.getOrder(orderIdNum)
+      .then(({ data: order }: { data: any }) => {
+        if (cancelled || !order) return;
         const status = (order.status ?? order.Status ?? '').toLowerCase();
         const isActive = !['completed', 'cancelled', 'paid'].includes(status);
         if (isActive) {
@@ -110,10 +119,15 @@ function MenuPageInner() {
           localStorage.removeItem('current_order_id');
         }
       })
-      .catch(() => {
-        localStorage.removeItem('current_order_id');
+      .catch((err: any) => {
+        if (cancelled) return;
+        // Solo un 404 real (la orden no existe) invalida la referencia guardada;
+        // un fallo transitorio de red no debe destruirla.
+        if (err?.response?.status === 404) localStorage.removeItem('current_order_id');
         setActiveOrderId(null);
+        setActiveOrderNumber(null);
       });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrderParam]);
 

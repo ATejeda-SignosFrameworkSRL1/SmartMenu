@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface CartItem {
+  /**
+   * Identificador de LINEA del carrito (lo genera el store al agregar; quien
+   * llama addItem no lo pasa). Distingue dos lineas del mismo plato con
+   * personalizaciones distintas — p.ej. "Filete termino medio" y "Filete bien
+   * cocido con alergia a mani" NO deben fusionarse.
+   */
+  lineId?: string;
   dishId: number;
   dishName: string;
   quantity: number;
@@ -36,8 +43,8 @@ interface CartState {
   setAddToOrderId: (_id: number | null) => void;
 
   addItem: (_item: CartItem) => void;
-  removeItem: (_dishId: number) => void;
-  updateQuantity: (_dishId: number, _quantity: number) => void;
+  removeItem: (_lineId: string) => void;
+  updateQuantity: (_lineId: string, _quantity: number) => void;
   clearCart: () => void;
   
   getSubtotal: () => number;
@@ -46,6 +53,28 @@ interface CartState {
   getTotal: () => number;
   getItemCount: () => number;
 }
+
+// crypto.randomUUID no existe en WebViews/Safari viejos (tablets Android del piso).
+const genLineId = (): string =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `line-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+/** Dos lineas solo se fusionan si TODA la personalizacion coincide (la alergia
+ *  o el termino de un comensal no pueden pisarse con los de otro). */
+const sameLine = (a: CartItem, b: CartItem) =>
+  a.dishId === b.dishId &&
+  a.notes === b.notes &&
+  a.specialInstructions === b.specialInstructions &&
+  a.customizations === b.customizations &&
+  a.allergies === b.allergies &&
+  a.meatCooking === b.meatCooking &&
+  a.sideDish === b.sideDish &&
+  a.drinkTiming === b.drinkTiming &&
+  a.withAlcohol === b.withAlcohol &&
+  a.liga === b.liga &&
+  a.courseTiming === b.courseTiming &&
+  JSON.stringify(a.modifiers ?? []) === JSON.stringify(b.modifiers ?? []);
 
 export const useCartStore = create<CartState>()(
   persist(
@@ -63,30 +92,30 @@ export const useCartStore = create<CartState>()(
 
       addItem: (newItem) =>
         set((state) => {
-          const existingItem = state.items.find(i => i.dishId === newItem.dishId);
-          
-          if (existingItem) {
+          const existing = state.items.find(i => sameLine(i, newItem));
+
+          if (existing) {
             return {
               items: state.items.map(i =>
-                i.dishId === newItem.dishId
+                i === existing
                   ? { ...i, quantity: i.quantity + newItem.quantity }
                   : i
               ),
             };
           }
-          
-          return { items: [...state.items, newItem] };
+
+          return { items: [...state.items, { ...newItem, lineId: genLineId() }] };
         }),
 
-      removeItem: (id) =>
+      removeItem: (lineId) =>
         set((state) => ({
-          items: state.items.filter(i => i.dishId !== id),
+          items: state.items.filter(i => i.lineId !== lineId),
         })),
 
-      updateQuantity: (id, qty) =>
+      updateQuantity: (lineId, qty) =>
         set((state) => ({
           items: state.items.map(i =>
-            i.dishId === id ? { ...i, quantity: qty } : i
+            i.lineId === lineId ? { ...i, quantity: qty } : i
           ),
         })),
 
@@ -119,6 +148,17 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'smartmenu-cart',
+      // v1: los items ganan lineId. Carritos persistidos antes de esta version
+      // no lo traen — se les genera al rehidratar para que removeItem/updateQuantity
+      // (keyeados por lineId) sigan funcionando.
+      version: 1,
+      migrate: (persisted: unknown) => {
+        const state = persisted as { items?: CartItem[] } | undefined;
+        if (state?.items?.length) {
+          state.items = state.items.map(i => (i.lineId ? i : { ...i, lineId: genLineId() }));
+        }
+        return state as CartState;
+      },
     }
   )
 );

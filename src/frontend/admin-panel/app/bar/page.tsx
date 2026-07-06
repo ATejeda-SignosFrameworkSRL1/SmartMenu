@@ -35,8 +35,13 @@ interface Order {
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 
 function isDrinkItem(dishName: string): boolean {
-  const name = dishName.toLowerCase();
-  return DRINK_KEYWORDS.some(k => name.includes(k));
+  const name = (dishName || '').toLowerCase();
+  // Match por PALABRA completa (con plurales), no substring: 'agua' no debe matchear
+  // 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con KDS/waiter/client y backend.
+  const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
+  return DRINK_KEYWORDS.some(k =>
+    k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
+  );
 }
 
 // Filtro por momento de servicio de bebida

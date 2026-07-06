@@ -20,7 +20,17 @@ public class OrderService : IOrderService
     {
         if (string.IsNullOrWhiteSpace(dishName)) return false;
         var name = dishName.Trim().ToLowerInvariant();
-        return DrinkKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase));
+        // Match por PALABRA completa (con plurales), no substring: 'agua' no debe
+        // matchear 'aguacate' ni 'ron' a 'macarrones' — un falso positivo enciende
+        // los flags Bar* y la orden queda esperando un bartender que nunca la vera.
+        // Mantener en sync con isDrinkItem de los frontends y Comanda.IsDrink del print-agent.
+        var words = System.Text.RegularExpressions.Regex
+            .Split(name, "[^a-záéíóúüñ]+")
+            .Where(w => w.Length > 0)
+            .ToHashSet();
+        return DrinkKeywords.Any(k => k.Contains(' ')
+            ? name.Contains(k, StringComparison.Ordinal)
+            : words.Contains(k) || words.Contains(k + "s") || words.Contains(k + "es"));
     }
 
     private static (bool HasFood, bool HasDrinks) GetOrderItemTypes(Order order)

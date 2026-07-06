@@ -15,7 +15,16 @@ const { api } = createAuthApi('kds');
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  return DRINK_KEYWORDS.some((k) => name.includes(k));
+  // Match por PALABRA completa (con plurales), no por substring: 'agua' no debe
+  // matchear 'aguacate', ni 'ron' a 'macarrones', ni 'coca' a 'cocada' — un falso
+  // positivo desaparece del KDS del chef y el plato se queda sin cocinar.
+  // includes() se mantiene solo para keywords multi-palabra ('piña colada').
+  const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
+  return DRINK_KEYWORDS.some((k) =>
+    k.includes(' ')
+      ? name.includes(k)
+      : words.has(k) || words.has(k + 's') || words.has(k + 'es')
+  );
 }
 
 // Mapa de DrinkTiming (0=Before/1=During/2=After) → CourseTiming string
@@ -242,7 +251,9 @@ export default function KDSPage() {
       setOrders(kitchenOrders);
     } catch (error) {
       console.error('Error loading orders:', error);
-      setOrders([]);
+      // Fallo transitorio (red/timeout/backend reiniciando): CONSERVAR el tablero
+      // actual — vaciarlo renderiza el falso "¡Todo listo!" y cocina deja de ver
+      // comandas reales. El proximo poll (5s) reconcilia.
     }
   };
 

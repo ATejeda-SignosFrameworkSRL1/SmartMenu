@@ -142,6 +142,7 @@
     "noOrderId": "No se recibió el ID de la orden",
     "createOrderError": "Error al crear la orden",
     "addItemsError": "Error al agregar ítems",
-    "cartEmpty": "El carrito está vacío"
+    "cartEmpty": "El carrito está vacío",
+    "noTableSelected": "Escanea el QR de tu mesa para ordenar"
   }
 }
