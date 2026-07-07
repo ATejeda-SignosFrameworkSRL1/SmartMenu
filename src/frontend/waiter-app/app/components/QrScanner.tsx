@@ -128,6 +128,18 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
           }
         }
 
+        if (started && scannerRef.current !== scanner) {
+          // El cleanup ya corrio (unmount o re-run del efecto) MIENTRAS start()
+          // estaba pendiente: su stop() fallo porque la camara aun no arrancaba
+          // y el stream getUserMedia quedaria vivo (LED encendido, bateria, y
+          // NotReadableError en la proxima apertura en Android). Se compara la
+          // IDENTIDAD del scanner (no mountedRef, que la siguiente corrida del
+          // efecto vuelve a poner en true) para detener al huerfano.
+          try { await scanner.stop(); } catch {}
+          try { scanner.clear(); } catch {}
+          return;
+        }
+
         if (started && mountedRef.current) {
           setStatus('ready');
           setErrorMessage('');

@@ -132,7 +132,7 @@ export default function HostReservationWizard({
     setSubmitting(true);
     try {
       const reservationDateTime = `${date}T${selectedTime}:00`;
-      await api.post('/api/tablereservation', {
+      const res = await api.post('/api/tablereservation', {
         tableId: table.id,
         customerName: name.trim(),
         customerPhone: phone.trim(),
@@ -144,17 +144,22 @@ export default function HostReservationWizard({
         hostId: hostId ?? undefined,
         advanceBlockMinutes: parseInt(advanceBlockMinutes) || 60,
       });
-      // Pre-orden opcional (igual que el modal anterior).
-      if (preOrderItems.length > 0) {
+      // Pre-orden opcional — adjuntar a la reserva RECIEN CREADA usando el id de la
+      // respuesta del POST (ReservationActionResult.reservationId). Antes se hacia
+      // GET de la lista completa y se tomaba slice(-1): como el endpoint ordena por
+      // fecha de reserva, la pre-orden caia en la reserva con fecha mas tardia del
+      // sistema (la de OTRO cliente) siempre que existiera una posterior.
+      const newId = res.data?.reservationId ?? res.data?.ReservationId;
+      if (preOrderItems.length > 0 && newId) {
         try {
-          const last = (await api.get('/api/tablereservation')).data?.slice?.(-1)?.[0]?.id;
-          if (last) {
-            await api.post(`/api/tablereservation/${last}/preorder`, {
-              notes: notes.trim() || null,
-              items: preOrderItems.map((i) => ({ dishId: i.dishId, quantity: i.quantity })),
-            });
-          }
-        } catch { /* opcional */ }
+          await api.post(`/api/tablereservation/${newId}/preorder`, {
+            notes: notes.trim() || null,
+            items: preOrderItems.map((i) => ({ dishId: i.dishId, quantity: i.quantity })),
+          });
+        } catch {
+          // La reserva SI se creo; solo fallo adjuntar la pre-orden.
+          toast.error(t('wizard.preorderError'));
+        }
       }
       toast.success(t('wizard.reservationCreated'));
       onCreated();

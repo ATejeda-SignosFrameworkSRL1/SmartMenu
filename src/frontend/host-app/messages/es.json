@@ -329,6 +329,7 @@
     "timeRequired": "Elige un horario",
     "reservationCreated": "Reserva creada exitosamente",
     "createError": "Error al crear reserva",
+    "preorderError": "La reserva se creó, pero no se pudo guardar la pre-orden de platos",
     "occasionNone": "Sin ocasión especial",
     "occasion1": "🎂 Cumpleaños",
     "occasion2": "💍 Aniversario",

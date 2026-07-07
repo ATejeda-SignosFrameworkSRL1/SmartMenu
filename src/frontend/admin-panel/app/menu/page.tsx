@@ -391,7 +391,20 @@ function DishFormModal({
         await api.put(`/api/dish/${dish.id}`, payload);
         toast.success(t('dishUpdated'));
       } else {
-        await api.post('/api/dish', payload);
+        const created = await api.post('/api/dish', payload);
+        // Asociar la galeria subida ANTES de crear el plato: hasta ahora esas
+        // imagenes solo vivian en estado local (ids falsos Date.now()) y se
+        // PERDIAN en silencio al guardar — solo sobrevivia imageUrl principal.
+        const newId = created.data?.id ?? created.data?.Id;
+        if (newId && dishImages.length > 0) {
+          let failed = 0;
+          for (const [idx, img] of dishImages.entries()) {
+            await api
+              .post(`/api/dish/${newId}/images`, { imageUrl: img.imageUrl, displayOrder: idx, isMain: img.isMain })
+              .catch(() => { failed++; });
+          }
+          if (failed > 0) toast.error(t('galleryAttachFailed', { count: failed }));
+        }
         toast.success(t('dishCreated'));
       }
       onSuccess();

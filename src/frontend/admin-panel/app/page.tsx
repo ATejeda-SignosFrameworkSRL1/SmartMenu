@@ -39,10 +39,14 @@ function AdminDashboardInner() {
     const urlUser = searchParams.get('user');
     if (urlToken) {
       localStorage.setItem('admin_token', urlToken);
-      if (urlUser) localStorage.setItem('user', decodeURIComponent(urlUser));
-      // Limpiar la URL sin recargar
+      // useSearchParams().get() ya devuelve el valor decodificado (doble decode
+      // puede lanzar URIError) y los lectores usan la clave 'admin_user'
+      // (Header/AppSidebar/lib-api), no 'user'.
+      if (urlUser) localStorage.setItem('admin_user', urlUser);
+      // Limpiar la URL sin recargar y CONTINUAR (sin return): hay que fijar el
+      // header Authorization y llamar loadData() con el token recien guardado.
+      // El return temprano dejaba el dashboard en loading=true hasta un F5.
       router.replace('/');
-      return;
     }
 
     const token = localStorage.getItem('admin_token');

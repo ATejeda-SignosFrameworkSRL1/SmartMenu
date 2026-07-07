@@ -1385,14 +1385,6 @@ export default function WaiterPage() {
       const orderTotal = Number((order as any).total ?? (order as any).totalAmount ?? 0);
       const orderItems: any[] = (order as any).items ?? [];
 
-      // Calcular propina del mesero
-      const tipAmt = pmTipPct > 0
-        ? orderTotal * (pmTipPct / 100)
-        : (pmCustomTip ? parseFloat(pmCustomTip) || 0 : 0);
-      const tipPct = pmTipPct > 0
-        ? pmTipPct
-        : (pmCustomTip && orderTotal > 0 ? (parseFloat(pmCustomTip) / orderTotal) * 100 : 0);
-
       // Calcular la porción a cobrar según split
       const taxRate = orderTotal > 0 ? (Number((order as any).tax ?? 0) / (Number((order as any).subtotal ?? 1) || 1)) : 0.18;
       let myPortion = orderTotal;
@@ -1424,6 +1416,17 @@ export default function WaiterPage() {
         Object.keys(catTotals).forEach(c => { catTotals[c] = catTotals[c] + catTotals[c] * taxRate; });
         myPortion = catTotals[pmPayCategory] ?? 0;
       }
+
+      // Propina del mesero — sobre la PORCION cobrada (myPortion), la MISMA base
+      // que muestra el modal. Antes se calculaba sobre el total de la orden ANTES
+      // del split: la UI mostraba RD$100 y el backend recibia RD$300 (y en
+      // ByComensal cada parte volvia a enviar la propina completa).
+      const tipAmt = pmTipPct > 0
+        ? myPortion * (pmTipPct / 100)
+        : (pmCustomTip ? parseFloat(pmCustomTip) || 0 : 0);
+      const tipPct = pmTipPct > 0
+        ? pmTipPct
+        : (pmCustomTip && myPortion > 0 ? (parseFloat(pmCustomTip) / myPortion) * 100 : 0);
 
       let body: any;
 

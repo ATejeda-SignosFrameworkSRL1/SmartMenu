@@ -340,6 +340,7 @@
     "fieldTags": "Etiquetas (picante, etc.)",
     "dishUpdated": "Platillo actualizado",
     "dishCreated": "Platillo creado",
+    "galleryAttachFailed": "{count, plural, one {# imagen de la galería no se pudo asociar} other {# imágenes de la galería no se pudieron asociar}}",
     "errorFieldsMarked": "Revisa los campos marcados en rojo",
     "errorSave": "Error al guardar",
     "errorGeneric": "Error",
