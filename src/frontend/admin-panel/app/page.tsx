@@ -182,8 +182,11 @@ function AdminDashboardInner() {
   };
 
   const getElapsedMinutes = (createdAt: string) => {
+    // El backend manda DateTime.UtcNow SIN sufijo 'Z': sin normalizar, en RD (UTC-4)
+    // los minutos se inflan +240 y todo se pinta en rojo. Igual que bar/kitchen/Header.
+    const utcStr = createdAt && !createdAt.endsWith('Z') ? createdAt + 'Z' : createdAt;
     const now = new Date().getTime();
-    const created = new Date(createdAt).getTime();
+    const created = new Date(utcStr).getTime();
     return Math.floor((now - created) / 60000);
   };
 

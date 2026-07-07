@@ -115,8 +115,11 @@ export default function TablesPage() {
   const nv = (obj: any, key: string) =>
     obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (opts?: { silent?: boolean }) => {
+    // silent: refresco de fondo (polling) — sin spinner. El spinner de pagina
+    // completa solo aplica a la carga inicial / boton Refrescar; antes el poll
+    // de 10s reemplazaba el grid por el spinner en cada tick.
+    if (!opts?.silent) setLoading(true);
     try {
       const token = localStorage.getItem('admin_token');
       if (token) {
@@ -177,7 +180,7 @@ export default function TablesPage() {
     }
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     loadData();
-    const interval = setInterval(loadData, 10000);
+    const interval = setInterval(() => loadData({ silent: true }), 10000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -326,7 +329,7 @@ export default function TablesPage() {
               <Plus className="h-4 w-4 mr-2" />
               {t('btnNewTable')}
             </Button>
-            <Button onClick={loadData} variant="outline">
+            <Button onClick={() => loadData()} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               {t('btnRefresh')}
             </Button>
