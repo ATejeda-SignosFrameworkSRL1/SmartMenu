@@ -35,8 +35,8 @@ if (args.Length > 0 && args[0].Equals("preview", StringComparison.OrdinalIgnoreC
 {
     var order = ComandaService.SampleOrder();
     var enc = Encoding.GetEncoding(settings.CodePage);
-    var cocina = order.Items.Where(i => !Comanda.IsDrink(i.DishName)).ToList();
-    var bar = order.Items.Where(i => Comanda.IsDrink(i.DishName)).ToList();
+    var cocina = order.Items.Where(i => !Comanda.ItemIsDrink(i)).ToList();
+    var bar = order.Items.Where(i => Comanda.ItemIsDrink(i)).ToList();
 
     void Dump(string station, byte[] bytes)
     {

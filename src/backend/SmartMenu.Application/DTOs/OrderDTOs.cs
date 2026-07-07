@@ -127,6 +127,12 @@ public record OrderItemDto
     /// <summary>Preferencia (ej. término de carne) en texto.</summary>
     public string? PreferenceText { get; init; }
     public bool IsReady { get; init; }
+    /// <summary>
+    /// FASE 2 RUTEO — true si el item va al BAR, false si va a COCINA. Lo calcula el
+    /// backend (Dish.KitchenZone.Type manda; keywords por nombre solo como fallback).
+    /// Los frontends y el print-agent deben preferir este flag sobre su matcher local.
+    /// </summary>
+    public bool IsDrink { get; init; }
     public int? KitchenZoneId { get; init; }
     public string? KitchenZoneName { get; init; }
     /// <summary>Curso en que se debe servir este ítem (Entrada, PlatoFuerte, Postre)</summary>

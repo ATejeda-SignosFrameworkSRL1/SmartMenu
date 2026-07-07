@@ -91,8 +91,10 @@ public sealed class ComandaService
     public void PrintComanda(OrderDtoModel order)
     {
         var enc = ResolveEncoding();
-        var cocina = order.Items.Where(i => !Comanda.IsDrink(i.DishName)).ToList();
-        var bar = order.Items.Where(i => Comanda.IsDrink(i.DishName)).ToList();
+        // Reparto por estacion: flag isDrink del backend (zona del plato) con
+        // fallback a keywords para backends que no lo envien.
+        var cocina = order.Items.Where(i => !Comanda.ItemIsDrink(i)).ToList();
+        var bar = order.Items.Where(i => Comanda.ItemIsDrink(i)).ToList();
 
         if (_s.SplitTickets)
         {

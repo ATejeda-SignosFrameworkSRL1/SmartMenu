@@ -451,6 +451,31 @@ public class OrderServiceTests
         InvokeIsDrinkDish(dishName).Should().Be(expected, "'{0}' clasificado incorrectamente", dishName);
     }
 
+    // ─── IsDrinkItem (FASE 2 ruteo): la ZONA del plato MANDA; keywords = fallback ──
+    // Dish.KitchenZone.Type "Bar"/"Kitchen" (asignable en el admin) decide la estacion;
+    // el matcher por nombre solo aplica a platos sin zona asignada.
+    [Theory]
+    [InlineData("Bar", "Ensalada Cesar", true)]      // zona Bar manda aunque el nombre sea comida
+    [InlineData("Kitchen", "Mojito Clasico", false)] // zona Kitchen manda aunque el nombre sea bebida
+    [InlineData("Kitchen", "Copa de helado", false)] // el caso irresoluble por texto: la zona lo corrige
+    [InlineData(null, "Copa de helado", true)]       // sin zona: fallback keywords ('copa') — limitacion documentada
+    [InlineData("Dining", "Mojito Clasico", true)]   // zona que no es estacion: fallback keywords
+    [InlineData(null, "Ribeye Premium 12oz", false)]
+    public void IsDrinkItem_zone_type_overrides_keyword_fallback(string? zoneType, string dishName, bool expected)
+    {
+        InvokeIsDrinkItem(zoneType, dishName).Should().Be(expected,
+            "zona '{0}' + '{1}' clasificado incorrectamente", zoneType, dishName);
+    }
+
+    private static bool InvokeIsDrinkItem(string? zoneType, string? dishName)
+    {
+        var mi = typeof(OrderService).GetMethod("IsDrinkItem",
+                BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException(
+                "OrderService.IsDrinkItem no existe — ¿renombrado? Actualizar este test.");
+        return (bool)mi.Invoke(null, new object?[] { zoneType, dishName })!;
+    }
+
     // Helper privado puro de OrderService: se invoca por reflexión para fijar el
     // contrato del matcher sin abrir la visibilidad en producción.
     private static bool InvokeIsDrinkDish(string? dishName)

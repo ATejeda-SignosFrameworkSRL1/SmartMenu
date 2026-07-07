@@ -56,13 +56,19 @@ function isDrinkItem(dishName: string): boolean {
     k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
   );
 }
+// FASE 2 RUTEO — el flag isDrink del backend (zona del plato) MANDA; el matcher
+// por nombre queda solo como fallback para payloads sin el campo.
+function itemIsDrink(item: any): boolean {
+  const flag = item?.isDrink ?? item?.IsDrink;
+  return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
+}
 function orderHasDrinkItem(order: any): boolean {
   const items = order?.items ?? order?.Items ?? [];
-  return items.some((i: any) => isDrinkItem(i?.dishName ?? i?.DishName ?? ''));
+  return items.some((i: any) => itemIsDrink(i));
 }
 function orderHasFoodItem(order: any): boolean {
   const items = order?.items ?? order?.Items ?? [];
-  return items.some((i: any) => !isDrinkItem(i?.dishName ?? i?.DishName ?? ''));
+  return items.some((i: any) => !itemIsDrink(i));
 }
 
 const mainNavConfig = [

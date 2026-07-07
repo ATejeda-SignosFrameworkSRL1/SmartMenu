@@ -33,13 +33,26 @@ public class OrderService : IOrderService
             : words.Contains(k) || words.Contains(k + "s") || words.Contains(k + "es"));
     }
 
+    /// <summary>
+    /// FASE 2 RUTEO — Cocina/Bar de un item: la ZONA del plato manda
+    /// (Dish.KitchenZone.Type == "Bar" => bebida; "Kitchen" => comida; se asigna
+    /// desde el admin en el form del plato). Las keywords por nombre quedan SOLO
+    /// como fallback para platos sin zona asignada. Casos que el texto nunca
+    /// resuelve ("Copa de helado" es postre) se corrigen asignando la zona.
+    /// </summary>
+    internal static bool IsDrinkItem(string? kitchenZoneType, string? dishName) => kitchenZoneType switch
+    {
+        "Bar" => true,
+        "Kitchen" => false,
+        _ => IsDrinkDish(dishName),
+    };
+
     private static (bool HasFood, bool HasDrinks) GetOrderItemTypes(Order order)
     {
         bool hasFood = false, hasDrinks = false;
         foreach (var item in order.Items)
         {
-            var name = item.Dish?.Name;
-            if (IsDrinkDish(name)) hasDrinks = true;
+            if (IsDrinkItem(item.Dish?.KitchenZone?.Type, item.Dish?.Name)) hasDrinks = true;
             else hasFood = true;
         }
         return (hasFood, hasDrinks);
@@ -71,9 +84,13 @@ public class OrderService : IOrderService
                 throw new ArgumentException($"La mesa con Id {dto.TableId} no existe.");
         }
 
-        // Validar que todos los platos existen y cargar DefaultCourse
+        // Validar que todos los platos existen y cargar DefaultCourse.
+        // KitchenZone se incluye para rutear el item (Destination Cocina/Bar) al crearlo.
         var dishIds = dto.Items.Select(i => i.DishId).Distinct().ToList();
-        var existingDishes = await _context.Dishes.Where(d => dishIds.Contains(d.Id)).ToListAsync();
+        var existingDishes = await _context.Dishes
+            .Include(d => d.KitchenZone)
+            .Where(d => dishIds.Contains(d.Id))
+            .ToListAsync();
         var dishMap = existingDishes.ToDictionary(d => d.Id);
         var missing = dishIds.Except(existingDishes.Select(d => d.Id)).ToList();
         if (missing.Count > 0)
@@ -103,7 +120,9 @@ public class OrderService : IOrderService
                 PreferenceText = i.MeatCooking,
                 CustomerName = dto.CustomerName,
                 IsReady = false,
-                CourseTiming = i.CourseTiming ?? dish.DefaultCourse
+                CourseTiming = i.CourseTiming ?? dish.DefaultCourse,
+                // FASE 2 RUTEO — persistir la estacion decidida al momento de ordenar.
+                Destination = IsDrinkItem(dish.KitchenZone?.Type, dish.Name) ? "Bar" : "Kitchen"
             };
         }).ToList();
 
@@ -751,10 +770,13 @@ public class OrderService : IOrderService
             if (dto.Quantity <= 0)
                 throw new ArgumentException($"Cantidad inválida para plato {dto.DishId}: {dto.Quantity}");
 
-            var dish = await _context.Dishes.FindAsync(dto.DishId)
+            var dish = await _context.Dishes
+                .Include(d => d.KitchenZone)   // ruteo Cocina/Bar por zona (fallback keywords)
+                .FirstOrDefaultAsync(d => d.Id == dto.DishId)
                 ?? throw new ArgumentException($"Plato {dto.DishId} no encontrado");
 
-            if (IsDrinkDish(dish.Name)) newDrinksAdded = true;
+            var isDrink = IsDrinkItem(dish.KitchenZone?.Type, dish.Name);
+            if (isDrink) newDrinksAdded = true;
             else newFoodAdded = true;
 
             order.Items.Add(new OrderItem
@@ -769,6 +791,8 @@ public class OrderService : IOrderService
                 SideDish       = dto.SideDish,
                 CustomerName   = customerName,
                 CourseTiming   = dto.CourseTiming ?? (CourseTiming?)dish.DefaultCourse,
+                // FASE 2 RUTEO — persistir la estacion decidida al momento de ordenar.
+                Destination    = isDrink ? "Bar" : "Kitchen",
             });
         }
 
@@ -854,6 +878,11 @@ public class OrderService : IOrderService
                 CustomerName = i.CustomerName,
                 PreferenceText = i.PreferenceText,
                 IsReady = i.IsReady,
+                // FASE 2 RUTEO — flag autoritativo para frontends/print-agent: el
+                // Destination persistido manda; si falta (ordenes viejas), se deriva
+                // de la zona del plato con fallback a keywords.
+                IsDrink = i.Destination == "Bar"
+                    || (i.Destination == null && IsDrinkItem(i.Dish?.KitchenZone?.Type, i.Dish?.Name)),
                 KitchenZoneId = i.Dish?.KitchenZoneId,
                 KitchenZoneName = i.Dish?.KitchenZone?.Name,
                 CourseTiming = i.CourseTiming?.ToString()

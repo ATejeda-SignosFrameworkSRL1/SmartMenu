@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Clock, Check, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import axios from 'axios';
 import * as signalR from '@microsoft/signalr';
 import { useTranslations } from 'next-intl';
 import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
@@ -25,6 +24,14 @@ function isDrinkItem(dishName: string): boolean {
       ? name.includes(k)
       : words.has(k) || words.has(k + 's') || words.has(k + 'es')
   );
+}
+
+// FASE 2 RUTEO — el flag isDrink que calcula el backend (zona del plato asignada
+// en el admin) MANDA; el matcher por nombre queda solo como fallback para
+// payloads viejos sin el campo. Resuelve casos imposibles por texto ("Copa de helado").
+function itemIsDrink(item: any): boolean {
+  const flag = item?.isDrink ?? item?.IsDrink;
+  return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
 }
 
 // Mapa de DrinkTiming (0=Before/1=During/2=After) → CourseTiming string
@@ -83,7 +90,6 @@ interface OrderItem {
   allergies?: string;
   sideDish?: string;
   meatCooking?: string;
-  status?: string;
 }
 
 interface Order {
@@ -217,16 +223,16 @@ export default function KDSPage() {
           let myItems: any[];
           if (isBar) {
             // Bar: solo items que son bebidas
-            myItems = items.filter((item: any) => isDrinkItem(item.dishName ?? item.DishName ?? ''));
+            myItems = items.filter((item: any) => itemIsDrink(item));
           } else if (chefZoneId) {
             // Chef con zona asignada: solo items de esa zona (excluyendo bebidas)
             myItems = items.filter((item: any) => {
               const itemZone = item.kitchenZoneId ?? item.KitchenZoneId;
-              return itemZone === chefZoneId && !isDrinkItem(item.dishName ?? item.DishName ?? '');
+              return itemZone === chefZoneId && !itemIsDrink(item);
             });
           } else {
             // Chef sin zona: todos los items de comida (sin bebidas)
-            myItems = items.filter((item: any) => !isDrinkItem(item.dishName ?? item.DishName ?? ''));
+            myItems = items.filter((item: any) => !itemIsDrink(item));
           }
           return { ...order, items: myItems };
         })

@@ -17,6 +17,13 @@ public static class Comanda
         "soda", "jugo", "limonada", "batido", "smoothie", "copa", "trago", "coca", "pepsi"
     ];
 
+    /// <summary>
+    /// FASE 2 RUTEO — decide la estacion de un item: el flag isDrink que calcula el
+    /// backend (zona del plato) MANDA; las keywords por nombre quedan solo como
+    /// fallback para backends viejos que no envian el campo.
+    /// </summary>
+    public static bool ItemIsDrink(OrderItemModel item) => item.IsDrink ?? IsDrink(item.DishName);
+
     public static bool IsDrink(string? dishName)
     {
         if (string.IsNullOrWhiteSpace(dishName)) return false;

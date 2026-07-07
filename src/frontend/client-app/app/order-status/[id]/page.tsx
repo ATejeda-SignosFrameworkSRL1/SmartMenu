@@ -59,8 +59,14 @@ export default function OrderStatusPage() {
 
   const order = orderData?.data;
   const items = order?.items ?? [];
-  const kitchenItems = items.filter((item: any) => !isDrinkItem(item.dishName ?? item.DishName ?? ''));
-  const barItems = items.filter((item: any) => isDrinkItem(item.dishName ?? item.DishName ?? ''));
+  // FASE 2 RUTEO — el flag isDrink del backend (zona del plato) manda; el matcher
+  // por nombre queda como fallback para payloads sin el campo.
+  const itemIsDrink = (item: any): boolean => {
+    const flag = item?.isDrink ?? item?.IsDrink;
+    return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
+  };
+  const kitchenItems = items.filter((item: any) => !itemIsDrink(item));
+  const barItems = items.filter((item: any) => itemIsDrink(item));
 
   const hasFood = kitchenItems.length > 0;
   const hasBar  = barItems.length > 0;

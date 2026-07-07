@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Utensils, Clock, DollarSign, CheckCircle, AlertCircle, XCircle, LogOut, Wine, Check, RefreshCw, QrCode, Users, ArrowRightLeft, Share2, Pin, PinOff, Bell, X, ChefHat, Play, Square, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Search, Plus, Minus, Pencil } from 'lucide-react';
+import { Utensils, Clock, DollarSign, AlertCircle, XCircle, LogOut, Wine, Check, RefreshCw, QrCode, Users, ArrowRightLeft, Share2, Pin, PinOff, Bell, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Search, Plus, Minus, Pencil } from 'lucide-react';
 // Icono de exclamación para alarma en mesas con pedido sin asignar
 const AlertExclamation = () => (
   <span className="inline-flex items-center justify-center text-red-600 font-bold text-xl animate-pulse" style={{ animationDuration: '0.8s' }}>!</span>
@@ -58,6 +58,13 @@ function isDrinkItem(dishName: string): boolean {
   return DRINK_KEYWORDS.some(k =>
     k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
   );
+}
+// FASE 2 RUTEO — el flag isDrink que calcula el backend (zona del plato asignada
+// en el admin) MANDA; el matcher por nombre queda solo como fallback para
+// payloads viejos sin el campo. Resuelve casos imposibles por texto ("Copa de helado").
+function itemIsDrink(item: any): boolean {
+  const flag = item?.isDrink ?? item?.IsDrink;
+  return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
 }
 // Código de pedido corto y legible para el mesero: ORD-20260611144054-7cfdfa → "7CFDFA"
 const shortOrder = (on?: string | null) => ((on ?? '').split('-').pop() ?? '').toUpperCase();
@@ -211,15 +218,12 @@ export default function WaiterPage() {
   const [orderModalOrder, setOrderModalOrder] = useState<Order | null>(null);
   const [barOrdersRaw, setBarOrdersRaw] = useState<any[]>([]);
   const [identifiedTableId, setIdentifiedTableId] = useState<number | null>(null);
-  const [showQrModal, setShowQrModal] = useState(false);
   // WAITER-QR.1 — verificación de mesa desde modal de orden:
   //   - tableId: mesa esperada (de la orden)
   //   - tableNumber: número visible al usuario para mostrar en el modal
   const [qrVerifyContext, setQrVerifyContext] = useState<{ tableId: number; tableNumber: number | string } | null>(null);
   // QR-MESA-DIRECT.1: mini-modal de confirmación al tap directo en mesa disponible
   const [confirmIdentifyTable, setConfirmIdentifyTable] = useState<{ id: number; tableNumber: number; zoneName: string } | null>(null);
-  const [qrTableInput, setQrTableInput] = useState('');
-  const [showQrCamera, setShowQrCamera] = useState(false);
   const [showVirtualTableCamera, setShowVirtualTableCamera] = useState(false);
   const [showVirtualTableModal, setShowVirtualTableModal] = useState(false);
   const [virtualTableIds, setVirtualTableIds] = useState<string>('');
@@ -352,14 +356,8 @@ export default function WaiterPage() {
     } catch { /* ignore */ }
     return new Set<number>();
   });
-  // Shift state
+  // Shift state (turno auto-gestionado por login/logout)
   const [activeShift, setActiveShift] = useState<{ id: number; startTime: string; durationMinutes: number } | null>(null);
-  const [showEndShiftModal, setShowEndShiftModal] = useState(false);
-  const [endShiftTransferTo, setEndShiftTransferTo] = useState<number | null>(null);
-  const [shiftStep, setShiftStep] = useState<1 | 2 | 3>(1); // 1=resumen, 2=transferencia, 3=resultado
-  const [shiftSummary, setShiftSummary] = useState<any>(null);
-  const [shiftLoadingModal, setShiftLoadingModal] = useState(false);
-  const [shiftResult, setShiftResult] = useState<any>(null);
   const [selectedVTTableIndex, setSelectedVTTableIndex] = useState(0);
   const [notifToken, setNotifToken] = useState<string | null>(null);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -534,54 +532,11 @@ export default function WaiterPage() {
     prevUnreadRef.current = unreadCount;
   }, [unreadCount, notifications]);
 
-  // Log cuando virtualTablesList cambie
-  useEffect(() => {
-    if (virtualTablesList.length > 0) {
-    }
-  }, [virtualTablesList]);
-  
   // Ref para el intervalo de polling (no causa re-renders)
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldPollRef = useRef(true);
 
   // Callbacks memoizados para QrScanner (evita re-crear funciones y desmontar el componente)
-  const handleQrScanIdentify = useCallback(async (tableIdOrQrCode: number | string) => {
-    // Si es número, buscar por número de mesa o ID
-    if (typeof tableIdOrQrCode === 'number') {
-      const foundTable = tables.find(tb => tb.tableNumber === tableIdOrQrCode || tb.id === tableIdOrQrCode);
-      if (foundTable) {
-        setIdentifiedTableId(foundTable.id);
-        toast.success(t('identifyTable.identified', { number: foundTable.tableNumber }));
-      } else {
-        setIdentifiedTableId(tableIdOrQrCode);
-        toast.success(t('identifyTable.identifiedById'));
-      }
-    } else {
-      // Es un GUID, buscar mesa por qrCode
-      try {
-        const token = localStorage.getItem('waiter_token');
-        if (token) {
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        }
-        const response = await api.get(`/api/table/qr/${tableIdOrQrCode}`);
-        const table = response.data;
-        if (table && table.id) {
-          setIdentifiedTableId(table.id);
-          toast.success(`Mesa ${table.tableNumber} identificada`);
-        } else {
-          console.error('❌ Respuesta sin datos válidos:', table);
-          toast.error(t('scanner.notFoundError'));
-        }
-      } catch (error) {
-        console.error('❌ Error al buscar mesa por QR:', error);
-        toast.error(t('scanner.identifyError'));
-      }
-    }
-    setShowQrModal(false);
-    setShowQrCamera(false);
-    setQrTableInput('');
-  }, [tables]);
-
   // WAITER-QR.1 — callback para verificar que el QR escaneado coincide con la mesa esperada (la de la orden)
   const handleQrVerifyTable = useCallback(async (tableIdOrQrCode: number | string) => {
     if (!qrVerifyContext) return;
@@ -660,10 +615,6 @@ export default function WaiterPage() {
     toast.error(msg);
   }, []);
 
-  const handleQrClose = useCallback(() => {
-    setShowQrCamera(false);
-  }, []);
-
   const handleVirtualQrClose = useCallback(() => {
     setShowVirtualTableCamera(false);
   }, []);
@@ -724,12 +675,12 @@ export default function WaiterPage() {
 
   // Efecto para pausar/reanudar polling cuando se abre/cierra la cámara
   useEffect(() => {
-    shouldPollRef.current = !showQrCamera && !showVirtualTableCamera;
-  }, [showQrCamera, showVirtualTableCamera]);
+    shouldPollRef.current = !showVirtualTableCamera;
+  }, [showVirtualTableCamera]);
 
   // Bloquear scroll del body cuando hay modales abiertos
   useEffect(() => {
-    const hasModal = showPaymentModal || showOrderModal || showQrModal || showVirtualTableModal || showMoveModal || showManualOrderModal || showMyOrderModal;
+    const hasModal = showPaymentModal || showOrderModal || showVirtualTableModal || showMoveModal || showManualOrderModal || showMyOrderModal;
     if (hasModal) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -738,11 +689,11 @@ export default function WaiterPage() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showPaymentModal, showOrderModal, showQrModal, showVirtualTableModal, showMoveModal, showManualOrderModal, showMyOrderModal]);
+  }, [showPaymentModal, showOrderModal, showVirtualTableModal, showMoveModal, showManualOrderModal, showMyOrderModal]);
 
   // Bloquear scroll del body cuando hay modales abiertos
   useEffect(() => {
-    const isModalOpen = showQrModal || showVirtualTableModal || showPaymentModal || showOrderModal || showMoveModal || showManualOrderModal;
+    const isModalOpen = showVirtualTableModal || showPaymentModal || showOrderModal || showMoveModal || showManualOrderModal;
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -751,7 +702,7 @@ export default function WaiterPage() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showQrModal, showVirtualTableModal, showPaymentModal, showOrderModal, showMoveModal, showManualOrderModal]);
+  }, [showVirtualTableModal, showPaymentModal, showOrderModal, showMoveModal, showManualOrderModal]);
 
   // TAREA 5: el modo transferencia sólo aplica en "Mis Mesas"; salir de esa vista lo cancela.
   useEffect(() => {
@@ -963,7 +914,6 @@ export default function WaiterPage() {
       const userData = localStorage.getItem('waiter_user');
       if (userData) {
         currentUser = JSON.parse(userData);
-
       }
     }
     
@@ -980,34 +930,10 @@ export default function WaiterPage() {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       const res = await api.get(`/api/virtualtable/waiter/${uid}`);
       const list = Array.isArray(res.data) ? res.data : [];
-      if (list.length > 0) {
-      }
-
       setVirtualTablesList([...list]); // Crear nueva referencia para forzar re-render
 
     } catch (error: any) {
       setVirtualTablesList([]);
-    }
-  };
-
-  const identifyTableByQr = () => {
-    const raw = qrTableInput.trim().replace(/^table-/i, '');
-    const num = parseInt(raw, 10);
-    if (!Number.isNaN(num) && num > 0) {
-      const tb = tables.find(tbl => tbl.tableNumber === num || tbl.id === num);
-      if (tb) {
-        setIdentifiedTableId(tb.id);
-        setShowQrModal(false);
-        setQrTableInput('');
-        toast.success(t('identifyTable.identified', { number: tb.tableNumber }));
-      } else {
-        setIdentifiedTableId(num);
-        setShowQrModal(false);
-        setQrTableInput('');
-        toast.success(t('identifyTable.identifiedById'));
-      }
-    } else {
-      toast.error(t('identifyTable.invalidNumber'));
     }
   };
 
@@ -1507,81 +1433,6 @@ export default function WaiterPage() {
     }
   };
 
-  const getTableStatus = (order: Order): string => {
-    const tid = (order as any).tableId ?? (order as any).TableId;
-    const t = tables.find(tb => tb.id === tid || tb.id === Number(tid));
-    return t?.status ?? '';
-  };
-
-  const loadShift = async () => {
-    const uid = getUserId(user);
-    if (!uid) return;
-    try {
-      const res = await api.get(`/api/waitershift/active/${uid}`);
-      if (res.data?.hasActiveShift) {
-        setActiveShift({ id: res.data.id, startTime: res.data.startTime, durationMinutes: res.data.durationMinutes });
-      } else {
-        setActiveShift(null);
-      }
-    } catch { /* ignore */ }
-  };
-
-  const startShift = async () => {
-    const uid = getUserId(user);
-    if (!uid) return;
-    try {
-      const res = await api.post('/api/waitershift/start', { waiterId: uid });
-      setActiveShift({ id: res.data.id, startTime: res.data.startTime, durationMinutes: 0 });
-      toast.success(t('shift.startShift'));
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || t('shift.startShiftError'));
-    }
-  };
-
-  const openEndShiftModal = async () => {
-    const uid = getUserId(user);
-    if (!uid) return;
-    setShiftStep(1);
-    setShiftSummary(null);
-    setShiftResult(null);
-    setEndShiftTransferTo(null);
-    setShowEndShiftModal(true);
-    setShiftLoadingModal(true);
-    try {
-      loadWaiters();
-      const res = await api.get(`/api/waitershift/summary/${uid}`);
-      setShiftSummary(res.data);
-    } catch {
-      toast.error(t('shift.loadSummaryError'));
-    } finally {
-      setShiftLoadingModal(false);
-    }
-  };
-
-  const endShift = async () => {
-    if (!activeShift) return;
-    try {
-      const res = await api.put(`/api/waitershift/${activeShift.id}/end`, {
-        unassignOrders: true,
-        transferToWaiterId: endShiftTransferTo || null
-      });
-      setShiftResult(res.data);
-      setShiftStep(3);
-      setActiveShift(null);
-      const uid = getUserId(user);
-      if (uid) loadData(uid);
-    } catch {
-      toast.error(t('shift.endShiftError'));
-    }
-  };
-
-  const closeShiftModal = () => {
-    setShowEndShiftModal(false);
-    setShiftStep(1);
-    setShiftSummary(null);
-    setShiftResult(null);
-  };
-
   const handleLogout = async () => {
     // SHIFT — cerrar el turno activo antes de salir (turno auto-gestionado por login/logout).
     try {
@@ -1615,7 +1466,7 @@ export default function WaiterPage() {
       ['Pending', 'Confirmed', 'Preparing', 'Ready'].includes(getOrderStatus(o))
     ).map((o: any) => ({
       ...o,
-      drinkItems: getOrderItems(o).filter((i: any) => isDrinkItem(getItemDishName(i)))
+      drinkItems: getOrderItems(o).filter((i: any) => itemIsDrink(i))
     })).filter((o: any) => (o.drinkItems?.length ?? 0) > 0);
     const queueCount = barOrders.length;
 
@@ -1785,200 +1636,6 @@ export default function WaiterPage() {
         </div>
       </div>
 
-      {/* ═══ SHIFT HANDOVER MODAL ═══ */}
-      {showEndShiftModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
-
-            {/* Header */}
-            <div className={`px-6 py-4 flex-shrink-0 ${shiftStep === 3 ? 'bg-emerald-600' : 'bg-amber-500'}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">
-                    {shiftStep === 1 && t('shift.summaryTitle')}
-                    {shiftStep === 2 && t('shift.handoverTitle')}
-                    {shiftStep === 3 && t('shift.closedTitle')}
-                  </h2>
-                  {activeShift && shiftStep !== 3 && (
-                    <p className="text-sm text-white/80 mt-0.5">
-                      {t('shift.startedAt', { time: new Date(activeShift.startTime).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true }), minutes: Math.round((Date.now() - new Date(activeShift.startTime).getTime()) / 60000) })}
-                    </p>
-                  )}
-                </div>
-                {/* Step indicators */}
-                {shiftStep !== 3 && (
-                  <div className="flex gap-1.5">
-                    {[1, 2].map(s => (
-                      <div key={s} className={`w-2.5 h-2.5 rounded-full transition-all ${shiftStep >= s ? 'bg-white' : 'bg-white/30'}`} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-
-              {/* STEP 1: Resumen */}
-              {shiftStep === 1 && (
-                <>
-                  {shiftLoadingModal ? (
-                    <div className="text-center py-10">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto mb-3" />
-                      <p className="text-sm text-gray-500">{t('shift.loadingSummary')}</p>
-                    </div>
-                  ) : shiftSummary ? (
-                    <>
-                      {/* Alerta si hay cuentas por cobrar */}
-                      {shiftSummary.pendingBillingCount > 0 && (
-                        <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-xl p-3">
-                          <span className="text-orange-500 text-lg">⚠️</span>
-                          <p className="text-sm text-orange-700 font-medium">
-                            {t('tables.pendingBillingAlert', { count: shiftSummary.pendingBillingCount, tables: shiftSummary.pendingBillingCount !== 1 ? 'mesas' : 'mesa' })}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Mesas activas */}
-                      {shiftSummary.activeTables?.length > 0 ? (
-                        <div>
-                          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                            {t('shift.openTablesList', { count: shiftSummary.activeTables.length })}
-                          </p>
-                          <div className="space-y-2">
-                            {shiftSummary.activeTables.map((tbl: any) => (
-                              <div key={tbl.orderId} className="border border-gray-200 rounded-xl p-3">
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold text-gray-800">Mesa {tbl.tableNumber}</span>
-                                    <span className="text-xs text-gray-400">{tbl.zoneName}</span>
-                                    {tbl.hasPendingPayment && (
-                                      <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-semibold">{t('tables.hasPendingPayment')}</span>
-                                    )}
-                                  </div>
-                                  <span className="font-bold text-gray-800">${tbl.total.toFixed(2)}</span>
-                                </div>
-                                <div className="flex items-center justify-between text-xs text-gray-500">
-                                  <span>{tbl.itemCount} plato{tbl.itemCount !== 1 ? 's' : ''}{tbl.customerName ? ` · ${tbl.customerName}` : ''}</span>
-                                  {tbl.tip > 0 && <span className="text-emerald-600 font-medium">Propina: ${tbl.tip.toFixed(2)}</span>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="bg-gray-50 rounded-xl p-4 text-center">
-                          <p className="text-sm text-gray-500">{t('tables.noOpenTables')}</p>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center py-6">{t('tables.noSummary')}</p>
-                  )}
-                </>
-              )}
-
-              {/* STEP 2: Transferencia */}
-              {shiftStep === 2 && (
-                <>
-                  {shiftSummary?.activeTables?.length > 0 ? (
-                    <>
-                      <p className="text-sm text-gray-600">
-                        {t('shift.step2Intro', { count: shiftSummary.activeTables.length, s: shiftSummary.activeTables.length !== 1 ? 's' : '' })}
-                      </p>
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
-                          style={{ borderColor: endShiftTransferTo === null ? '#f59e0b' : '#e5e7eb' }}>
-                          <input type="radio" name="shiftTransfer" checked={endShiftTransferTo === null}
-                            onChange={() => setEndShiftTransferTo(null)} className="accent-amber-500" />
-                          <div>
-                            <p className="text-sm font-semibold text-gray-700">{t('transfer.leaveUnassigned')}</p>
-                            <p className="text-xs text-gray-400">{t('transfer.leaveUnassignedHint')}</p>
-                          </div>
-                        </label>
-                        {waiterList.filter(w => w.id !== getUserId(user)).map(w => (
-                          <label key={w.id} className="flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
-                            style={{ borderColor: endShiftTransferTo === w.id ? '#f59e0b' : '#e5e7eb' }}>
-                            <input type="radio" name="shiftTransfer" checked={endShiftTransferTo === w.id}
-                              onChange={() => setEndShiftTransferTo(w.id)} className="accent-amber-500" />
-                            <div>
-                              <p className="text-sm font-semibold text-gray-700">{w.firstName} {w.lastName}</p>
-                              <p className="text-xs text-gray-400">{t('transfer.transferToWaiter', { count: shiftSummary.activeTables.length, s: shiftSummary.activeTables.length !== 1 ? 's' : '' })}</p>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="bg-emerald-50 rounded-xl p-4 text-center">
-                      <p className="text-2xl mb-2">✅</p>
-                      <p className="text-sm font-semibold text-emerald-700">{t('shift.noOpenTablesStep2')}</p>
-                      <p className="text-xs text-emerald-600 mt-1">{t('shift.canClose')}</p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* STEP 3: Resultado */}
-              {shiftStep === 3 && shiftResult && (
-                <div className="text-center space-y-5">
-                  <div className="text-5xl">✅</div>
-                  <div>
-                    <p className="text-lg font-bold text-gray-800">{t('shift.closedDuration')}</p>
-                    <p className="text-sm text-gray-500 mt-1">{t('shift.duration', { formatted: shiftResult.durationFormatted })}</p>
-                  </div>
-                  {shiftResult.transferredTables > 0 ? (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 space-y-1">
-                      <p className="text-sm font-bold text-amber-700">
-                        {t('shift.transferredTables', { count: shiftResult.transferredTables, s: shiftResult.transferredTables !== 1 ? 's' : '' })}
-                      </p>
-                      {shiftResult.transferredTo ? (
-                        <p className="text-sm text-amber-600">{t('shift.deliveredTo', { name: shiftResult.transferredTo })}</p>
-                      ) : (
-                        <p className="text-sm text-amber-600">{t('shift.leftAvailable')}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-4">
-                      <p className="text-sm font-semibold text-emerald-700">{t('shift.noOpenAtClose')}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Footer buttons */}
-            <div className="flex-shrink-0 px-6 pb-6 pt-2 flex gap-3">
-              {shiftStep === 1 && (
-                <>
-                  <button onClick={closeShiftModal} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">
-                    {t('common.cancel')}
-                  </button>
-                  <button onClick={() => setShiftStep(2)} disabled={shiftLoadingModal}
-                    className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-sm font-semibold disabled:opacity-50">
-                    {t('common.continue')}
-                  </button>
-                </>
-              )}
-              {shiftStep === 2 && (
-                <>
-                  <button onClick={() => setShiftStep(1)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-semibold">
-                    {t('common.back')}
-                  </button>
-                  <button onClick={endShift} className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-sm font-semibold">
-                    Confirmar cierre
-                  </button>
-                </>
-              )}
-              {shiftStep === 3 && (
-                <button onClick={closeShiftModal} className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 text-sm font-semibold">
-                  {t('common.done')}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Panel de notificaciones */}
       {showNotifPanel && (
@@ -2367,10 +2024,6 @@ export default function WaiterPage() {
                 const tablesNotMine = tables.filter(t => {
                   const inMyOrders = myOrders.some(o => String(o.tableNumber) === String(t.tableNumber));
                   const inVirtualTable = virtualTableIds.includes(t.id);
-                  
-                  if (inVirtualTable) {
-                  }
-                  
                   return !inMyOrders && !inVirtualTable;
                 });
                 
@@ -2468,8 +2121,6 @@ export default function WaiterPage() {
               const filteredMyOrders = myOrders.filter(o => {
                 const tId = (o as any).tableId ?? (o as any).TableId;
                 const isInVirtual = virtualTableIds.includes(tId);
-                if (isInVirtual) {
-                }
                 return !isInVirtual;
               });
               
@@ -2487,8 +2138,8 @@ export default function WaiterPage() {
                     const barReady = (order as any).barReady ?? (order as any).BarReady;
                     const kitchenServed = (order as any).kitchenServed ?? (order as any).KitchenServed;
                     const barServed = (order as any).barServed ?? (order as any).BarServed;
-                    const hasFoodItems = (order.items ?? []).some((i: any) => !isDrinkItem(i.dishName ?? i.DishName ?? ''));
-                    const hasDrinkItems = (order.items ?? []).some((i: any) => isDrinkItem(i.dishName ?? i.DishName ?? ''));
+                    const hasFoodItems = (order.items ?? []).some((i: any) => !itemIsDrink(i));
+                    const hasDrinkItems = (order.items ?? []).some((i: any) => itemIsDrink(i));
                     const readyToServe = (kitchenReady || !hasFoodItems) && (barReady || !hasDrinkItems);
                     const isPaid = (order as Order).paymentCollectedByWaiter || order.status === 'Completed';
 
@@ -3314,121 +2965,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Modal: Identificar mesa por QR */}
-      {showQrModal && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">{t('qrVerify.title')}</h2>
-            {!showQrCamera ? (
-              <>
-                <p className="text-sm text-gray-600 mb-4">{t('tables.scanHint')}</p>
-                <button
-                  type="button"
-                  onClick={() => setShowQrCamera(true)}
-                  className="w-full mb-4 py-3 border-2 border-dashed border-indigo-300 rounded-lg text-indigo-600 font-medium flex items-center justify-center gap-2"
-                >
-                  <QrCode className="w-5 h-5" />
-                  {t('tables.openCamera')}
-                </button>
-                <input
-                  type="text"
-                  value={qrTableInput}
-                  onChange={e => setQrTableInput(e.target.value)}
-                  placeholder={t('tables.tableNumberPlaceholder')}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 mb-4"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowQrModal(false);
-                      setQrTableInput('');
-                      setShowQrCamera(false);
-                    }}
-                    className="flex-1 py-2 border border-gray-300 rounded-lg"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      identifyTableByQr();
-                    }}
-                    className="flex-1 py-2 bg-indigo-600 text-white rounded-lg"
-                  >
-                    {t('tables.identify')}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <QrScanner
-                  singleMode
-                  onScan={handleQrScanIdentify}
-                  onError={handleQrError}
-                  onClose={handleQrClose}
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowQrCamera(false);
-                  }}
-                  className="w-full mt-3 py-2 border-2 border-indigo-500 text-indigo-700 rounded-lg font-medium hover:bg-indigo-50"
-                >
-                  {t('tables.closeCamera')}
-                </button>
-                <p className="mt-3 text-xs text-gray-500">{t('tables.orEnterManually')}</p>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    type="text"
-                    value={qrTableInput}
-                    onChange={e => setQrTableInput(e.target.value)}
-                    placeholder={t('tables.tableInputPlaceholder')}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      identifyTableByQr();
-                    }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm"
-                  >
-                    {t('tables.identify')}
-                  </button>
-                </div>
-                <div className="mt-3 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowQrModal(false);
-                      setShowQrCamera(false);
-                      setQrTableInput('');
-                    }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg"
-                  >
-                    {t('tables.closeModal')}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Modal: Crear mesa virtual */}
       {showVirtualTableModal && (
@@ -3570,10 +3106,10 @@ export default function WaiterPage() {
       {showMyOrderModal && myOrderModalOrder && (() => {
         const order = myOrderModalOrder;
         const orderId = getOrderId(order);
-        const hasFoodItems = (order.items ?? []).some((i: any) => !isDrinkItem(i.dishName ?? i.DishName ?? ''));
-        const hasDrinkItems = (order.items ?? []).some((i: any) => isDrinkItem(i.dishName ?? i.DishName ?? ''));
-        const foodItems = (order.items ?? []).filter((i: any) => !isDrinkItem(i.dishName ?? i.DishName ?? ''));
-        const drinkItems = (order.items ?? []).filter((i: any) => isDrinkItem(i.dishName ?? i.DishName ?? ''));
+        const hasFoodItems = (order.items ?? []).some((i: any) => !itemIsDrink(i));
+        const hasDrinkItems = (order.items ?? []).some((i: any) => itemIsDrink(i));
+        const foodItems = (order.items ?? []).filter((i: any) => !itemIsDrink(i));
+        const drinkItems = (order.items ?? []).filter((i: any) => itemIsDrink(i));
         const kitchenReady = (order as any).kitchenReady ?? (order as any).KitchenReady;
         const barReady = (order as any).barReady ?? (order as any).BarReady;
         const kitchenServed = (order as any).kitchenServed ?? (order as any).KitchenServed;

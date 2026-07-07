@@ -44,6 +44,13 @@ function isDrinkItem(dishName: string): boolean {
   );
 }
 
+// FASE 2 RUTEO — el flag isDrink del backend (zona del plato) MANDA; el matcher
+// por nombre queda solo como fallback para payloads sin el campo.
+function itemIsDrink(item: any): boolean {
+  const flag = item?.isDrink ?? item?.IsDrink;
+  return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
+}
+
 // Filtro por momento de servicio de bebida
 type DrinkTimingFilter = 'all' | 'Before' | 'During' | 'After';
 
@@ -142,7 +149,7 @@ export default function BarPage() {
     })
     .map(o => ({
       ...o,
-      drinkItems: getOrderItems(o).filter((i: any) => isDrinkItem(getItemDishName(i))),
+      drinkItems: getOrderItems(o).filter((i: any) => itemIsDrink(i)),
     }))
     .filter(o => (o as any).drinkItems.length > 0);
 

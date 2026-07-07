@@ -26,6 +26,9 @@ public sealed class OrderItemModel
     public string? SideDish { get; set; }
     /// <summary>Preferencia en texto (ej. termino de carne).</summary>
     public string? PreferenceText { get; set; }
+    /// <summary>FASE 2 RUTEO — flag autoritativo del backend (zona del plato manda).
+    /// Nullable para compatibilidad con backends viejos sin el campo.</summary>
+    public bool? IsDrink { get; set; }
     public string? KitchenZoneName { get; set; }
     public string? CourseTiming { get; set; }
 }
