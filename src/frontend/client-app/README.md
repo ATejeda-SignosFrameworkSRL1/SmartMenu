@@ -24,7 +24,7 @@ npm run type-check
 
 ## Stack interno
 
-- **Auth**: `lib/auth-client.ts` → `createAuthApi('client-app')` provee axios + interceptor JWT con refresh transparente
+- **Auth**: app anónima — `lib/api.ts` provee el axios compartido (adjunta Bearer token si existe; sin refresh, los 401 se propagan a React Query)
 - **Errores**: `app/error.tsx` + `app/global-error.tsx` capturan throws + log a `lib/sentry.ts`
 - **Login**: `<LoginScreen appKey="client-app" .../>` componente compartido en `components/LoginScreen.tsx`
 - **Roles aceptados**: anónimo (sin login)

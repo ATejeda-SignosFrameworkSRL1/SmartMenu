@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Users, Calendar, LogOut, X, Clock, Phone, Mail, User, CreditCard, CheckCircle, XCircle, CalendarCheck, Globe, UtensilsCrossed, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as signalR from '@microsoft/signalr';
@@ -177,8 +177,6 @@ export default function HostApp() {
   // Zona actualmente filtrada en el modal (default: la pedida por el cliente)
   const [assignableZoneId, setAssignableZoneId] = useState<number | null>(null);
   const [allZonesForAssign, setAllZonesForAssign] = useState<Zone[]>([]);
-  const connectionRef = useRef<signalR.HubConnection | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Filters
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -481,8 +479,6 @@ export default function HostApp() {
       .configureLogging(signalR.LogLevel.Warning)
       .build();
 
-    connectionRef.current = connection;
-
     connection.on('NewReservation', (data: any) => {
       toast((toastInstance) => (
         <div className="flex items-center gap-3">
@@ -527,7 +523,6 @@ export default function HostApp() {
 
     return () => {
       connection.stop().catch(() => {});
-      connectionRef.current = null;
     };
   }, [loadReservations]);
 
@@ -768,9 +763,7 @@ export default function HostApp() {
     setFilterTimeTo('');
   };
 
-  const totalCapacity = tables.reduce((sum, t) => sum + t.capacity, 0);
   const availableSeats = tables.filter(t => t.status === 'Available').reduce((sum, t) => sum + t.capacity, 0);
-  const occupiedSeats = totalCapacity - availableSeats;
 
   // Panel operativo: ocultar reservas TERMINALES (cancelada/completada/no-show/expirada);
   // solo se gestionan las activas. Así al cancelar una reserva desaparece de la lista.
@@ -849,7 +842,6 @@ export default function HostApp() {
   });
 
   const totalPending = activeReservations.filter(r => !r.isConfirmed).length;
-  const totalConfirmed = activeReservations.filter(r => r.isConfirmed).length;
 
   // Ocupación por mesa: reservas confirmadas/sentadas que ocupan la mesa en un día (YYYY-MM-DD).
   const occupancyForTableOnDate = (table: Table, ymd: string) =>
