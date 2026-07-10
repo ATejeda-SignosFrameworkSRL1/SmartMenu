@@ -42,9 +42,15 @@ export default function TrackPage({ params }: { params: { code: string } }) {
   const [notFound, setNotFound] = useState(false);
 
   const fetchTrack = useCallback(async () => {
-    const r = await getTrack(code);
-    if (r) { setTrack(r); setNotFound(false); } else { setNotFound(true); }
-    setLoading(false);
+    try {
+      const r = await getTrack(code);
+      // null = 404 real del backend (código inexistente); solo ahí mostramos "no encontrada".
+      if (r) { setTrack(r); setNotFound(false); } else { setNotFound(true); }
+    } catch {
+      // Fallo de red/transitorio: conserva la última vista buena; el polling de 10s reintenta.
+    } finally {
+      setLoading(false);
+    }
   }, [code]);
 
   useEffect(() => {

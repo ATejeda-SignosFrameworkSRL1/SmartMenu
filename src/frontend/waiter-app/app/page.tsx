@@ -678,31 +678,18 @@ export default function WaiterPage() {
     shouldPollRef.current = !showVirtualTableCamera;
   }, [showVirtualTableCamera]);
 
-  // Bloquear scroll del body cuando hay modales abiertos
+  // Bloquear scroll del body cuando hay modales abiertos (efecto único: considera todos los modales)
   useEffect(() => {
     const hasModal = showPaymentModal || showOrderModal || showVirtualTableModal || showMoveModal || showManualOrderModal || showMyOrderModal;
     if (hasModal) {
       document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     };
   }, [showPaymentModal, showOrderModal, showVirtualTableModal, showMoveModal, showManualOrderModal, showMyOrderModal]);
-
-  // Bloquear scroll del body cuando hay modales abiertos
-  useEffect(() => {
-    const isModalOpen = showVirtualTableModal || showPaymentModal || showOrderModal || showMoveModal || showManualOrderModal;
-    if (isModalOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [showVirtualTableModal, showPaymentModal, showOrderModal, showMoveModal, showManualOrderModal]);
 
   // TAREA 5: el modo transferencia sólo aplica en "Mis Mesas"; salir de esa vista lo cancela.
   useEffect(() => {
@@ -711,6 +698,7 @@ export default function WaiterPage() {
   }, [view]);
 
   useEffect(() => {
+    let cancelled = false;
     const initAuth = async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const tokenFromUrl = urlParams.get('token');
@@ -796,6 +784,7 @@ export default function WaiterPage() {
       } catch { /* ignore — no crítico */ }
 
       setLoading(false);
+      if (cancelled) return; // El componente se desmontó durante los awaits — no crear el interval
       pollingIntervalRef.current = setInterval(() => {
         if (!shouldPollRef.current) {
           return; // Pausar si la cámara está abierta
@@ -812,6 +801,7 @@ export default function WaiterPage() {
 
     initAuth();
     return () => {
+      cancelled = true;
       if (pollingIntervalRef.current != null) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;

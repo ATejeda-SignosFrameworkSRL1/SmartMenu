@@ -117,12 +117,18 @@ export default function KDSPage() {
   const t = useTranslations('kds');
   const [user, setUser] = useState<any>(null);
   const userRef = useRef<any>(null);
+  // Guard de secuencia: loadOrders se dispara concurrente (poll 5s + SignalR +
+  // acciones manuales); solo la llamada MÁS RECIENTE puede pintar, para que una
+  // respuesta lenta/vieja no pise datos frescos. mountedRef evita setOrders tras unmount.
+  const seqRef = useRef(0);
+  const mountedRef = useRef(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [courseFilter, setCourseFilter] = useState<CourseFilter>('all');
   const [drinkTimingFilter, setDrinkTimingFilter] = useState<DrinkTimingFilter>('all');
 
   useEffect(() => {
+    mountedRef.current = true; // re-armar en re-mount (StrictMode dev ejecuta cleanup+effect dos veces)
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get('token');
     const userFromUrl = urlParams.get('user');
@@ -164,8 +170,9 @@ export default function KDSPage() {
       }).catch(() => {});
     }
 
-    loadOrders();
-    setLoading(false);
+    // Esperar la primera carga antes de quitar el loading — llamar setLoading(false)
+    // en síncrono provocaba un flash del empty state "¡Todo listo!" al montar.
+    loadOrders().finally(() => setLoading(false));
 
     // SignalR: escuchar nuevas órdenes para cocina (cuando el mesero confirma la orden)
     const connection = new signalR.HubConnectionBuilder()
@@ -182,6 +189,7 @@ export default function KDSPage() {
 
     const interval = setInterval(loadOrders, 5000);
     return () => {
+      mountedRef.current = false; // invalida respuestas en vuelo: no setOrders tras unmount
       clearInterval(interval);
       connection.stop().catch(() => {});
     };
@@ -189,6 +197,10 @@ export default function KDSPage() {
   }, []);
 
   const loadOrders = async () => {
+    // Captura el número de secuencia de ESTA llamada; si al volver la respuesta
+    // ya entró otra más reciente, se descarta (evita pintar datos viejos sobre frescos).
+    const seq = ++seqRef.current;
+    const isStale = () => seq !== seqRef.current || !mountedRef.current;
     try {
       const token = localStorage.getItem('kds_token');
       if (!token) return;
@@ -196,6 +208,7 @@ export default function KDSPage() {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       const response = await api.get('/api/order/active');
       const data = response?.data;
+      if (isStale()) return;
       if (!Array.isArray(data)) {
         setOrders([]);
         return;
@@ -254,6 +267,7 @@ export default function KDSPage() {
         if (cDiff !== 0) return cDiff;
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
+      if (isStale()) return;
       setOrders(kitchenOrders);
     } catch (error) {
       console.error('Error loading orders:', error);

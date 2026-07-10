@@ -265,6 +265,15 @@ export function useFloorPlanLive() {
     }, 500);
   }, []);
 
+  // Limpieza al desmontar: cancela los PUT debounced pendientes (editor y paleta)
+  // para que no se disparen después del unmount.
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (paletteTimer.current) clearTimeout(paletteTimer.current);
+    };
+  }, []);
+
   // Switch de visibilidad del plano por app (Host/Mesero) → PUT /api/floorplan/visibility.
   // El backend difunde FloorPlanVisibilityChanged para que host/waiter reaccionen en vivo.
   const onToggleVisibility = useCallback((target: 'host' | 'waiter', enabled: boolean) => {

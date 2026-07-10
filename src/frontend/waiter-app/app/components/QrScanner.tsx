@@ -179,7 +179,6 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
   }, [containerId, singleMode, attempt]);
 
   const handleDecode = (decodedText: string, scanner: any) => {
-    console.log('🔍 QR Escaneado:', decodedText);
     const result = parseTableIdFromQrContent(decodedText);
     if (result != null) {
       onScan(result);

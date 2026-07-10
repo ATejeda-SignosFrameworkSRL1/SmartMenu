@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Users, Calendar, LogOut, X, Clock, Phone, Mail, User, CreditCard, CheckCircle, XCircle, CalendarCheck, Globe, UtensilsCrossed, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as signalR from '@microsoft/signalr';
@@ -76,9 +76,6 @@ interface Reservation {
   source?: string;
   advanceBlockMinutes?: number;
   preOrder?: PreOrder | null;
-  // Host (empleado) que aceptó/creó la reserva — visible en cards y modales
-  createdByHostId?: number | null;
-  createdByHostName?: string | null;
 }
 
 // Estados TERMINALES de una reserva: no se gestionan en las vistas operativas
@@ -266,20 +263,27 @@ export default function HostApp() {
   }, []);
 
 
+  // Guard de secuencia: si el host cambia de zona rápido en el modal, respuestas
+  // fuera de orden no deben pisar la lista — solo la última petición aplica su resultado.
+  const assignableReqSeqRef = useRef(0);
+
   // Cargar tablas disponibles para una reserva, opcionalmente filtrando por zona específica
   const loadAssignableTables = async (reservationId: number, zoneId: number | null) => {
+    const seq = ++assignableReqSeqRef.current;
     setLoadingAssignable(true);
     try {
       const url = zoneId
         ? `/api/tablereservation/${reservationId}/available-tables?zoneId=${zoneId}`
         : `/api/tablereservation/${reservationId}/available-tables`;
       const res = await api.get(url);
+      if (seq !== assignableReqSeqRef.current) return; // respuesta obsoleta
       setAssignableTables(Array.isArray(res.data) ? res.data : []);
     } catch {
+      if (seq !== assignableReqSeqRef.current) return; // respuesta obsoleta
       toast.error(t('toast.availableTablesError'));
       setAssignableTables([]);
     } finally {
-      setLoadingAssignable(false);
+      if (seq === assignableReqSeqRef.current) setLoadingAssignable(false);
     }
   };
 
@@ -637,7 +641,9 @@ export default function HostApp() {
     // El wizard (HostReservationWizard) maneja su propio estado; aquí solo
     // precargamos el menú para el paso de pre-orden.
     if (menuDishes.length === 0) {
-      api.get('/api/dish').then(res => setMenuDishes(Array.isArray(res.data) ? res.data : [])).catch(() => {});
+      api.get('/api/dish')
+        .then(res => setMenuDishes(Array.isArray(res.data) ? res.data : []))
+        .catch(() => { toast.error(t('toast.menuLoadError')); });
     }
   };
 

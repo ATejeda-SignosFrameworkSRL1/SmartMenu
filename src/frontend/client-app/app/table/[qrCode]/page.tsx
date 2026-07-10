@@ -67,7 +67,9 @@ export default function TablePage() {
     if (error) {
       console.error('Error al cargar mesa:', error);
       toast.error(t('notFoundToast'));
-      setTimeout(() => router.push('/'), 3000);
+      // Guardar el id y limpiarlo al desmontar para no redirigir tras unmount
+      const timeoutId = setTimeout(() => router.push('/'), 3000);
+      return () => clearTimeout(timeoutId);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error, router]);

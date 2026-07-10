@@ -63,7 +63,10 @@ export default function OrderServedPage() {
     );
   }
 
-  const timeElapsed = Math.floor((new Date().getTime() - new Date(order.data.createdAt).getTime()) / 60000);
+  // Forzar interpretación UTC (el servidor devuelve sin 'Z')
+  const createdAtRaw: string | undefined = order.data.createdAt;
+  const utcStr = createdAtRaw && !createdAtRaw.endsWith('Z') ? createdAtRaw + 'Z' : createdAtRaw;
+  const timeElapsed = utcStr ? Math.floor((new Date().getTime() - new Date(utcStr).getTime()) / 60000) : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 py-8 px-4">

@@ -9,7 +9,6 @@ export interface Slot {
   time: string;        // HH:mm
   status: SlotStatus;
   remaining: number;
-  isPast: boolean;
 }
 
 export interface ServiceWindow {
@@ -27,12 +26,10 @@ export interface Availability {
 }
 
 export interface BookingResult {
-  success?: boolean;
   reservationId: number;
   confirmationCode: string;
   status: string;
   holdExpiresAt?: string | null;
-  reservationDateTime?: string | null;
 }
 
 export interface ZoneOption { id: number; name: string; }
@@ -124,8 +121,11 @@ export async function getTrack(code: string): Promise<ReservationTrack | null> {
   try {
     const { data } = await api.get<ReservationTrack>(`/api/tablereservation/track/${encodeURIComponent(code)}`);
     return data;
-  } catch {
-    return null;
+  } catch (e) {
+    // Solo un 404 real significa "reserva no encontrada". Fallos de red/timeout/5xx se
+    // propagan para que la UI conserve la última vista buena y el polling reintente.
+    if (axios.isAxiosError(e) && e.response?.status === 404) return null;
+    throw e;
   }
 }
 

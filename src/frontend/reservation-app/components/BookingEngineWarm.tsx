@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
@@ -93,11 +93,18 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
     if (mode === 'area') setGuests((g) => Math.max(g, AREA_MIN_GUESTS));
   }, [mode]);
 
+  // Guard anti out-of-order: solo la respuesta de la ÚLTIMA petición toca el estado
+  // (el polling de 15s y los cambios rápidos de fecha/comensales/zona pueden cruzarse).
+  const slotsSeq = useRef(0);
   const fetchSlots = useCallback(async () => {
+    const seq = ++slotsSeq.current;
     setLoadingSlots(true); setSlotsError(null);
-    try { setAvailability(await getSlots(date, guests, zoneId)); }
-    catch { setSlotsError(t('toastLoadFailed')); }
-    finally { setLoadingSlots(false); }
+    try {
+      const a = await getSlots(date, guests, zoneId);
+      if (seq === slotsSeq.current) setAvailability(a);
+    }
+    catch { if (seq === slotsSeq.current) setSlotsError(t('toastLoadFailed')); }
+    finally { if (seq === slotsSeq.current) setLoadingSlots(false); }
   }, [date, guests, zoneId, t]);
 
   useEffect(() => {
@@ -113,9 +120,9 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
     return () => clearInterval(id);
   }, [step, fetchSlots]);
 
-  // Cuenta regresiva del hold; si expira en paso 3, regresa a slots.
+  // Cuenta regresiva del hold; solo corre en el paso 3 (si expira ahí, regresa a slots).
   useEffect(() => {
-    if (!hold?.holdExpiresAt) { setSecondsLeft(null); return; }
+    if (!hold?.holdExpiresAt || step !== 3) { setSecondsLeft(null); return; }
     const expiry = new Date(hold.holdExpiresAt).getTime();
     const tick = () => {
       const s = Math.round((expiry - Date.now()) / 1000);
