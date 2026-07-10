@@ -142,6 +142,7 @@
     "noOrderId": "注文IDを受信できませんでした",
     "createOrderError": "注文の作成中にエラーが発生しました",
     "addItemsError": "アイテムの追加中にエラーが発生しました",
+    "noTableSelected": "ご注文にはテーブルのQRコードをスキャンしてください",
     "cartEmpty": "カートは空です"
   }
 }

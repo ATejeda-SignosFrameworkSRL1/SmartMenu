@@ -339,6 +339,7 @@
     "fieldPrepTime": "Preparation Time (minutes)",
     "fieldTags": "Tags (spicy, etc.)",
     "dishUpdated": "Dish updated",
+    "galleryAttachFailed": "{count, plural, one {# gallery image could not be attached} other {# gallery images could not be attached}}",
     "dishCreated": "Dish created",
     "errorFieldsMarked": "Check the fields marked in red",
     "errorSave": "Error saving",

@@ -142,6 +142,7 @@
     "noOrderId": "Keine Bestell-ID erhalten",
     "createOrderError": "Fehler beim Erstellen der Bestellung",
     "addItemsError": "Fehler beim Hinzufügen der Artikel",
+    "noTableSelected": "Scanne den QR-Code deines Tisches, um zu bestellen",
     "cartEmpty": "Der Warenkorb ist leer"
   }
 }

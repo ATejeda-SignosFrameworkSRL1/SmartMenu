@@ -339,6 +339,7 @@
     "fieldPrepTime": "Tempo di Preparazione (minuti)",
     "fieldTags": "Etichette (piccante, ecc.)",
     "dishUpdated": "Piatto aggiornato",
+    "galleryAttachFailed": "{count, plural, one {# immagine della galleria non è stata associata} other {# immagini della galleria non sono state associate}}",
     "dishCreated": "Piatto creato",
     "errorFieldsMarked": "Controlla i campi evidenziati in rosso",
     "errorSave": "Errore durante il salvataggio",

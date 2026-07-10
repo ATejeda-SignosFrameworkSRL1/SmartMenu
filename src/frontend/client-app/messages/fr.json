@@ -142,6 +142,7 @@
     "noOrderId": "L'identifiant de la commande n'a pas été reçu",
     "createOrderError": "Erreur lors de la création de la commande",
     "addItemsError": "Erreur lors de l'ajout des articles",
+    "noTableSelected": "Scannez le code QR de votre table pour commander",
     "cartEmpty": "Le panier est vide"
   }
 }

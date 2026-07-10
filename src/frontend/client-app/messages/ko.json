@@ -142,6 +142,7 @@
     "noOrderId": "주문 ID를 받지 못했습니다",
     "createOrderError": "주문 생성 중 오류가 발생했습니다",
     "addItemsError": "항목 추가 중 오류가 발생했습니다",
+    "noTableSelected": "주문하려면 테이블의 QR 코드를 스캔하세요",
     "cartEmpty": "장바구니가 비어 있습니다"
   }
 }

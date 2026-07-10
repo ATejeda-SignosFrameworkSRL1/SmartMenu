@@ -286,7 +286,8 @@
     "zoneConflict": "처리 불가: 해당 날짜/시간에 이미 예약이 있습니다. 메시지와 함께 거절할 수 있습니다.",
     "zoneDecisionError": "구역 예약 응답 오류",
     "rescheduled": "예약이 재일정되었습니다",
-    "rescheduleError": "예약 재일정 오류"
+    "rescheduleError": "예약 재일정 오류",
+    "menuLoadError": "사전 주문용 메뉴를 불러오지 못했습니다"
   },
   "wizard": {
     "reserveLabel": "예약",
@@ -327,6 +328,7 @@
     "reservationSummary": "{num}번 테이블 · {time} · {count} 명",
     "nameRequired": "이름과 전화번호는 필수입니다",
     "timeRequired": "시간대를 선택해 주세요",
+    "preorderError": "예약은 생성되었지만 요리 사전 주문을 저장하지 못했습니다",
     "reservationCreated": "예약이 성공적으로 생성되었습니다",
     "createError": "예약 생성 오류",
     "occasionNone": "특별 행사 없음",

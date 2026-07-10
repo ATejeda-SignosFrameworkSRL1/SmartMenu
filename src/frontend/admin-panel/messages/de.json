@@ -339,6 +339,7 @@
     "fieldPrepTime": "Zubereitungszeit (Minuten)",
     "fieldTags": "Tags (scharf usw.)",
     "dishUpdated": "Gericht aktualisiert",
+    "galleryAttachFailed": "{count, plural, one {# Galeriebild konnte nicht zugeordnet werden} other {# Galeriebilder konnten nicht zugeordnet werden}}",
     "dishCreated": "Gericht erstellt",
     "errorFieldsMarked": "Rot markierte Felder überprüfen",
     "errorSave": "Fehler beim Speichern",

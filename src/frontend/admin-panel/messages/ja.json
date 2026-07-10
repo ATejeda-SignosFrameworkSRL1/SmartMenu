@@ -339,6 +339,7 @@
     "fieldPrepTime": "調理時間（分）",
     "fieldTags": "タグ（辛いなど）",
     "dishUpdated": "料理を更新しました",
+    "galleryAttachFailed": "{count, plural, other {#枚のギャラリー画像を関連付けられませんでした}}",
     "dishCreated": "料理を作成しました",
     "errorFieldsMarked": "赤くマークされたフィールドを確認してください",
     "errorSave": "保存エラー",

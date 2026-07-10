@@ -142,6 +142,7 @@
     "noOrderId": "No order ID received",
     "createOrderError": "Error creating the order",
     "addItemsError": "Error adding items",
+    "noTableSelected": "Scan your table's QR code to order",
     "cartEmpty": "The cart is empty"
   }
 }

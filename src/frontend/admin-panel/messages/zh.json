@@ -339,6 +339,7 @@
     "fieldPrepTime": "制作时间（分钟）",
     "fieldTags": "标签（辣等）",
     "dishUpdated": "菜品已更新",
+    "galleryAttachFailed": "{count, plural, other {#张图库图片未能关联}}",
     "dishCreated": "菜品已创建",
     "errorFieldsMarked": "请检查红色标记的字段",
     "errorSave": "保存失败",

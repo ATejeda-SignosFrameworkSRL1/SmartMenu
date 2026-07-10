@@ -286,7 +286,8 @@
     "zoneConflict": "Impossible : la zone a déjà des réservations à cette date/heure. Vous pouvez refuser avec un message.",
     "zoneDecisionError": "Erreur lors de la réponse à la réservation de zone",
     "rescheduled": "Réservation reprogrammée",
-    "rescheduleError": "Erreur lors de la reprogrammation de la réservation"
+    "rescheduleError": "Erreur lors de la reprogrammation de la réservation",
+    "menuLoadError": "Impossible de charger le menu pour la précommande"
   },
   "wizard": {
     "reserveLabel": "Réserver",
@@ -327,6 +328,7 @@
     "reservationSummary": "Table #{num} · {time} · {count} pers.",
     "nameRequired": "Le nom et le téléphone sont obligatoires",
     "timeRequired": "Veuillez choisir un créneau",
+    "preorderError": "La réservation a été créée, mais la précommande de plats n'a pas pu être enregistrée",
     "reservationCreated": "Réservation créée avec succès",
     "createError": "Erreur lors de la création de la réservation",
     "occasionNone": "Sans occasion spéciale",

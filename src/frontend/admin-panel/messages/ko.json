@@ -339,6 +339,7 @@
     "fieldPrepTime": "준비 시간 (분)",
     "fieldTags": "태그 (매운맛 등)",
     "dishUpdated": "메뉴 업데이트됨",
+    "galleryAttachFailed": "{count, plural, other {갤러리 이미지 #장을 연결하지 못했습니다}}",
     "dishCreated": "메뉴 생성됨",
     "errorFieldsMarked": "빨간색으로 표시된 필드를 확인하세요",
     "errorSave": "저장 오류",

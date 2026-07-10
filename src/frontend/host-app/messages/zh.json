@@ -286,7 +286,8 @@
     "zoneConflict": "无法操作：该区域在该日期/时间段已有预订。您可以发送留言拒绝。",
     "zoneDecisionError": "处理区域预订回复时出错",
     "rescheduled": "预订已重新安排",
-    "rescheduleError": "重新安排预订时出错"
+    "rescheduleError": "重新安排预订时出错",
+    "menuLoadError": "无法加载预点餐菜单"
   },
   "wizard": {
     "reserveLabel": "预订",
@@ -327,6 +328,7 @@
     "reservationSummary": "{num} 号桌 · {time} · {count} 人",
     "nameRequired": "姓名和电话为必填项",
     "timeRequired": "请选择时段",
+    "preorderError": "预订已创建，但菜品预点单未能保存",
     "reservationCreated": "预订创建成功",
     "createError": "创建预订时出错",
     "occasionNone": "无特殊场合",

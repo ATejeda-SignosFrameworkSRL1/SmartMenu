@@ -339,6 +339,7 @@
     "fieldPrepTime": "Temps de préparation (minutes)",
     "fieldTags": "Étiquettes (épicé, etc.)",
     "dishUpdated": "Plat mis à jour",
+    "galleryAttachFailed": "{count, plural, one {# image de la galerie n'a pas pu être associée} other {# images de la galerie n'ont pas pu être associées}}",
     "dishCreated": "Plat créé",
     "errorFieldsMarked": "Vérifiez les champs marqués en rouge",
     "errorSave": "Erreur lors de l'enregistrement",

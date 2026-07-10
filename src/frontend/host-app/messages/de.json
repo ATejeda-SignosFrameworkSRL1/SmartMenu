@@ -286,7 +286,8 @@
     "zoneConflict": "Nicht möglich: Der Bereich hat bereits Reservierungen an diesem Datum/Zeitraum. Sie können mit einer Nachricht ablehnen.",
     "zoneDecisionError": "Fehler beim Beantworten der Bereichsreservierung",
     "rescheduled": "Reservierung umgeplant",
-    "rescheduleError": "Fehler beim Umplanen der Reservierung"
+    "rescheduleError": "Fehler beim Umplanen der Reservierung",
+    "menuLoadError": "Das Menü für die Vorbestellung konnte nicht geladen werden"
   },
   "wizard": {
     "reserveLabel": "Reservieren",
@@ -327,6 +328,7 @@
     "reservationSummary": "Tisch #{num} · {time} · {count} Pers.",
     "nameRequired": "Name und Telefon sind erforderlich",
     "timeRequired": "Bitte wählen Sie ein Zeitfenster",
+    "preorderError": "Die Reservierung wurde erstellt, aber die Vorbestellung der Gerichte konnte nicht gespeichert werden",
     "reservationCreated": "Reservierung erfolgreich erstellt",
     "createError": "Fehler beim Erstellen der Reservierung",
     "occasionNone": "Kein besonderer Anlass",

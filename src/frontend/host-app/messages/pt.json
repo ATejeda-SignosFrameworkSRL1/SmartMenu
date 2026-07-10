@@ -286,7 +286,8 @@
     "zoneConflict": "Não é possível: a zona já tem reservas nessa data/horário. Você pode recusar com uma mensagem.",
     "zoneDecisionError": "Erro ao responder a reserva de zona",
     "rescheduled": "Reserva reagendada",
-    "rescheduleError": "Erro ao reagendar reserva"
+    "rescheduleError": "Erro ao reagendar reserva",
+    "menuLoadError": "Não foi possível carregar o menu para o pré-pedido"
   },
   "wizard": {
     "reserveLabel": "Reservar",
@@ -327,6 +328,7 @@
     "reservationSummary": "Mesa #{num} · {time} · {count} pes.",
     "nameRequired": "Nome e telefone são obrigatórios",
     "timeRequired": "Escolha um horário",
+    "preorderError": "A reserva foi criada, mas o pré-pedido de pratos não pôde ser salvo",
     "reservationCreated": "Reserva criada com sucesso",
     "createError": "Erro ao criar reserva",
     "occasionNone": "Sem ocasião especial",

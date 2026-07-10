@@ -142,6 +142,7 @@
     "noOrderId": "未收到订单 ID",
     "createOrderError": "创建订单失败",
     "addItemsError": "添加菜品失败",
+    "noTableSelected": "请扫描您餐桌上的二维码进行点餐",
     "cartEmpty": "购物车是空的"
   }
 }

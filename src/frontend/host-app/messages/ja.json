@@ -286,7 +286,8 @@
     "zoneConflict": "実行できません: そのゾーンはその日時にすでに予約が入っています。メッセージを添えて拒否してください。",
     "zoneDecisionError": "ゾーン予約の応答エラー",
     "rescheduled": "予約を変更しました",
-    "rescheduleError": "予約の変更エラー"
+    "rescheduleError": "予約の変更エラー",
+    "menuLoadError": "事前注文用のメニューを読み込めませんでした"
   },
   "wizard": {
     "reserveLabel": "予約",
@@ -327,6 +328,7 @@
     "reservationSummary": "テーブル #{num} · {time} · {count} 名",
     "nameRequired": "お名前と電話番号は必須です",
     "timeRequired": "時間帯を選択してください",
+    "preorderError": "予約は作成されましたが、料理の事前注文を保存できませんでした",
     "reservationCreated": "予約が正常に作成されました",
     "createError": "予約の作成エラー",
     "occasionNone": "特別なイベントなし",

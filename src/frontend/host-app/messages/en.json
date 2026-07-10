@@ -286,7 +286,8 @@
     "zoneConflict": "Cannot proceed: the zone already has reservations on that date/time. You can reject with a message.",
     "zoneDecisionError": "Error responding to zone reservation",
     "rescheduled": "Reservation rescheduled",
-    "rescheduleError": "Error rescheduling reservation"
+    "rescheduleError": "Error rescheduling reservation",
+    "menuLoadError": "Could not load the menu for the pre-order"
   },
   "wizard": {
     "reserveLabel": "Reserve",
@@ -327,6 +328,7 @@
     "reservationSummary": "Table #{num} · {time} · {count} guests",
     "nameRequired": "Name and phone are required",
     "timeRequired": "Please select a time slot",
+    "preorderError": "The reservation was created, but the dish pre-order could not be saved",
     "reservationCreated": "Reservation created successfully",
     "createError": "Error creating reservation",
     "occasionNone": "No special occasion",

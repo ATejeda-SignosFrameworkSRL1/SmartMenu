@@ -286,7 +286,8 @@
     "zoneConflict": "Impossibile: la zona ha già prenotazioni in quella data/orario. Puoi rifiutare con un messaggio.",
     "zoneDecisionError": "Errore nella risposta alla prenotazione zona",
     "rescheduled": "Prenotazione riprogrammata",
-    "rescheduleError": "Errore nella riprogrammazione della prenotazione"
+    "rescheduleError": "Errore nella riprogrammazione della prenotazione",
+    "menuLoadError": "Impossibile caricare il menu per il pre-ordine"
   },
   "wizard": {
     "reserveLabel": "Prenota",
@@ -327,6 +328,7 @@
     "reservationSummary": "Tavolo #{num} · {time} · {count} pers.",
     "nameRequired": "Nome e telefono sono obbligatori",
     "timeRequired": "Scegli un orario",
+    "preorderError": "La prenotazione è stata creata, ma il preordine dei piatti non è stato salvato",
     "reservationCreated": "Prenotazione creata con successo",
     "createError": "Errore nella creazione della prenotazione",
     "occasionNone": "Nessuna occasione speciale",

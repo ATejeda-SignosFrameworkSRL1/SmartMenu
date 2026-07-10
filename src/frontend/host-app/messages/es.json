@@ -286,7 +286,8 @@
     "zoneConflict": "No se puede: la zona ya tiene reservas en esa fecha/horario. Podés rechazar con un mensaje.",
     "zoneDecisionError": "Error al responder la reserva de zona",
     "rescheduled": "Reserva reprogramada",
-    "rescheduleError": "Error al reprogramar reserva"
+    "rescheduleError": "Error al reprogramar reserva",
+    "menuLoadError": "No se pudo cargar el menú para la pre-orden"
   },
   "wizard": {
     "reserveLabel": "Reservar",
