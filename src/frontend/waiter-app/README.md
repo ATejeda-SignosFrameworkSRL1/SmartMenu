@@ -24,7 +24,7 @@ npm run type-check
 
 ## Stack interno
 
-- **Auth**: `lib/auth-client.ts` → `createAuthApi('waiter-app')` provee axios + interceptor JWT con refresh transparente
+- **Auth**: `lib/api.ts` → instancia axios propia + `ensureFreshToken()` (refresh JWT con clave `waiter_token`); no usa el auth-client compartido de otras apps
 - **Errores**: `app/error.tsx` + `app/global-error.tsx` capturan throws + log a `lib/sentry.ts`
 - **Login**: `<LoginScreen appKey="waiter-app" .../>` componente compartido en `components/LoginScreen.tsx`
 - **Roles aceptados**: Waiter (+ Admin)

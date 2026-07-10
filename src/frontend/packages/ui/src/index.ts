@@ -4,6 +4,11 @@
  */
 export { cn } from "./lib/cn";
 export { useIsMobile } from "./hooks/use-mobile";
+export {
+  useFloorPlanReadOnly,
+  type FloorPlanReadOnlyOptions,
+  type FloorPlanTableEvent,
+} from "./hooks/use-floor-plan-readonly";
 
 // ── Átomos ───────────────────────────────────────────────────────────────
 export { Button, buttonVariants, type ButtonProps } from "./components/button";
