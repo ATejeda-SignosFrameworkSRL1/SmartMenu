@@ -83,7 +83,10 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("SmartMenu.Infrastructure"));
     options.AddInterceptors(sp.GetRequiredService<SmartMenu.API.Data.AuditInterceptor>());
-    options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+    // PROD-SCHEMA.1 — la supresion de PendingModelChangesWarning se ELIMINO a proposito:
+    // el snapshot quedo sincronizado con el modelo (migration SyncEnsurePatchesToMigrations),
+    // y a partir de ahora cualquier drift modelo-vs-migrations debe fallar RUIDOSAMENTE
+    // (crear la migration que falta), no ocultarse.
 });
 
 // ===== REDIS ===== (Comentado temporalmente - no crítico para MVP)
@@ -453,31 +456,17 @@ if (app.Environment.IsDevelopment())
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishTagsSeedAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBartenderRoleAsync(context);
 
-    // 4. Sprint 2 — Schema PIN del waiter (idempotente). Cubre el período de
-    //    transición hasta que se genere una migration EF formal.
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureWaiterPinColumnsAsync(context);
-
-    // 5. Sprint 4.2 — Tabla AuditEvents para trazabilidad DGII.
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureAuditEventsTableAsync(context);
-
-    // 6. VT-PAY — columna PayerTableId para el cobro unificado de mesa virtual.
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureVirtualTablePayerColumnAsync(context);
-
-    // 7. Reservas — turnos (ServicePeriods) por defecto para la capacidad dinámica por intervalo.
+    // 4. Reservas — turnos (ServicePeriods) por defecto para la capacidad dinámica
+    //    por intervalo (seed de DATOS, no schema).
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDefaultServicePeriodsAsync(context);
 
-    // 8. ZONA-EXCL — columnas IsZoneExclusive/HostResponseMessage para reservas de zona completa.
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureZoneExclusiveColumnsAsync(context);
-
-    // 9. SHARED-TABLE-ORDER — columna CustomerName en OrderItems (varios comensales del mismo QR, una sola orden por mesa).
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureOrderItemCustomerNameColumnAsync(context);
-
-    // 10. PLANO (Gestión de Salón) — columnas de layout en Tables (PositionX/Y, Shape, Width/Height, Server)
-    //     + tabla FloorStructures. Idempotentes/transitorios hasta una migration EF formal.
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorPlanColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureRestaurantPaletteColumnAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorPlanVisibilityColumnsAsync(context);
-    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureFloorStructureTableAsync(context);
+    // PROD-SCHEMA.1 — Los parches de SCHEMA que vivian aqui (PIN del waiter,
+    // AuditEvents, PayerTableId, zona exclusiva, OrderItems.CustomerName y las
+    // columnas/tabla del plano) se consolidaron en la migration EF formal
+    // SyncEnsurePatchesToMigrations (mismo SQL idempotente) y los aplica el
+    // MigrateAsync() de arriba. Produccion: `dotnet ef database update` (CI/CD)
+    // produce ahora el esquema COMPLETO en una BD virgen. Cualquier cambio de
+    // esquema futuro va SIEMPRE en una migration, nunca en un Ensure*.
 }
 
 app.Run();
