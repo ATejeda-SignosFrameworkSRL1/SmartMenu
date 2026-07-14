@@ -28,6 +28,9 @@ public class Restaurant : BaseEntity
     /// <summary>Switch del admin: muestra/oculta el plano de salón en la waiter-app. Default true.</summary>
     public bool FloorPlanWaiterEnabled { get; set; } = true;
 
+    /// <summary>Switch del admin: habilita/oculta el seguimiento (tracking) de órdenes delivery en el admin-panel. Default true.</summary>
+    public bool DeliveryTrackingEnabled { get; set; } = true;
+
     // Navigation properties
     public ICollection<User> Staff { get; set; } = new List<User>();
     public ICollection<Table> Tables { get; set; } = new List<Table>();

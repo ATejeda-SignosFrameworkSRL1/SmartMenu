@@ -208,6 +208,7 @@ builder.Services.AddSingleton<SmartMenu.Application.Services.ITableRealtimeNotif
 // Punto único de difusión de estado de mesa (calcula efectivo + emite TableStatusChanged).
 builder.Services.AddScoped<SmartMenu.Application.Services.ITableStatusBroadcaster, SmartMenu.Infrastructure.Services.TableStatusBroadcaster>();
 builder.Services.AddScoped<SmartMenu.Application.Services.IOrderService, SmartMenu.Infrastructure.Services.OrderService>();
+builder.Services.AddScoped<SmartMenu.Application.Services.IInvoiceService, SmartMenu.Infrastructure.Services.InvoiceService>();
 // Reservas — capacidad dinámica por intervalo: seams de comunicaciones y depósitos (stubs en MVP).
 builder.Services.AddScoped<SmartMenu.Application.Services.INotificationService, SmartMenu.Infrastructure.Services.LoggingNotificationService>();
 builder.Services.AddScoped<SmartMenu.Application.Services.IDepositService, SmartMenu.Infrastructure.Services.NoopDepositService>();

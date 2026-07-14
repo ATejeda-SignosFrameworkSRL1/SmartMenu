@@ -10,6 +10,10 @@ public class Order : BaseEntity
     /// <summary>True para órdenes de mostrador/para llevar creadas por el cajero.</summary>
     public bool IsPickup { get; set; } = false;
     public int? TableSessionId { get; set; }
+    /// <summary>Factura global multi-franquicia (checkout delivery/pickup online). Null en órdenes de mesa/POS.</summary>
+    public int? InvoiceId { get; set; }
+    /// <summary>Franquicia dueña de esta orden (scopea el KDS y la liquidación fiscal). Null = legado single-restaurant.</summary>
+    public int? RestaurantId { get; set; }
     public string SessionId { get; set; } = string.Empty;
     /// <summary>Nombre del comensal (lo ingresa al entrar al menú desde el QR).</summary>
     public string? CustomerName { get; set; }
@@ -59,6 +63,8 @@ public class Order : BaseEntity
     // Navigation properties
     public Table? Table { get; set; }
     public TableSession? TableSession { get; set; }
+    public Invoice? Invoice { get; set; }
+    public Restaurant? Restaurant { get; set; }
     public User? Customer { get; set; }
     public User? AssignedWaiter { get; set; }
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();

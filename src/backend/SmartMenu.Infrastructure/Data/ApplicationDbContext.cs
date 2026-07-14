@@ -22,6 +22,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<TableSession> TableSessions => Set<TableSession>();
     public DbSet<TableReservation> TableReservations => Set<TableReservation>();
     public DbSet<VirtualTable> VirtualTables => Set<VirtualTable>();
@@ -96,6 +97,27 @@ public class ApplicationDbContext : DbContext
             .WithMany()
             .HasForeignKey(o => o.AssignedWaiterId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // ─── Factura global multi-franquicia (agregador delivery/pickup online) ───
+        // Restrict: una Invoice/Order histórica-fiscal nunca se borra en cascada.
+        modelBuilder.Entity<Order>()
+            .HasOne(o => o.Invoice)
+            .WithMany(inv => inv.Orders)
+            .HasForeignKey(o => o.InvoiceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Franquicia dueña de la orden. NoAction: sin cascada (evita ciclos/borrados masivos).
+        modelBuilder.Entity<Order>()
+            .HasOne(o => o.Restaurant)
+            .WithMany()
+            .HasForeignKey(o => o.RestaurantId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<Invoice>()
+            .HasOne(inv => inv.Customer)
+            .WithMany()
+            .HasForeignKey(inv => inv.CustomerId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Restrict en lugar de Cascade: una Order nunca debería ser borrada en SQL
         // (los datos fiscales/históricos deben sobrevivir). Si alguien intenta DELETE en
@@ -248,6 +270,10 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Order>().HasIndex(o => o.TableId);
         modelBuilder.Entity<Payment>().HasIndex(p => p.OrderId);
         modelBuilder.Entity<Payment>().HasIndex(p => p.Status);
+        modelBuilder.Entity<Order>().HasIndex(o => o.InvoiceId);
+        modelBuilder.Entity<Order>().HasIndex(o => o.RestaurantId);
+        modelBuilder.Entity<Invoice>().HasIndex(inv => inv.DeliveryStatus);
+        modelBuilder.Entity<Invoice>().HasIndex(inv => inv.CreatedAt);
         modelBuilder.Entity<Dish>().HasIndex(d => new { d.CategoryId, d.IsAvailable });
         modelBuilder.Entity<Dish>().HasIndex(d => d.IsDeleted);
         modelBuilder.Entity<TableSession>().HasIndex(ts => new { ts.TableId, ts.IsActive });
