@@ -153,3 +153,18 @@ export type {
   StructureType,
 } from "./components/floor-plan/types";
 export { BISTRO_TABLES } from "./components/floor-plan/bistro-tables";
+
+// ── Delivery Tracking (PROTOTIPO multi-franquicia — solo Storybook por ahora) ──
+export {
+  DeliveryTrackingPanel,
+  type DeliveryTrackingPanelProps,
+} from "./components/delivery-tracking/delivery-tracking-panel";
+export {
+  DELIVERY_NEXT_STATUS,
+  DELIVERY_STATUS_LABELS,
+  type DeliveryInvoice,
+  type DeliveryFranchiseOrder,
+  type DeliveryOrderItem,
+  type DeliveryStatusKey,
+  type FulfillmentKey,
+} from "./components/delivery-tracking/types";
