@@ -154,6 +154,18 @@ export type {
 } from "./components/floor-plan/types";
 export { BISTRO_TABLES } from "./components/floor-plan/bistro-tables";
 
+// ── Franchise Directory (PROTOTIPO marketplace del cliente — solo Storybook) ──
+export {
+  FranchiseDirectory,
+  type FranchiseDirectoryProps,
+} from "./components/franchise-directory/franchise-directory";
+export type {
+  FranchiseSummary,
+  DirectoryDish,
+  CartLine,
+  FranchiseCartGroup,
+} from "./components/franchise-directory/types";
+
 // ── Delivery Tracking (PROTOTIPO multi-franquicia — solo Storybook por ahora) ──
 export {
   DeliveryTrackingPanel,
