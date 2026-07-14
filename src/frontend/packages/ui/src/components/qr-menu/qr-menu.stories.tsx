@@ -29,28 +29,52 @@ export default meta;
 
 type Story = StoryObj<typeof QrMenu>;
 
+const MIXED_CART = [
+  { dish: MOCK_QR_MENU.find((d) => d.dishId === 4)!, quantity: 1, takeaway: false, courseTiming: "PlatoFuerte" as const, garnish: "Puré de papa" },
+  { dish: MOCK_QR_MENU.find((d) => d.dishId === 12)!, quantity: 2, takeaway: false, courseTiming: "PlatoFuerte" as const },
+  { dish: MOCK_QR_MENU.find((d) => d.dishId === 14)!, quantity: 1, takeaway: true, courseTiming: "Postre" as const, notes: "Para llevar al salir" },
+  { dish: MOCK_QR_MENU.find((d) => d.dishId === 1)!, quantity: 1, takeaway: true, allergies: "alérgico a nueces" },
+];
+
+// ═══ VARIANTE A — 'inline' (recomendada): marcar mientras navega ═══
+
 /**
- * Flujo completo: buscar/filtrar → "Agregar" (mesa, 1 tap) o 🥡 (para llevar) desde
+ * A · Flujo completo: buscar/filtrar → "Agregar" (mesa, 1 tap) o 🥡 (para llevar) desde
  * la card → o abrir el plato y usar el switch "Para llevar" junto a la cantidad →
  * revisar el carrito, alternar señales por línea o marcar "¿Todo para llevar?".
  */
-export const FlujoCompleto: Story = {
-  args: {},
+export const InlineFlujoCompleto: Story = {
+  args: { takeawayUx: "inline" },
 };
 
 /**
- * Carrito abierto con señales mixtas: platos en mesa y platos 🥡 para llevar en el
- * mismo pedido. Cada línea alterna su señal con un clic; el switch de arriba empaca
- * (o des-empaca) todo el pedido de una vez.
+ * A · Carrito abierto con señales mixtas: cada línea alterna su señal con un clic;
+ * el switch de arriba empaca (o des-empaca) todo el pedido de una vez.
  */
-export const CarritoMixto: Story = {
-  args: {
-    initialCartOpen: true,
-    initialCart: [
-      { dish: MOCK_QR_MENU.find((d) => d.dishId === 4)!, quantity: 1, takeaway: false, courseTiming: "PlatoFuerte", garnish: "Puré de papa" },
-      { dish: MOCK_QR_MENU.find((d) => d.dishId === 12)!, quantity: 2, takeaway: false, courseTiming: "PlatoFuerte" },
-      { dish: MOCK_QR_MENU.find((d) => d.dishId === 14)!, quantity: 1, takeaway: true, courseTiming: "Postre", notes: "Para llevar al salir" },
-      { dish: MOCK_QR_MENU.find((d) => d.dishId === 1)!, quantity: 1, takeaway: true, allergies: "alérgico a nueces" },
-    ],
-  },
+export const InlineCarritoMixto: Story = {
+  args: { takeawayUx: "inline", initialCartOpen: true, initialCart: MIXED_CART },
+};
+
+// ═══ VARIANTE B — 'review': selección al final (botón junto a Confirmar) ═══
+
+/**
+ * B · Flujo completo: se arma el pedido normal (card y modal SIN señal de llevar) y en
+ * el carrito, junto a "Confirmar Pedido", el botón "🥡 Para llevar" abre la pantalla de
+ * selección para marcar cuáles platos van empacados.
+ */
+export const ReviewFlujoCompleto: Story = {
+  args: { takeawayUx: "review" },
+};
+
+/** B · El carrito con el botón "🥡 Para llevar" junto a "Confirmar Pedido". */
+export const ReviewCarrito: Story = {
+  args: { takeawayUx: "review", initialCartOpen: true, initialCart: MIXED_CART },
+};
+
+/**
+ * B · La pantalla de SELECCIÓN abierta: la lista de platos pedidos con un check por
+ * cada uno + "Todos"/"Ninguno". Aquí el cliente decide cuáles llevar y cuáles no.
+ */
+export const ReviewPantallaSeleccion: Story = {
+  args: { takeawayUx: "review", initialSelectOpen: true, initialCart: MIXED_CART },
 };
