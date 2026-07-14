@@ -164,6 +164,7 @@ export type {
   DirectoryDish,
   CartLine,
   FranchiseCartGroup,
+  FoodCategory,
 } from "./components/franchise-directory/types";
 
 // ── Delivery Tracking (PROTOTIPO multi-franquicia — solo Storybook por ahora) ──

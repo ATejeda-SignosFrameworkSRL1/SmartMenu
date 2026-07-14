@@ -11,13 +11,15 @@ const meta: Meta<typeof FranchiseDirectory> = {
     docs: {
       description: {
         component:
-          "PROTOTIPO (solo maquetación, sin BD): el cliente se registra en la página de " +
-          "reservation, navega un DIRECTORIO de franquicias de un mismo dueño, arma un " +
-          "carrito MIXTO y paga UNA factura global. El carrito visualiza la regla del " +
-          "modelo de datos: cada franquicia genera su Order independiente " +
-          "(Orders.RestaurantId FK, derivado de Menus.RestaurantId) con su ITBIS/propina " +
-          "propios, para que cada cocina procese y cobre lo suyo. " +
-          "Implementación backend de referencia: rama feature/invoice-delivery-tracking.",
+          "PROTOTIPO estilo marketplace de delivery (sin barra de envío gratis ni descuentos, " +
+          "por decisión de producto). Flujo: el cliente se registra en la página de reservation → " +
+          "HOME con la opción Restaurantes + logos de las franquicias → LISTADO con las categorías " +
+          "de comida de las distintas franquicias ('Ver todas' abre la grilla completa) y todos los " +
+          "restaurantes → cada restaurante conecta a su CATÁLOGO de menú (chips por categoría, " +
+          "'Más vendido', sidebar Mi pedido). El carrito mixto visualiza la regla del modelo de " +
+          "datos: cada franquicia genera su Order independiente (Orders.RestaurantId FK, derivado " +
+          "de Menus.RestaurantId) con su ITBIS/propina propios; la factura global solo suma. " +
+          "SOLO Storybook — sin BD ni APIs. Backend de referencia: rama feature/invoice-delivery-tracking.",
       },
     },
   },
@@ -27,25 +29,36 @@ export default meta;
 type Story = StoryObj<typeof FranchiseDirectory>;
 
 /**
- * Flujo completo del cliente: registro → directorio → entrar a una franquicia y
- * agregar platos (repite con otra franquicia) → carrito con el split por franquicia
- * y la factura global que suma.
+ * Flujo completo del cliente: registro → home (tiles + logos de franquicias) →
+ * "Restaurantes" → filtrar por categoría de comida / Ver todas → entrar a un
+ * restaurante, agregar platos (repite con otra franquicia) → pedido con el split
+ * por franquicia y la factura global.
  */
 export const FlujoCompleto: Story = {
   args: { initialView: "register" },
 };
 
-/** El directorio directo (usuario ya registrado): buscar, ver abiertos/cerrados, entrar. */
-export const Directorio: Story = {
-  args: { initialView: "directory" },
+/** El home tras registrarse: tiles de negocio, logos de franquicias, banners informativos. */
+export const Home: Story = {
+  args: { initialView: "home" },
+};
+
+/** Listado "Restaurantes": carrusel de categorías de comida + todos los locales. */
+export const ListadoRestaurantes: Story = {
+  args: { initialView: "restaurants" },
+};
+
+/** Catálogo de un restaurante: chips de categorías, "Más vendido" y sidebar Mi pedido. */
+export const CatalogoDeRestaurante: Story = {
+  args: { initialView: "menu", initialRestaurantId: 1 },
 };
 
 /**
- * Carrito mixto precargado con platos de 3 franquicias — muestra el split en
- * 3 órdenes independientes (cada una con su Orders.RestaurantId y su fiscal propio)
- * y la factura global de un solo pago.
+ * Pedido mixto precargado con platos de 3 franquicias — el split en 3 órdenes
+ * independientes (cada una con su Orders.RestaurantId y su fiscal propio) y la
+ * factura global de un solo pago.
  */
-export const CarritoMixtoTresOrdenes: Story = {
+export const PedidoMixtoTresOrdenes: Story = {
   args: {
     initialView: "cart",
     initialCart: [
@@ -55,9 +68,4 @@ export const CarritoMixtoTresOrdenes: Story = {
       { dish: MOCK_DIRECTORY_DISHES.find((d) => d.dishId === 302)!, quantity: 2 }, // Pizza
     ],
   },
-};
-
-/** Carrito vacío (estado inicial tras registrarse sin agregar nada). */
-export const CarritoVacio: Story = {
-  args: { initialView: "cart", initialCart: [] },
 };
