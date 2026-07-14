@@ -74,6 +74,46 @@
       "reports": "Reportes"
     }
   },
+  "delivery": {
+    "pageTitle": "Seguimiento de Delivery",
+    "pageSubtitle": "Estado de entregas y pedidos para llevar",
+    "refresh": "Actualizar",
+    "loading": "Cargando entregas…",
+    "emptyState": "No hay entregas para mostrar",
+    "toggleLabel": "Seguimiento de delivery habilitado",
+    "toggleHintOn": "El seguimiento está activo. Las facturas en curso aparecen abajo.",
+    "toggleHintOff": "El seguimiento está desactivado. Actívalo para ver las entregas.",
+    "disabledTitle": "Seguimiento de delivery deshabilitado",
+    "disabledSubtitle": "Activa el interruptor de arriba para empezar a rastrear las entregas y pedidos para llevar.",
+    "filterLabel": "Filtrar por estado:",
+    "filterAll": "Todos los estados",
+    "advanceLabel": "Avanzar a:",
+    "updating": "Actualizando…",
+    "noCustomer": "Cliente sin nombre",
+    "noRestaurant": "Franquicia sin nombre",
+    "ordersCount": "{count, plural, one {# orden por franquicia} other {# órdenes por franquicia}}",
+    "fulfillment": {
+      "Delivery": "Delivery",
+      "Pickup": "Pickup"
+    },
+    "status": {
+      "Pending": "Pendiente",
+      "Confirmed": "Confirmada",
+      "Preparing": "Preparando",
+      "ReadyForPickup": "Lista para recoger",
+      "OutForDelivery": "En camino",
+      "Delivered": "Entregada",
+      "Cancelled": "Cancelada"
+    },
+    "toast": {
+      "enabled": "Seguimiento de delivery activado",
+      "disabled": "Seguimiento de delivery desactivado",
+      "settingsError": "Error al cambiar el ajuste de seguimiento",
+      "loadError": "Error al cargar las entregas",
+      "statusUpdated": "Estado → {label}",
+      "updateError": "Error al actualizar el estado"
+    }
+  },
   "floorPlan": {
     "pageTitle": "Gestión de Salón",
     "pageSubtitle": "Plano de planta y reservas del salón",
@@ -469,6 +509,7 @@
       "groupLabel": "Operaciones",
       "dashboard": "Dashboard",
       "orders": "Órdenes",
+      "delivery": "Seguimiento Delivery",
       "menu": "Menú",
       "tables": "Mesas",
       "floorPlan": "Gestión de Salón",

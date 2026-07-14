@@ -15,6 +15,7 @@ import {
   Settings,
   UtensilsCrossed,
   ShoppingBag,
+  Truck,
   BarChart3,
   CalendarCheck,
   Wrench,
@@ -74,6 +75,7 @@ function orderHasFoodItem(order: any): boolean {
 const mainNavConfig = [
   { titleKey: 'nav.dashboard', url: '/', icon: LayoutDashboard, badgeKey: null },
   { titleKey: 'nav.orders', url: '/orders', icon: ShoppingBag, badgeKey: 'orders' },
+  { titleKey: 'nav.delivery', url: '/delivery', icon: Truck, badgeKey: null },
   { titleKey: 'nav.menu', url: '/menu', icon: Menu, badgeKey: null },
   { titleKey: 'nav.tables', url: '/tables', icon: MapPin, badgeKey: null },
   { titleKey: 'nav.floorPlan', url: '/floor-plan', icon: Armchair, badgeKey: null },
