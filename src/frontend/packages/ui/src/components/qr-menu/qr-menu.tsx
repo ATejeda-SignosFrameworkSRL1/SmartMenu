@@ -1,32 +1,26 @@
 "use client";
 
-// QR-MENU (PROTOTIPO) — recreacion del menu digital que ve el cliente al escanear
-// el QR de su mesa (client-app), con la senal "PARA LLEVAR" por plato.
-// DOS variantes de UX conviven (prop takeawayUx) para comparar en Storybook:
-//
-//  'inline' (recomendada — "senal silenciosa"): se marca MIENTRAS navega.
-//     - Card: "Agregar" (1 tap = mesa) + boton compacto 🥡 (= para llevar).
-//     - Modal del plato: switch "🥡 Para llevar" junto a la cantidad.
-//     - Carrito: badge 🍽️/🥡 alternable por linea + switch "¿Todo para llevar?".
-//
-//  'review' (seleccion al final): arma el pedido normal y AL FINAL, junto a
-//     "Confirmar Pedido", un boton "🥡 Para llevar" abre una PANTALLA DE SELECCION
-//     que lista los platos pedidos con un switch por cada uno. No hay marcado
-//     durante la navegacion (card y modal sin senal).
-//
+// QR-MENU (PROTOTIPO) — menu digital del cliente al escanear el QR de su mesa.
+// Senal "PARA LLEVAR" como PROCESO APARTE (no marcado por plato):
+//   - Se arma el pedido de MESA normal y en el carrito, junto a "Confirmar Orden",
+//     hay un boton "🥡 Para llevar".
+//   - Ese boton NO abre una lista de seleccion: cambia el menu a MODO PARA LLEVAR y
+//     el cliente vuelve al CATALOGO GENERAL a armar un pedido para llevar SEPARADO.
+//   - Dos procesos independientes, un pedido cada uno: el de mesa y el para llevar,
+//     cada cual con su propia confirmacion.
 // PRESENTACIONAL: estado local + mocks; sin APIs ni BD.
-// Mapeo futuro: OrderItem.IsTakeaway (por item; distinto de Order.IsPickup por orden).
+// Mapeo futuro: cada proceso = una Order (Order.IsPickup=true para la de llevar);
+// no hace falta flag por item.
 
 import { useMemo, useState } from "react";
 import {
-  ArrowLeft, Check, Clock, Globe, Minus, Plus, Search, ShoppingCart, X,
+  ArrowLeft, Clock, Globe, Minus, Plus, Search, ShoppingCart, UtensilsCrossed, X,
 } from "lucide-react";
 
 import { cn } from "../../lib/cn";
 import { Badge } from "../badge";
 import { Button } from "../button";
 import { Input } from "../input";
-import { Switch } from "../switch";
 import { MOCK_QR_MENU } from "./mock-menu";
 import {
   MENU_CATEGORIES, MENU_TAG_META,
@@ -46,10 +40,11 @@ const COURSE_CHIPS: { key: CourseTiming; label: string; sub: string; emoji: stri
   { key: "Postre",      label: "Postre",       sub: "Al final",        emoji: "🍰" },
 ];
 
+type OrderMode = "dinein" | "takeaway";
+
 interface DishModalState {
   dish: QrMenuDish;
   quantity: number;
-  takeaway: boolean;
   courseTiming: CourseTiming;
   garnish: string;
   customizations: string;
@@ -58,40 +53,44 @@ interface DishModalState {
 }
 
 export interface QrMenuProps {
-  /** UX del "para llevar": 'inline' (marcar al navegar) | 'review' (seleccion al final). */
-  takeawayUx?: "inline" | "review";
+  /** Modo inicial: 'dinein' (pedido de mesa) | 'takeaway' (proceso para llevar). */
+  initialMode?: OrderMode;
+  /** Pedido de mesa precargado. */
   initialCart?: QrMenuCartLine[];
+  /** Pedido para llevar precargado. */
+  initialTakeawayCart?: QrMenuCartLine[];
   initialCartOpen?: boolean;
-  /** Abre directamente la pantalla de seleccion (solo variante 'review'). */
-  initialSelectOpen?: boolean;
   dishes?: QrMenuDish[];
   className?: string;
 }
 
 export function QrMenu({
-  takeawayUx = "inline",
+  initialMode = "dinein",
   initialCart = [],
+  initialTakeawayCart = [],
   initialCartOpen = false,
-  initialSelectOpen = false,
   dishes = MOCK_QR_MENU,
   className,
 }: QrMenuProps) {
-  const isReview = takeawayUx === "review";
+  const [mode, setMode] = useState<OrderMode>(initialMode);
   const [search, setSearch] = useState("");
   const [activeTags, setActiveTags] = useState<Set<MenuTag>>(new Set());
   const [activeCategory, setActiveCategory] = useState<"Todos" | MenuCategory>("Todos");
-  const [cart, setCart] = useState<QrMenuCartLine[]>(initialCart);
-  const [cartOpen, setCartOpen] = useState(initialCartOpen || initialSelectOpen);
-  const [selectOpen, setSelectOpen] = useState(initialSelectOpen && isReview);
+  const [dineInCart, setDineInCart] = useState<QrMenuCartLine[]>(initialCart);
+  const [takeawayCart, setTakeawayCart] = useState<QrMenuCartLine[]>(initialTakeawayCart);
+  const [cartOpen, setCartOpen] = useState(initialCartOpen);
   const [modal, setModal] = useState<DishModalState | null>(null);
+  const [confirmedNote, setConfirmedNote] = useState<string | null>(null);
+
+  const isTakeaway = mode === "takeaway";
+  const cart = isTakeaway ? takeawayCart : dineInCart;
+  const setCart = isTakeaway ? setTakeawayCart : setDineInCart;
 
   const cartCount = cart.reduce((s, l) => s + l.quantity, 0);
   const subtotal = cart.reduce((s, l) => s + l.dish.price * l.quantity, 0);
   const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
   const tip = Math.round(subtotal * TIP_RATE * 100) / 100;
   const total = subtotal + tax + tip;
-  const allTakeaway = cart.length > 0 && cart.every((l) => l.takeaway);
-  const takeawayCount = cart.filter((l) => l.takeaway).reduce((s, l) => s + l.quantity, 0);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -110,13 +109,13 @@ export function QrMenu({
       return next;
     });
 
-  /** Inserta la linea; fusiona solo lineas "simples" iguales (mismo plato y misma senal). */
+  /** Inserta la linea en el carrito ACTIVO (mesa o llevar segun el modo). */
   const pushLine = (line: QrMenuCartLine) =>
     setCart((prev) => {
       const simple = !line.customizations && !line.allergies && !line.notes && !line.garnish;
       if (simple) {
         const i = prev.findIndex(
-          (l) => l.dish.dishId === line.dish.dishId && l.takeaway === line.takeaway
+          (l) => l.dish.dishId === line.dish.dishId
               && !l.customizations && !l.allergies && !l.notes && !l.garnish,
         );
         if (i >= 0) {
@@ -128,12 +127,12 @@ export function QrMenu({
       return [...prev, line];
     });
 
-  const quickAdd = (dish: QrMenuDish, takeaway: boolean) =>
-    pushLine({ dish, quantity: 1, takeaway });
+  const quickAdd = (dish: QrMenuDish) =>
+    pushLine({ dish, quantity: 1, takeaway: isTakeaway });
 
   const addFromModal = (m: DishModalState) => {
     pushLine({
-      dish: m.dish, quantity: m.quantity, takeaway: m.takeaway, courseTiming: m.courseTiming,
+      dish: m.dish, quantity: m.quantity, takeaway: isTakeaway, courseTiming: m.courseTiming,
       garnish: m.garnish || undefined, customizations: m.customizations || undefined,
       allergies: m.allergies || undefined, notes: m.notes || undefined,
     });
@@ -147,24 +146,31 @@ export function QrMenu({
         .filter((l) => l.quantity > 0),
     );
 
-  const toggleLineTakeaway = (index: number) =>
-    setCart((prev) => prev.map((l, i) => (i === index ? { ...l, takeaway: !l.takeaway } : l)));
-
-  const setAllTakeaway = (value: boolean) =>
-    setCart((prev) => prev.map((l) => ({ ...l, takeaway: value })));
-
   const openModal = (dish: QrMenuDish) =>
     setModal({
-      dish, quantity: 1, takeaway: false,
+      dish, quantity: 1,
       courseTiming: dish.category === "Entradas" ? "Entrada" : dish.category === "Postres" ? "Postre" : "PlatoFuerte",
       garnish: "", customizations: "", allergies: "", notes: "",
     });
 
-  const takeawayBadge = (takeaway: boolean) => (
-    <Badge variant={takeaway ? "default" : "secondary"} className="text-[10px]">
-      {takeaway ? "🥡 PARA LLEVAR" : "🍽️ En mesa"}
-    </Badge>
-  );
+  /** El boton estrella: inicia el PROCESO para llevar → vuelve al catalogo en modo llevar. */
+  const startTakeaway = () => {
+    setMode("takeaway");
+    setCartOpen(false);
+    setConfirmedNote(null);
+  };
+
+  const backToDineIn = () => {
+    setMode("dinein");
+    setCartOpen(false);
+  };
+
+  const confirmOrder = () => {
+    setConfirmedNote(isTakeaway
+      ? "🥡 Pedido para llevar confirmado — te lo empacamos."
+      : "🍽️ Pedido de mesa confirmado — ya va a cocina.");
+    setCartOpen(false);
+  };
 
   const categories: ("Todos" | MenuCategory)[] = ["Todos", ...MENU_CATEGORIES.map((c) => c.key)];
 
@@ -181,7 +187,7 @@ export function QrMenu({
             <Globe className="h-4 w-4" /> Español
           </span>
           <Button variant="default" className="relative rounded-full" size="sm"
-                  onClick={() => setCartOpen(true)} aria-label="Ver carrito">
+                  onClick={() => setCartOpen(true)} aria-label="Ver pedido">
             <ShoppingCart className="h-4 w-4" />
             {cartCount > 0 && (
               <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
@@ -191,6 +197,31 @@ export function QrMenu({
           </Button>
         </div>
       </div>
+
+      {/* ── Banner de MODO PARA LLEVAR (proceso aparte sobre el catalogo general) ── */}
+      {isTakeaway && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-primary/40 bg-primary/5 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl" aria-hidden>🥡</span>
+            <div>
+              <p className="text-sm font-bold">Estás armando un pedido PARA LLEVAR</p>
+              <p className="text-[11px] text-muted-foreground">
+                Todo lo que agregues aquí va a tu pedido para llevar, aparte del de la mesa.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" className="rounded-full" onClick={backToDineIn}>
+            <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Volver al pedido de mesa
+          </Button>
+        </div>
+      )}
+
+      {/* ── Aviso de confirmacion (una por proceso) ── */}
+      {confirmedNote && (
+        <div className="flex items-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
+          {confirmedNote}
+        </div>
+      )}
 
       {/* ── Buscador + filtros por etiqueta ── */}
       <div className="relative">
@@ -256,19 +287,9 @@ export function QrMenu({
                           <Clock className="h-3 w-3" />{d.prepMinutes} min
                         </p>
                       </div>
-                      <div className="flex gap-1.5">
-                        <Button size="sm" className="rounded-full" onClick={() => quickAdd(d, false)}>
-                          Agregar
-                        </Button>
-                        {/* Boton 🥡 solo en la variante 'inline' (marcar al navegar). */}
-                        {!isReview && (
-                          <Button size="sm" variant="outline" className="rounded-full px-2.5"
-                                  title="Agregar para llevar" aria-label={`Agregar ${d.name} para llevar`}
-                                  onClick={() => quickAdd(d, true)}>
-                            🥡
-                          </Button>
-                        )}
-                      </div>
+                      <Button size="sm" className="rounded-full" onClick={() => quickAdd(d)}>
+                        {isTakeaway ? "🥡 Agregar" : "Agregar"}
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -284,7 +305,7 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Modal de personalizacion del plato ── */}
+      {/* ── Modal de personalizacion del plato (igual en ambos modos) ── */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-8"
              onClick={() => setModal(null)}>
@@ -295,7 +316,10 @@ export function QrMenu({
             </div>
             <div className="space-y-4 p-6">
               <div>
-                <h3 className="text-2xl font-bold">{modal.dish.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-2xl font-bold">{modal.dish.name}</h3>
+                  {isTakeaway && <Badge className="text-[10px]">🥡 Para llevar</Badge>}
+                </div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {modal.dish.tags.map((t) => (
                     <Badge key={t} variant="secondary" className="text-[10px]">
@@ -310,39 +334,22 @@ export function QrMenu({
                 <p className="mt-2 text-2xl font-extrabold text-primary">{money(modal.dish.price)}</p>
               </div>
 
-              {/* Cantidad + (solo inline) switch PARA LLEVAR */}
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="space-y-1.5">
-                  <p className="text-sm font-medium">Cantidad</p>
-                  <div className="flex items-center gap-3">
-                    <Button size="sm" variant="outline" className="rounded-full"
-                            onClick={() => setModal({ ...modal, quantity: Math.max(1, modal.quantity - 1) })}
-                            aria-label="Menos">
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <span className="w-6 text-center text-lg font-bold">{modal.quantity}</span>
-                    <Button size="sm" variant="outline" className="rounded-full"
-                            onClick={() => setModal({ ...modal, quantity: modal.quantity + 1 })}
-                            aria-label="Más">
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
+              {/* Cantidad */}
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Cantidad</p>
+                <div className="flex items-center gap-3">
+                  <Button size="sm" variant="outline" className="rounded-full"
+                          onClick={() => setModal({ ...modal, quantity: Math.max(1, modal.quantity - 1) })}
+                          aria-label="Menos">
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-6 text-center text-lg font-bold">{modal.quantity}</span>
+                  <Button size="sm" variant="outline" className="rounded-full"
+                          onClick={() => setModal({ ...modal, quantity: modal.quantity + 1 })}
+                          aria-label="Más">
+                    <Plus className="h-4 w-4" />
+                  </Button>
                 </div>
-                {!isReview && (
-                  <div className={cn(
-                    "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
-                    modal.takeaway && "border-primary bg-primary/5",
-                  )}>
-                    <div>
-                      <p className="text-sm font-semibold">🥡 Para llevar</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {modal.takeaway ? "Te lo empacamos" : "Se sirve en la mesa"}
-                      </p>
-                    </div>
-                    <Switch checked={modal.takeaway} aria-label="Para llevar"
-                            onCheckedChange={(v) => setModal({ ...modal, takeaway: v })} />
-                  </div>
-                )}
               </div>
 
               {/* Momento de servicio */}
@@ -407,7 +414,7 @@ export function QrMenu({
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
                 <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => addFromModal(modal)}>
-                  {!isReview && modal.takeaway ? "🥡 " : ""}Agregar {money(modal.dish.price * modal.quantity)}
+                  {isTakeaway ? "🥡 " : ""}Agregar {money(modal.dish.price * modal.quantity)}
                 </Button>
               </div>
             </div>
@@ -415,47 +422,31 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Carrito (drawer) ── */}
+      {/* ── Carrito (drawer) — muestra el pedido del modo activo ── */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={() => setCartOpen(false)}>
           <div className="flex h-full w-full max-w-md flex-col bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
-              <h3 className="text-lg font-bold">Tu pedido · Mesa 7</h3>
-              <button onClick={() => setCartOpen(false)} aria-label="Cerrar carrito"><X className="h-5 w-5" /></button>
+              <div>
+                <h3 className="text-lg font-bold">
+                  {isTakeaway ? "Pedido para llevar" : "Tu pedido · Mesa 7"}
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {isTakeaway ? "🥡 Se te entregará empacado" : "🍽️ Se sirve en la mesa"}
+                </p>
+              </div>
+              <button onClick={() => setCartOpen(false)} aria-label="Cerrar pedido"><X className="h-5 w-5" /></button>
             </div>
-
-            {/* Variante inline: "¿Todo para llevar?" arriba (marcado durante navegacion). */}
-            {!isReview && cart.length > 0 && (
-              <div className="flex items-center justify-between gap-3 border-b bg-muted/20 px-5 py-3">
-                <div>
-                  <p className="text-sm font-semibold">🥡 ¿Todo para llevar?</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {takeawayCount > 0
-                      ? `${takeawayCount} de ${cartCount} platos se empacan`
-                      : "Todo se sirve en la mesa"}
-                  </p>
-                </div>
-                <Switch checked={allTakeaway} aria-label="Todo para llevar"
-                        onCheckedChange={setAllTakeaway} />
-              </div>
-            )}
-
-            {/* Variante review: aviso de cuantos van para llevar (se decide en la pantalla). */}
-            {isReview && cart.length > 0 && takeawayCount > 0 && (
-              <div className="border-b bg-primary/5 px-5 py-2.5 text-[11px] text-primary">
-                🥡 {takeawayCount} de {cartCount} platos marcados para llevar
-              </div>
-            )}
 
             <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
               {cart.length === 0 && (
                 <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
                   <ShoppingCart className="h-10 w-10 opacity-30" />
-                  <p className="text-sm">Tu carrito está vacío</p>
+                  <p className="text-sm">Tu pedido está vacío</p>
                 </div>
               )}
               {cart.map((l, i) => (
-                <div key={i} className={cn("rounded-xl border p-3", l.takeaway && "border-primary/40 bg-primary/5")}>
+                <div key={i} className="rounded-xl border p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold">{l.dish.name}</p>
@@ -468,27 +459,16 @@ export function QrMenu({
                     </div>
                     <span className="text-sm font-bold">{money(l.dish.price * l.quantity)}</span>
                   </div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" className="h-6 w-6 rounded-full p-0"
-                              onClick={() => changeQty(i, -1)} aria-label="Quitar uno">
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <span className="w-4 text-center text-sm font-bold">{l.quantity}</span>
-                      <Button size="sm" variant="outline" className="h-6 w-6 rounded-full p-0"
-                              onClick={() => changeQty(i, 1)} aria-label="Agregar uno">
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    {/* inline: badge clicable (red de seguridad). review: badge de solo lectura
-                        (la seleccion se hace en la pantalla dedicada). */}
-                    {isReview ? (
-                      takeawayBadge(l.takeaway)
-                    ) : (
-                      <button onClick={() => toggleLineTakeaway(i)} title="Cambiar entre mesa y para llevar">
-                        {takeawayBadge(l.takeaway)}
-                      </button>
-                    )}
+                  <div className="mt-2 flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="h-6 w-6 rounded-full p-0"
+                            onClick={() => changeQty(i, -1)} aria-label="Quitar uno">
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="w-4 text-center text-sm font-bold">{l.quantity}</span>
+                    <Button size="sm" variant="outline" className="h-6 w-6 rounded-full p-0"
+                            onClick={() => changeQty(i, 1)} aria-label="Agregar uno">
+                      <Plus className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -496,87 +476,36 @@ export function QrMenu({
 
             {cart.length > 0 && (
               <div className="space-y-2 border-t px-5 py-4">
-                {takeawayCount > 0 && (
-                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-                    🥡 Los platos marcados “PARA LLEVAR” llegan empacados — la etiqueta viaja a cocina en la comanda.
-                  </p>
-                )}
                 <div className="flex justify-between text-sm"><span>Subtotal</span><b>{money(subtotal)}</b></div>
                 <div className="flex justify-between text-xs text-muted-foreground"><span>ITBIS 18%</span><span>{money(tax)}</span></div>
                 <div className="flex justify-between text-xs text-muted-foreground"><span>Propina legal 10%</span><span>{money(tip)}</span></div>
                 <div className="flex justify-between text-base font-extrabold"><span>Total</span><span>{money(total)}</span></div>
-                {/* Variante review: boton "Para llevar" AL LADO de Confirmar → pantalla de seleccion. */}
-                {isReview ? (
+
+                {isTakeaway ? (
+                  // Proceso para llevar: su propia confirmacion + volver al de mesa.
                   <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="lg" onClick={() => setSelectOpen(true)}>
-                      🥡 Para llevar
+                    <Button variant="outline" size="lg" onClick={backToDineIn}>
+                      <ArrowLeft className="mr-1 h-4 w-4" /> Pedido de mesa
                     </Button>
-                    <Button size="lg">Confirmar pedido</Button>
+                    <Button size="lg" onClick={confirmOrder}>Confirmar para llevar</Button>
                   </div>
                 ) : (
-                  <Button className="w-full" size="lg">Confirmar pedido</Button>
+                  // Pedido de mesa: Confirmar Orden + el boton "Para llevar" AL LADO.
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="lg" onClick={startTakeaway}>
+                      🥡 Para llevar
+                    </Button>
+                    <Button size="lg" onClick={confirmOrder}>Confirmar Orden</Button>
+                  </div>
+                )}
+                {!isTakeaway && (
+                  <p className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
+                    <UtensilsCrossed className="h-3 w-3" />
+                    “Para llevar” abre el menú para armar un pedido aparte
+                  </p>
                 )}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Pantalla de SELECCION "Para llevar" (solo variante review) ── */}
-      {isReview && selectOpen && (
-        <div className="fixed inset-0 z-[60] flex justify-end bg-black/50" onClick={() => setSelectOpen(false)}>
-          <div className="flex h-full w-full max-w-md flex-col bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2 border-b px-5 py-4">
-              <button onClick={() => setSelectOpen(false)} aria-label="Volver al pedido"><ArrowLeft className="h-5 w-5" /></button>
-              <div>
-                <h3 className="text-lg font-bold">¿Cuáles para llevar?</h3>
-                <p className="text-[11px] text-muted-foreground">
-                  Marca los platos que quieres empacados; el resto se sirve en la mesa.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-5 py-2.5">
-              <span className="text-xs text-muted-foreground">
-                {takeawayCount} de {cartCount} marcados
-              </span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-7 rounded-full" onClick={() => setAllTakeaway(true)}>
-                  Todos
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 rounded-full" onClick={() => setAllTakeaway(false)}>
-                  Ninguno
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 space-y-2 overflow-y-auto px-5 py-4">
-              {cart.map((l, i) => (
-                <button key={i} onClick={() => toggleLineTakeaway(i)}
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition",
-                          l.takeaway ? "border-primary bg-primary/5" : "hover:bg-muted/40",
-                        )}>
-                  <span className={cn(
-                    "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 transition",
-                    l.takeaway ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30",
-                  )} aria-hidden>
-                    {l.takeaway && <Check className="h-4 w-4" />}
-                  </span>
-                  <span className="text-2xl" aria-hidden>{l.dish.emoji}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">{l.quantity}× {l.dish.name}</span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      {l.takeaway ? "🥡 Para llevar" : "🍽️ En mesa"}
-                    </span>
-                  </span>
-                  <span className="text-sm font-bold">{money(l.dish.price * l.quantity)}</span>
-                </button>
-              ))}
-            </div>
-            <div className="border-t px-5 py-4">
-              <Button className="w-full" size="lg" onClick={() => setSelectOpen(false)}>
-                Listo{takeawayCount > 0 ? ` · ${takeawayCount} para llevar` : ""}
-              </Button>
-            </div>
           </div>
         </div>
       )}
