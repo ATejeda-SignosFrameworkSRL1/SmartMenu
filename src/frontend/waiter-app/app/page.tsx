@@ -1248,9 +1248,13 @@ export default function WaiterPage() {
     try {
       const res = await api.get(`/api/payment/order/${orderId}`);
       const rows: any[] = Array.isArray(res.data) ? res.data : [];
-      const bc = rows.filter(p => p.status === 'Completed' && p.billSplitType === 'ByComensal' && p.splitPartIndex != null);
+      const completed = rows.filter(p => p.status === 'Completed');
+      const bc = completed.filter(p => p.billSplitType === 'ByComensal' && p.splitPartIndex != null);
       setPmPaidParts(bc.map(p => Number(p.splitPartIndex)));
-      setPmPaidAmount(bc.reduce((s, p) => s + Number(p.amount ?? 0), 0));
+      // Total YA cobrado por CUALQUIER método/split (no solo ByComensal). Se descuenta del
+      // monto a cobrar para no re-cobrar el total completo cuando se agregaron ítems a una
+      // orden ya pagada → el backend rechazaba por sobrepago y el cobro quedaba "congelado".
+      setPmPaidAmount(completed.reduce((s, p) => s + Number(p.amount ?? 0), 0));
     } catch {
       setPmPaidParts([]);
       setPmPaidAmount(0);
@@ -1306,7 +1310,8 @@ export default function WaiterPage() {
 
       // Calcular la porción a cobrar según split
       const taxRate = orderTotal > 0 ? (Number((order as any).tax ?? 0) / (Number((order as any).subtotal ?? 1) || 1)) : 0.18;
-      let myPortion = orderTotal;
+      // Saldo pendiente = total − lo ya cobrado (evita el sobrepago que congelaba el cobro).
+      let myPortion = Math.max(0, orderTotal - pmPaidAmount);
       if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
         const equalShareBC = Math.round((orderTotal / pmSplitParts) * 100) / 100;
         const unpaidBC = Array.from({ length: pmSplitParts }, (_, i) => i + 1).filter(n => !pmPaidParts.includes(n));
@@ -2586,7 +2591,7 @@ export default function WaiterPage() {
         Object.keys(catTotals).forEach(c => { catTotals[c] = catTotals[c] + catTotals[c] * taxRate; });
 
         // Porción a cobrar según split
-        let myPortion = orderTotal;
+        let myPortion = Math.max(0, orderTotal - pmPaidAmount); // saldo pendiente (resta lo ya cobrado)
         const equalShareBC = pmSplitParts > 0 ? Math.round((orderTotal / pmSplitParts) * 100) / 100 : orderTotal;
         if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
           const unpaidBC = Array.from({ length: pmSplitParts }, (_, i) => i + 1).filter(n => !pmPaidParts.includes(n));
