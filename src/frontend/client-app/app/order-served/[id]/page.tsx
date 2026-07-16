@@ -2,14 +2,16 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle, UtensilsCrossed, Cake, CreditCard, Clock, GlassWater, UtensilsCrossed as MenuIcon } from 'lucide-react';
+import { CheckCircle, UtensilsCrossed, Cake, CreditCard, Clock, GlassWater, UtensilsCrossed as MenuIcon, ShoppingBag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '@/lib/api';
+import { useCartStore } from '@/lib/stores/cartStore';
 
 export default function OrderServedPage() {
   const params = useParams();
   const router = useRouter();
   const orderId = params.id as string;
+  const setTakeaway = useCartStore((s) => s.setTakeaway);
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', orderId],
@@ -40,6 +42,13 @@ export default function OrderServedPage() {
 
   const handleRequestAccount = () => {
     router.push(`/payment/${orderId}`);
+  };
+
+  // PARA LLEVAR desde el pedido servido: activa el modo (marca por ítem en el
+  // checkout) y vuelve al menú para sumar los platos a empacar a esta misma orden.
+  const handleTakeaway = () => {
+    setTakeaway(true);
+    router.push(`/menu?addToOrder=${orderId}`);
   };
 
   if (isLoading) {
@@ -182,6 +191,26 @@ export default function OrderServedPage() {
                 </h3>
                 <p className="text-sm text-gray-600">
                   (Ver todo el menú)
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Para llevar */}
+          <button
+            onClick={handleTakeaway}
+            className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                <ShoppingBag className="w-8 h-8 text-teal-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="text-lg font-bold text-gray-900 mb-1">
+                  🥡 Para llevar
+                </h3>
+                <p className="text-sm text-gray-600">
+                  (Pedir platos para empacar)
                 </p>
               </div>
             </div>
