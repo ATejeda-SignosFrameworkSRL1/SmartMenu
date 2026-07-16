@@ -22,6 +22,9 @@ function CartPageInner() {
     tableId,
     customerName,
     addToOrderId: storeAddToOrderId,
+    takeaway,
+    setTakeaway,
+    setAddToOrderId,
     removeItem,
     updateQuantity,
     clearCart,
@@ -30,6 +33,9 @@ function CartPageInner() {
     getTip,
     getTotal,
   } = useCartStore();
+
+  // Modal "¿Estás seguro?" antes de confirmar un pedido PARA LLEVAR.
+  const [showTakeawayConfirm, setShowTakeawayConfirm] = useState(false);
 
   // orderId puede venir por URL (?orderId=71) o por el store
   const urlOrderId = searchParams?.get('orderId') ? parseInt(searchParams.get('orderId')!) : null;
@@ -84,7 +90,12 @@ function CartPageInner() {
       dishId: item.dishId,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      notes: item.notes || item.specialInstructions || undefined,
+      // PARA LLEVAR: la marca va POR ÍTEM (en notes). Así sobrevive tanto al CREAR la
+      // orden como al AGREGAR a una orden viva de la mesa (AddItemsToOrderAsync persiste
+      // notes pero NO specialInstructions), y el print-agent la imprime en la línea de
+      // cada plato para llevar. En mesa compartida solo se marcan los ítems para llevar.
+      notes: [takeaway ? '🥡 PARA LLEVAR' : '', item.notes || item.specialInstructions || '']
+        .filter(Boolean).join(' · ') || undefined,
       drinkTiming: item.drinkTiming || undefined,
       withAlcohol: item.withAlcohol !== undefined ? item.withAlcohol : undefined,
       meatCooking: item.meatCooking || undefined,
@@ -327,41 +338,74 @@ function CartPageInner() {
           </div>
         </div>
 
-        {/* Checkout Button */}
-        <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg flex gap-3">
-          {/* Botón visual "Para llevar" — placeholder de diseño, sin función aún.
-              UX/UI: mismo alto/radio/tipografía que el primario (consistencia), estilo
-              delineado (jerarquía: acción secundaria), ícono del mismo set (lucide). */}
-          <button
-            type="button"
-            className="px-6 py-4 rounded-xl border-2 border-primary-600 bg-white text-primary-700 font-semibold text-lg whitespace-nowrap shadow-sm hover:bg-primary-50 hover:shadow-md transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
-          >
-            <ShoppingBag className="w-6 h-6" />
-            Para llevar
-          </button>
-          <button
-            onClick={handleCheckout}
-            disabled={isPending}
-            className="flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
-          >
-            {isPending ? (
-              <>
-                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                {t('processing')}
-              </>
-            ) : isAddingToOrder ? (
-              <>
-                <Receipt className="w-6 h-6" />
-                {t('addToMyOrderButton')}
-              </>
-            ) : (
-              <>
-                <Receipt className="w-6 h-6" />
-                {t('confirmOrder')}
-              </>
-            )}
-          </button>
+        {/* Checkout */}
+        <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg space-y-3">
+          {takeaway && (
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 py-2 text-sm font-semibold text-primary-700">
+              🥡 {t('takeawayBanner')}
+            </div>
+          )}
+          <div className="flex gap-3">
+            {/* Secundario: entra al modo PARA LLEVAR (→ menú) o sigue agregando.
+                UX/UI: mismo alto/radio/tipografía que el primario; delineado = acción secundaria. */}
+            <button
+              type="button"
+              onClick={() => { setTakeaway(true); setAddToOrderId(null); router.push('/menu'); }}
+              className="px-6 py-4 rounded-xl border-2 border-primary-600 bg-white text-primary-700 font-semibold text-lg whitespace-nowrap shadow-sm hover:bg-primary-50 hover:shadow-md transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
+            >
+              {takeaway ? <Plus className="w-6 h-6" /> : <ShoppingBag className="w-6 h-6" />}
+              {takeaway ? t('takeawayContinue') : t('takeawayButton')}
+            </button>
+            <button
+              onClick={takeaway ? () => setShowTakeawayConfirm(true) : handleCheckout}
+              disabled={isPending}
+              className="flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+            >
+              {isPending ? (
+                <>
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  {t('processing')}
+                </>
+              ) : isAddingToOrder ? (
+                <>
+                  <Receipt className="w-6 h-6" />
+                  {t('addToMyOrderButton')}
+                </>
+              ) : (
+                <>
+                  <Receipt className="w-6 h-6" />
+                  {t('confirmOrder')}
+                </>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Modal "¿Estás seguro?" del pedido PARA LLEVAR */}
+        {showTakeawayConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+              <span className="text-5xl" aria-hidden>🥡</span>
+              <h3 className="mt-2 text-lg font-bold text-gray-900">{t('takeawayConfirmTitle')}</h3>
+              <p className="mt-1 text-sm text-gray-600">{t('takeawayConfirmBody')}</p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowTakeawayConfirm(false)}
+                  className="py-3 rounded-xl border-2 border-gray-200 font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  {t('takeawayConfirmNo')}
+                </button>
+                <button
+                  onClick={() => { setShowTakeawayConfirm(false); handleCheckout(); }}
+                  disabled={isPending}
+                  className="py-3 rounded-xl bg-gradient-to-r from-primary-600 to-secondary-600 text-white font-semibold disabled:opacity-50"
+                >
+                  {t('takeawayConfirmYes')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

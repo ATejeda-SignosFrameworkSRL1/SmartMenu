@@ -36,11 +36,15 @@ interface CartState {
   customerName: string | null;
   /** Si se está agregando a una orden existente (ej. postres), guarda el orderId. */
   addToOrderId: number | null;
+  /** Modo PARA LLEVAR: el pedido en curso se confirma como para llevar (marca la
+   *  comanda de cocina/bar). Lo activa el botón "Para llevar" del carrito. */
+  takeaway: boolean;
 
   setTableId: (_tableId: number) => void;
   setRestaurantId: (_restaurantId: number) => void;
   setCustomerName: (_name: string | null) => void;
   setAddToOrderId: (_id: number | null) => void;
+  setTakeaway: (_v: boolean) => void;
 
   addItem: (_item: CartItem) => void;
   removeItem: (_lineId: string) => void;
@@ -84,11 +88,13 @@ export const useCartStore = create<CartState>()(
       restaurantId: null,
       customerName: null,
       addToOrderId: null,
+      takeaway: false,
 
       setTableId: (id) => set({ tableId: id }),
       setRestaurantId: (id) => set({ restaurantId: id }),
       setCustomerName: (name) => set({ customerName: name }),
       setAddToOrderId: (id) => set({ addToOrderId: id }),
+      setTakeaway: (v) => set({ takeaway: v }),
 
       addItem: (newItem) =>
         set((state) => {
@@ -119,7 +125,7 @@ export const useCartStore = create<CartState>()(
           ),
         })),
 
-      clearCart: () => set({ items: [], addToOrderId: null }),
+      clearCart: () => set({ items: [], addToOrderId: null, takeaway: false }),
 
       getSubtotal: () => {
         const { items } = get();

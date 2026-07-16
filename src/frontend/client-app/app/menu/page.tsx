@@ -35,7 +35,7 @@ const BADGE_STYLES: Record<string, string> = {
 };
 
 function MenuPageInner() {
-  const { getItemCount, setAddToOrderId } = useCartStore();
+  const { getItemCount, setAddToOrderId, takeaway, setTakeaway } = useCartStore();
   const searchParams = useSearchParams();
   const router = useRouter();
   const tm = useTranslations('menu');
@@ -211,6 +211,19 @@ function MenuPageInner() {
           </div>
         </div>
       </header>
+
+      {/* Banner MODO PARA LLEVAR: el cliente eligió "Para llevar" en el carrito y
+          volvió al menú a elegir sus platos; lo que agregue va al pedido para llevar. */}
+      {takeaway && (
+        <div className="bg-primary-600 text-white">
+          <div className="container mx-auto px-4 py-2.5 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-sm font-semibold">🥡 {tm('takeawayModeBanner')}</span>
+            <button onClick={() => setTakeaway(false)} className="text-xs underline opacity-90 hover:opacity-100">
+              {tm('takeawayModeExit')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search + Tag filters */}
       <div className="bg-white border-b">

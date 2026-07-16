@@ -26,6 +26,8 @@
   },
   "menu": {
     "subtitle": "Menú Digital",
+    "takeawayModeBanner": "Estás eligiendo platos PARA LLEVAR",
+    "takeawayModeExit": "Salir del modo para llevar",
     "chooseDesserts": "🍰 Elige tus postres",
     "addingDessertsBanner": "🍰 Agregando postres a tu orden #{orderNum}",
     "searchPlaceholder": "Buscar platos...",
@@ -133,7 +135,14 @@
     "legalTipNote": "<strong>Nota:</strong> La propina legal del 10% es obligatoria según la Ley 13-07 de RD 🇩🇴",
     "processing": "Procesando...",
     "addToMyOrderButton": "Agregar a mi Orden",
-    "confirmOrder": "Confirmar Orden"
+    "confirmOrder": "Confirmar Orden",
+    "takeawayButton": "Para llevar",
+    "takeawayContinue": "Seguir agregando",
+    "takeawayBanner": "Estás armando un pedido para llevar",
+    "takeawayConfirmTitle": "¿Confirmar pedido para llevar?",
+    "takeawayConfirmBody": "Enviaremos tu pedido a cocina y bar marcado como PARA LLEVAR.",
+    "takeawayConfirmYes": "Sí, confirmar",
+    "takeawayConfirmNo": "Cancelar"
   },
   "toast": {
     "addedToCart": "{quantity}x {name} agregado al carrito",
