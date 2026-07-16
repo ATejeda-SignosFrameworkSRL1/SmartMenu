@@ -328,13 +328,16 @@ function CartPageInner() {
         </div>
 
         {/* Checkout Button */}
-        <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg flex gap-2">
-          {/* Botón visual "Para llevar" — placeholder de diseño, sin función aún. */}
+        <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg flex gap-3">
+          {/* Botón visual "Para llevar" — placeholder de diseño, sin función aún.
+              UX/UI: mismo alto/radio/tipografía que el primario (consistencia), estilo
+              delineado (jerarquía: acción secundaria), ícono del mismo set (lucide). */}
           <button
             type="button"
-            className="px-4 py-4 rounded-xl border-2 border-primary-200 text-primary-700 font-semibold text-base whitespace-nowrap hover:bg-primary-50 transition-colors"
+            className="px-6 py-4 rounded-xl border-2 border-primary-600 bg-white text-primary-700 font-semibold text-lg whitespace-nowrap shadow-sm hover:bg-primary-50 hover:shadow-md transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
           >
-            🥡 Para llevar
+            <ShoppingBag className="w-6 h-6" />
+            Para llevar
           </button>
           <button
             onClick={handleCheckout}
