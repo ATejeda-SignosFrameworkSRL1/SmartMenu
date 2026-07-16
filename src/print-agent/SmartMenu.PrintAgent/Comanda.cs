@@ -69,8 +69,35 @@ public static class Comanda
         return b.ToArray();
     }
 
+    private const string TakeawayTag = "PARA LLEVAR";
+
+    /// <summary>Detecta si la orden es PARA LLEVAR: marca por ítem en Notes (lo que manda
+    /// el client), o IsPickup, o nota de orden. No depende de columnas nuevas en la BD.</summary>
+    private static bool IsTakeawayOrder(OrderDtoModel o) =>
+        o.IsPickup
+        || (o.SpecialInstructions?.Contains(TakeawayTag, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (o.Items?.Any(i => i.Notes?.Contains(TakeawayTag, StringComparison.OrdinalIgnoreCase) ?? false) ?? false);
+
+    /// <summary>Quita el marcador "PARA LLEVAR" de la nota del ítem para que la línea se lea
+    /// limpia — el encabezado ya avisa que el pedido es para llevar.</summary>
+    private static string? CleanNote(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note)) return note;
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(
+            note, @"🥡?\s*PARA LLEVAR\s*[·\-—|]?\s*", "",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
     private static void Header(EscPos b, string station, OrderDtoModel o, PrintAgentSettings s)
     {
+        // PEDIDO PARA LLEVAR: encabezado prominente ANTES de todo lo demás.
+        if (IsTakeawayOrder(o))
+        {
+            b.AlignCenter().Bold(true).Line("*** PEDIDO ***")
+             .DoubleSize(true).Line("PARA LLEVAR").DoubleSize(false).Bold(false).AlignLeft();
+            b.Line(Rule('=', s));
+        }
         b.AlignCenter().Bold(true).DoubleSize(true).Line($"*** {station} ***").DoubleSize(false).Bold(false);
         b.AlignLeft().Line(Rule('=', s));
         b.Bold(true).Line($"Orden: #{ShortOrder(o.OrderNumber)}").Bold(false);
@@ -94,7 +121,7 @@ public static class Comanda
 
         Sub(b, "> ", it.PreferenceText, s);
         Sub(b, "> Acomp: ", it.SideDish, s);
-        Sub(b, "> ", it.Notes, s);
+        Sub(b, "> ", CleanNote(it.Notes), s);
         Sub(b, "> Curso: ", PrettyCourse(it.CourseTiming), s);
 
         if (!string.IsNullOrWhiteSpace(it.Allergies))
