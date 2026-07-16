@@ -287,9 +287,15 @@ export function QrMenu({
                           <Clock className="h-3 w-3" />{d.prepMinutes} min
                         </p>
                       </div>
-                      <Button size="sm" className="rounded-full" onClick={() => quickAdd(d)}>
-                        {isTakeaway ? "🥡 Agregar" : "Agregar"}
-                      </Button>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" className="rounded-full" onClick={() => quickAdd(d)}>
+                          {isTakeaway ? "🥡 Agregar" : "Agregar"}
+                        </Button>
+                        {/* Boton visual "Para llevar" — placeholder de diseno, sin funcion. */}
+                        <Button size="sm" variant="outline" className="rounded-full" type="button">
+                          🥡 Para llevar
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -411,8 +417,10 @@ export function QrMenu({
               </div>
 
               {/* Footer */}
-              <div className="grid grid-cols-2 gap-2 pt-2">
+              <div className="grid grid-cols-3 gap-2 pt-2">
                 <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
+                {/* Boton visual "Para llevar" — placeholder de diseno, sin funcion. */}
+                <Button variant="secondary" type="button">🥡 Para llevar</Button>
                 <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => addFromModal(modal)}>
                   {isTakeaway ? "🥡 " : ""}Agregar {money(modal.dish.price * modal.quantity)}
                 </Button>
