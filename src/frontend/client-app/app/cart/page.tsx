@@ -328,11 +328,18 @@ function CartPageInner() {
         </div>
 
         {/* Checkout Button */}
-        <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg">
+        <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg flex gap-2">
+          {/* Botón visual "Para llevar" — placeholder de diseño, sin función aún. */}
+          <button
+            type="button"
+            className="px-4 py-4 rounded-xl border-2 border-primary-200 text-primary-700 font-semibold text-base whitespace-nowrap hover:bg-primary-50 transition-colors"
+          >
+            🥡 Para llevar
+          </button>
           <button
             onClick={handleCheckout}
             disabled={isPending}
-            className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+            className="flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
           >
             {isPending ? (
               <>

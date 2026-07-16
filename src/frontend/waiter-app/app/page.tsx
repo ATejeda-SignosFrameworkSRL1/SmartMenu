@@ -171,6 +171,9 @@ export default function WaiterPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [generalOrders, setGeneralOrders] = useState<Order[]>([]);
   const [myOrders, setMyOrders] = useState<Order[]>([]);
+  // Cards de "Mis Mesas" que el mesero ya confirmó/despachó (cancelaciones) — se ocultan
+  // aunque el backend siga devolviéndolas en my-orders (que trae todo lo no-Completed).
+  const [dismissedOrderIds, setDismissedOrderIds] = useState<Set<number>>(new Set());
   const [stats, setStats] = useState<WaiterStats>({ totalSales: 0, totalTips: 0, totalAmount: 0, transactionCount: 0 });
   const [loading, setLoading] = useState(true);
   // Guard de hidratación: la página es auth-gated (SSR sin token → render vacío). Mostramos el
@@ -1411,6 +1414,49 @@ export default function WaiterPage() {
     }
   };
 
+  // BUG-2 FIX — la card Served/Completed ya no tiene callejones sin salida:
+  //  - Served sin cobrar: el botón abre el modal de COBRO (cobrar es lo que la
+  //    completa en el backend y libera la mesa) en vez de quedarse disabled.
+  //  - Served ya cobrada (edge: pagos por otras vías): PUT status→Completed — el
+  //    backend libera la mesa + cierra la sesión + la saca de my-orders.
+  //  - Completed (mesa en Cleaning): solo libera la mesa (comportamiento previo).
+  const completeAndRelease = async (order: Order) => {
+    if (!user) return;
+    const oid = getOrderId(order);
+    const tableId = (order as any).tableId ?? (order as any).TableId;
+    try {
+      if (order.status === 'Served') {
+        await api.put(`/api/order/${oid}/status`, { newStatus: 'Completed' });
+      } else if (tableId) {
+        await api.put(`/api/table/${tableId}/status`, { newStatus: 'Available' });
+      }
+      toast.success(t('tables.releaseTable'));
+      if (tableId) setTables(prev => prev.map(tb => tb.id === tableId ? { ...tb, status: 'Available' } : tb));
+      await loadData(getUserId(user));
+      loadVirtualTables();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? t('tables.releaseTable'));
+    }
+  };
+
+  // BUG-1 FIX — confirmar una cancelación: la mesa ya se libera en el backend al
+  // cancelar (Pending/Confirmed), pero my-orders sigue devolviendo la orden Cancelled
+  // (trae todo lo no-Completed) y la card quedaba pegada sin acción. Esto asegura la
+  // mesa Available y la saca de "Mis Mesas" (dismiss local, resistente al re-fetch).
+  const confirmCancellation = async (order: Order) => {
+    const oid = getOrderId(order);
+    const tableId = (order as any).tableId ?? (order as any).TableId;
+    try {
+      if (tableId) {
+        await api.put(`/api/table/${tableId}/status`, { newStatus: 'Available' }).catch(() => {});
+        setTables(prev => prev.map(tb => tb.id === tableId ? { ...tb, status: 'Available' } : tb));
+      }
+    } finally {
+      setDismissedOrderIds(prev => { const n = new Set(prev); n.add(oid); return n; });
+      toast.success(t('tables.cancellationConfirmed'));
+    }
+  };
+
   const getOrderStatusColor = (status: string) => {
     switch (status) {
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
@@ -2111,7 +2157,7 @@ export default function WaiterPage() {
               const filteredMyOrders = myOrders.filter(o => {
                 const tId = (o as any).tableId ?? (o as any).TableId;
                 const isInVirtual = virtualTableIds.includes(tId);
-                return !isInVirtual;
+                return !isInVirtual && !dismissedOrderIds.has(getOrderId(o));
               });
               
               
@@ -2287,22 +2333,34 @@ export default function WaiterPage() {
                             {t('tables.markServed')}
                           </button>
                         )}
-                        {/* Liberar Mesa: aparece cuando está Served o Completed, habilitado solo si ya cobró */}
+                        {/* Confirmar cancelación: la card Cancelled se queda en my-orders sin
+                            acción; el mesero la confirma → mesa a normal + fuera de "Mis Mesas". */}
+                        {!transferMode && order.status === 'Cancelled' && (
+                          <button
+                            onClick={async (e) => { e.stopPropagation(); await confirmCancellation(order); }}
+                            className="w-full mt-2 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold flex items-center justify-center gap-1"
+                          >
+                            {t('tables.confirmCancellation')}
+                          </button>
+                        )}
+                        {/* Liberar Mesa: en Served/Completed. Si aún no cobró, el botón abre el
+                            COBRO (antes quedaba disabled y la mesa Served se pegaba sin salida);
+                            cobrada, libera/completa. */}
                         {!transferMode && (order.status === 'Served' || order.status === 'Completed') && (
                           <button
-                            disabled={!isPaid}
                             onClick={async (e) => {
                               e.stopPropagation();
-                              releaseTable((order as any).tableId ?? (order as any).TableId);
+                              if (!isPaid) { openPaymentModal(order); return; }
+                              completeAndRelease(order);
                             }}
                             className={`w-full mt-2 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 ${
                               isPaid
                                 ? 'bg-red-500 hover:bg-red-600 text-white cursor-pointer'
-                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'bg-amber-100 hover:bg-amber-200 text-amber-800 cursor-pointer'
                             }`}
                             title={!isPaid ? t('tables.releaseTableTitle') : ''}
                           >
-                            {!isPaid ? t('tables.releaseTablePending') : t('tables.releaseTable')}
+                            {!isPaid ? t('tables.releaseTableCollect') : t('tables.releaseTable')}
                           </button>
                         )}
                       </div>
