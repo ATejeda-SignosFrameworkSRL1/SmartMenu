@@ -80,7 +80,10 @@ export function QrMenu({
   const [takeawayCart, setTakeawayCart] = useState<QrMenuCartLine[]>(initialTakeawayCart);
   const [cartOpen, setCartOpen] = useState(initialCartOpen);
   const [modal, setModal] = useState<DishModalState | null>(null);
-  const [confirmedNote, setConfirmedNote] = useState<string | null>(null);
+  // Modal "¿Estás seguro?" antes de confirmar (guarda qué proceso se confirma).
+  const [confirmMode, setConfirmMode] = useState<OrderMode | null>(null);
+  // Resultado: la comanda "impresa" dividida por estación (Cocina/Bar), como el ruteo real.
+  const [comanda, setComanda] = useState<{ mode: OrderMode; cocina: number; bar: number } | null>(null);
 
   const isTakeaway = mode === "takeaway";
   const cart = isTakeaway ? takeawayCart : dineInCart;
@@ -157,7 +160,14 @@ export function QrMenu({
   const startTakeaway = () => {
     setMode("takeaway");
     setCartOpen(false);
-    setConfirmedNote(null);
+    setComanda(null);
+  };
+
+  // División Cocina/Bar de un carrito (prototipo: por categoría; el backend usa Zone.Type).
+  const splitStations = (lines: QrMenuCartLine[]) => {
+    const bar = lines.filter((l) => l.dish.category === "Bebidas").reduce((s, l) => s + l.quantity, 0);
+    const cocina = lines.reduce((s, l) => s + l.quantity, 0) - bar;
+    return { cocina, bar };
   };
 
   const backToDineIn = () => {
@@ -165,10 +175,17 @@ export function QrMenu({
     setCartOpen(false);
   };
 
-  const confirmOrder = () => {
-    setConfirmedNote(isTakeaway
-      ? "🥡 Pedido para llevar confirmado — te lo empacamos."
-      : "🍽️ Pedido de mesa confirmado — ya va a cocina.");
+  // "Confirmar" ya no confirma directo: abre el modal "¿Estás seguro?".
+  const confirmOrder = () => setConfirmMode(mode);
+
+  // Al dar "Sí": se "imprime" la comanda a Cocina y al Bar (dividida por estación).
+  const doConfirm = () => {
+    if (!confirmMode) return;
+    const targetCart = confirmMode === "takeaway" ? takeawayCart : dineInCart;
+    setComanda({ mode: confirmMode, ...splitStations(targetCart) });
+    if (confirmMode === "takeaway") { setTakeawayCart([]); setMode("dinein"); }
+    else setDineInCart([]);
+    setConfirmMode(null);
     setCartOpen(false);
   };
 
@@ -216,10 +233,22 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Aviso de confirmacion (una por proceso) ── */}
-      {confirmedNote && (
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
-          {confirmedNote}
+      {/* ── Resultado: comanda "impresa" a Cocina/Bar (una por proceso confirmado) ── */}
+      {comanda && (
+        <div className="flex items-start justify-between gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
+          <div>
+            <p className="text-sm font-bold">
+              {comanda.mode === "takeaway" ? "🥡 Pedido PARA LLEVAR confirmado" : "🍽️ Pedido de mesa confirmado"}
+            </p>
+            <p className="mt-0.5 text-xs">
+              🖨️ Comanda{comanda.mode === "takeaway" ? " (PARA LLEVAR)" : ""} enviada —{" "}
+              <b>Cocina: {comanda.cocina} {comanda.cocina === 1 ? "plato" : "platos"}</b>
+              {comanda.bar > 0 && <> · <b>Bar: {comanda.bar} {comanda.bar === 1 ? "bebida" : "bebidas"}</b></>}
+            </p>
+          </div>
+          <button onClick={() => setComanda(null)} aria-label="Cerrar aviso" className="opacity-60 hover:opacity-100">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -509,6 +538,44 @@ export function QrMenu({
           </div>
         </div>
       )}
+
+      {/* ── Modal "¿Estás seguro?" antes de confirmar (imprime comanda a Cocina/Bar) ── */}
+      {confirmMode && (() => {
+        const targetCart = confirmMode === "takeaway" ? takeawayCart : dineInCart;
+        const { cocina, bar } = splitStations(targetCart);
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-card p-6 text-center shadow-2xl">
+              <span className="text-4xl" aria-hidden>{confirmMode === "takeaway" ? "🥡" : "🍽️"}</span>
+              <h3 className="mt-2 text-lg font-bold">¿Estás seguro?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {confirmMode === "takeaway"
+                  ? "Confirmaremos tu pedido PARA LLEVAR y enviaremos la comanda a cocina/bar."
+                  : "Confirmaremos tu pedido y enviaremos la comanda a cocina/bar."}
+              </p>
+              {/* Desglose de a dónde va la comanda */}
+              <div className="mt-4 space-y-1.5 rounded-xl border bg-muted/30 p-3 text-left text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">🍳 Cocina</span>
+                  <b>{cocina} {cocina === 1 ? "plato" : "platos"}</b>
+                </div>
+                {bar > 0 && (
+                  <div className="flex items-center justify-between border-t pt-1.5">
+                    <span className="flex items-center gap-1.5">🍹 Bar</span>
+                    <b>{bar} {bar === 1 ? "bebida" : "bebidas"}</b>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button variant="outline" size="lg" onClick={() => setConfirmMode(null)}>Cancelar</Button>
+                <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700" onClick={doConfirm}>
+                  Sí, confirmar
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
