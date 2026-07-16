@@ -156,6 +156,7 @@ export { BISTRO_TABLES } from "./components/floor-plan/bistro-tables";
 
 // ── QR Menu "Para Llevar" (PROTOTIPO menu del QR con senal takeaway — solo Storybook) ──
 export { QrMenu, type QrMenuProps } from "./components/qr-menu/qr-menu";
+export { QrOrderReview, type QrOrderReviewProps } from "./components/qr-menu/qr-order-review";
 export type {
   QrMenuDish,
   QrMenuCartLine,
