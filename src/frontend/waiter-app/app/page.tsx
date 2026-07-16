@@ -2343,24 +2343,18 @@ export default function WaiterPage() {
                             {t('tables.confirmCancellation')}
                           </button>
                         )}
-                        {/* Liberar Mesa: en Served/Completed. Si aún no cobró, el botón abre el
-                            COBRO (antes quedaba disabled y la mesa Served se pegaba sin salida);
-                            cobrada, libera/completa. */}
-                        {!transferMode && (order.status === 'Served' || order.status === 'Completed') && (
+                        {/* Liberar Mesa: SOLO cuando ya está cobrada (Served pagada o Completed).
+                            Sin cobrar no se muestra ningún botón aquí (decisión de producto);
+                            el cobro vive en el modal de la card. */}
+                        {!transferMode && (order.status === 'Served' || order.status === 'Completed') && isPaid && (
                           <button
                             onClick={async (e) => {
                               e.stopPropagation();
-                              if (!isPaid) { openPaymentModal(order); return; }
                               completeAndRelease(order);
                             }}
-                            className={`w-full mt-2 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 ${
-                              isPaid
-                                ? 'bg-red-500 hover:bg-red-600 text-white cursor-pointer'
-                                : 'bg-amber-100 hover:bg-amber-200 text-amber-800 cursor-pointer'
-                            }`}
-                            title={!isPaid ? t('tables.releaseTableTitle') : ''}
+                            className="w-full mt-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
                           >
-                            {!isPaid ? t('tables.releaseTableCollect') : t('tables.releaseTable')}
+                            {t('tables.releaseTable')}
                           </button>
                         )}
                       </div>
