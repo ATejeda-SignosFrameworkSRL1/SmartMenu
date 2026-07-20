@@ -18,6 +18,11 @@ public record CreateOrderDto
     [StringLength(1024)]
     public string? SpecialInstructions { get; init; }
 
+    /// <summary>PARA LLEVAR desde la mesa: crea una orden SEPARADA (NO se fusiona con la orden
+    /// viva de la mesa), para que su comanda traiga solo los ítems para llevar y tenga su
+    /// propia cuenta. Solo controla el ruteo al crear; no se persiste como columna.</summary>
+    public bool IsTakeaway { get; init; }
+
     [Required, MinLength(1)]
     public List<CreateOrderItemDto> Items { get; init; } = new();
 }

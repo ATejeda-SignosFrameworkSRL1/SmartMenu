@@ -99,6 +99,11 @@ public class OrderController : ControllerBase
         if (!request.TableId.HasValue)
             return await CreateFreshOrderAsync(request);
 
+        // PARA LLEVAR desde la mesa: orden SEPARADA — NO se fusiona con la orden viva de la
+        // mesa, así su comanda trae solo lo de llevar y tiene su propia cuenta.
+        if (request.IsTakeaway)
+            return await CreateFreshOrderAsync(request);
+
         var gate = _tableOrderLocks.GetOrAdd(request.TableId.Value, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
         try

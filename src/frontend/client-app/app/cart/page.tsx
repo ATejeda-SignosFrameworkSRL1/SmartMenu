@@ -124,6 +124,9 @@ function CartPageInner() {
       sessionId,
       customerName: customerName?.trim() || undefined,
       specialInstructions: specialInstructions || undefined,
+      // PARA LLEVAR: orden SEPARADA — el backend NO la fusiona con la orden viva de la mesa,
+      // así su comanda trae solo los ítems para llevar y tiene su propia cuenta.
+      isTakeaway: takeaway,
       items: mappedItems,
     });
   };

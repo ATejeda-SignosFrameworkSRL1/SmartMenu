@@ -137,6 +137,7 @@ public class OrderService : IOrderService
             OrderNumber = orderNumber,
             TableId = dto.TableId,
             IsPickup = !dto.TableId.HasValue,
+            IsTakeaway = dto.IsTakeaway,
             SessionId = dto.SessionId ?? string.Empty,
             CustomerName = dto.CustomerName,
             Subtotal = subtotal,
@@ -196,8 +197,11 @@ public class OrderService : IOrderService
         // Orden "viva" de la mesa: cualquiera que no esté pagada/cancelada. Si hay varias
         // (no debería), se toma la más reciente. Permite que varios comensales del mismo QR
         // agreguen sus pedidos a una sola comanda por mesa en vez de crear órdenes separadas.
+        // Se EXCLUYEN las órdenes PARA LLEVAR: son cuentas separadas y no deben capturar los
+        // pedidos normales posteriores de la mesa (si no, se corrompería la cuenta separada).
         return await _context.Orders
             .Where(o => o.TableId == tableId
+                     && !o.IsTakeaway
                      && o.Status != OrderStatus.Completed
                      && o.Status != OrderStatus.Cancelled)
             .OrderByDescending(o => o.Id)

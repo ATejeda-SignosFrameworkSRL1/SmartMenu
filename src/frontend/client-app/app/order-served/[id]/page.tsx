@@ -12,6 +12,7 @@ export default function OrderServedPage() {
   const router = useRouter();
   const orderId = params.id as string;
   const setTakeaway = useCartStore((s) => s.setTakeaway);
+  const setAddToOrderId = useCartStore((s) => s.setAddToOrderId);
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', orderId],
@@ -44,11 +45,13 @@ export default function OrderServedPage() {
     router.push(`/payment/${orderId}`);
   };
 
-  // PARA LLEVAR desde el pedido servido: activa el modo (marca por ítem en el
-  // checkout) y vuelve al menú para sumar los platos a empacar a esta misma orden.
+  // PARA LLEVAR desde el pedido servido: activa el modo y vuelve al menú para armar un
+  // pedido SEPARADO (NO se anexa a la orden de la mesa). Al confirmar se crea una orden
+  // nueva e independiente con solo los platos para llevar → su propia comanda y cuenta.
   const handleTakeaway = () => {
     setTakeaway(true);
-    router.push(`/menu?addToOrder=${orderId}`);
+    setAddToOrderId(null); // orden separada: no anexar a la orden viva de la mesa
+    router.push('/menu');
   };
 
   if (isLoading) {
@@ -207,7 +210,7 @@ export default function OrderServedPage() {
               </div>
               <div className="flex-1 text-left">
                 <h3 className="text-lg font-bold text-gray-900 mb-1">
-                  🥡 Para llevar
+                   Para llevar
                 </h3>
                 <p className="text-sm text-gray-600">
                   (Pedir platos para empacar)

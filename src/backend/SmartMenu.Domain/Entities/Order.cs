@@ -9,6 +9,10 @@ public class Order : BaseEntity
     public int? TableId { get; set; }
     /// <summary>True para órdenes de mostrador/para llevar creadas por el cajero.</summary>
     public bool IsPickup { get; set; } = false;
+    /// <summary>PARA LLEVAR desde la mesa: orden SEPARADA de la orden viva de la mesa (su
+    /// propia comanda/cuenta). Tiene TableId (la sirve el mesero) pero se EXCLUYE de la
+    /// selección de "orden activa" para que un pedido normal posterior no se fusione en ella.</summary>
+    public bool IsTakeaway { get; set; } = false;
     public int? TableSessionId { get; set; }
     /// <summary>Factura global multi-franquicia (checkout delivery/pickup online). Null en órdenes de mesa/POS.</summary>
     public int? InvoiceId { get; set; }
