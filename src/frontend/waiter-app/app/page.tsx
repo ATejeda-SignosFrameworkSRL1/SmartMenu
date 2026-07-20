@@ -2319,9 +2319,21 @@ export default function WaiterPage() {
                             )}
                           </div>
                         )}
+                        {/* PARA LLEVAR / PENDING: una orden separada para llevar nace Pending y
+                            asignada al mesero; sin este botón no había forma de confirmarla
+                            (enviarla a cocina) desde "Mis Mesas" → se quedaba pegada y nunca
+                            llegaba al KDS. Confirmar = assign-waiter → Confirmed → NewKitchenOrder. */}
+                        {!transferMode && order.status === 'Pending' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); confirmOrder(order); }}
+                            className="w-full mt-2 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1"
+                          >
+                            {(order as any).isTakeaway ? `🥡 ${t('orders.confirmSend')}` : t('orders.confirmSend')}
+                          </button>
+                        )}
                         {/* TAREA 5: en modo transferencia ocultamos las acciones por-mesa para evitar
                             clicks accidentales; el card sólo se marca/desmarca. */}
-                        {!transferMode && (!hasFoodItems || kitchenServed) && (!hasDrinkItems || barServed) && order.status !== 'Served' && order.status !== 'Completed' && (
+                        {!transferMode && (!hasFoodItems || kitchenServed) && (!hasDrinkItems || barServed) && order.status !== 'Served' && order.status !== 'Completed' && order.status !== 'Pending' && (
                           <button
                             onClick={async (e) => {
                               e.stopPropagation();
@@ -3254,8 +3266,19 @@ export default function WaiterPage() {
 
               {/* Botones de acción del tab */}
               <div className="px-4 pb-2 space-y-2">
+                {/* Confirmar y enviar a cocina: una orden Pending (p.ej. para llevar separada)
+                    no puede servirse hasta confirmarse; sin esto el modal era un callejón sin
+                    salida (los botones "Servir" quedan deshabilitados porque no fue al KDS). */}
+                {order.status === 'Pending' && (
+                  <button
+                    onClick={() => { closeModal(); confirmOrder(order); }}
+                    className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm flex items-center justify-center gap-2"
+                  >
+                    {(order as any).isTakeaway ? `🥡 ${t('orders.confirmSend')}` : t('orders.confirmSend')}
+                  </button>
+                )}
                 {/* Servir Cocina */}
-                {(!hasDrinkItems || myOrderModalTab === 'kitchen' || !hasFoodItems) && hasFoodItems && (
+                {order.status !== 'Pending' && (!hasDrinkItems || myOrderModalTab === 'kitchen' || !hasFoodItems) && hasFoodItems && (
                   <button
                     disabled={!kitchenReady || kitchenServed}
                     onClick={doKitchenServed}
@@ -3269,7 +3292,7 @@ export default function WaiterPage() {
                   </button>
                 )}
                 {/* Servir Bar */}
-                {(!hasFoodItems || myOrderModalTab === 'bar' || !hasDrinkItems) && hasDrinkItems && (
+                {order.status !== 'Pending' && (!hasFoodItems || myOrderModalTab === 'bar' || !hasDrinkItems) && hasDrinkItems && (
                   <button
                     disabled={!barReady || barServed}
                     onClick={doBarServed}

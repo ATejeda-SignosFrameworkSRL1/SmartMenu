@@ -79,6 +79,9 @@ public record OrderDto
     public int? TableId { get; init; }
     public string TableNumber { get; init; } = string.Empty;
     public bool IsPickup { get; init; }
+    /// <summary>PARA LLEVAR desde la mesa: orden separada marcada para empacar. La cocina/mesero
+    /// la distinguen con un badge; el mesero igual la confirma y la sirve (tiene mesa).</summary>
+    public bool IsTakeaway { get; init; }
     /// <summary>Modalidad de entrega: DineIn (mesa) | Pickup | Delivery. Derivada de la
     /// Invoice del portal si existe; si no, de IsPickup (mostrador). Para badges KDS/admin.</summary>
     public string FulfillmentType { get; init; } = "DineIn";

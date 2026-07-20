@@ -896,6 +896,7 @@ public class OrderService : IOrderService
             OrderNumber = order.OrderNumber,
             TableId = order.TableId,
             IsPickup = order.IsPickup,
+            IsTakeaway = order.IsTakeaway,
             // Modalidad: la Invoice del portal manda (Pickup/Delivery); sin invoice, IsPickup
             // distingue mostrador del POS; el resto es mesa (DineIn).
             FulfillmentType = order.Invoice != null

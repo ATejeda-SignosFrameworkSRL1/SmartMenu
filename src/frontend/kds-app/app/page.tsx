@@ -101,6 +101,8 @@ interface Order {
   createdAt: string;
   /** DineIn (mesa) | Pickup | Delivery. Los del portal NO tienen mesero. */
   fulfillmentType?: string;
+  /** PARA LLEVAR desde la mesa: la cocina debe empacar el pedido. */
+  isTakeaway?: boolean;
   items: OrderItem[];
   kitchenPreparing?: boolean;
   kitchenReady?: boolean;
@@ -520,6 +522,10 @@ export default function KDSPage() {
                           if (ft === 'Pickup')   return <p className="text-2xl font-bold">🛍️ PICKUP</p>;
                           return <p className="text-2xl font-bold">{t('table', { number: order.tableId ?? (order as any).tableNumber ?? '-' })}</p>;
                         })()}
+                        {/* PARA LLEVAR desde la mesa: la cocina debe EMPACAR este pedido */}
+                        {(order as any).isTakeaway && (
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500 text-white text-sm font-extrabold">🥡 PARA LLEVAR</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock className="w-5 h-5" />
