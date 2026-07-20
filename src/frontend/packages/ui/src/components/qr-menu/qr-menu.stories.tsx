@@ -13,7 +13,7 @@ const meta: Meta<typeof QrMenu> = {
         component:
           "PROTOTIPO (solo maquetación, sin BD/APIs): menú del QR del cliente con el 'Para " +
           "llevar' como PROCESO APARTE. En el carrito, junto a 'Confirmar Orden', hay un botón " +
-          "'🥡 Para llevar'; al pulsarlo NO se abre una lista de selección, sino que el menú " +
+          "' Para llevar'; al pulsarlo NO se abre una lista de selección, sino que el menú " +
           "entra en MODO PARA LLEVAR y el cliente vuelve al catálogo general a armar un pedido " +
           "para llevar SEPARADO (con su propia confirmación). Dos procesos independientes, un " +
           "pedido cada uno: el de la mesa y el para llevar. Mapeo futuro: cada proceso = una " +

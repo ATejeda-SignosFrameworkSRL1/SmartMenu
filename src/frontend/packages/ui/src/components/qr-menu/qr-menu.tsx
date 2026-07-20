@@ -238,7 +238,7 @@ export function QrMenu({
         <div className="flex items-start justify-between gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
           <div>
             <p className="text-sm font-bold">
-              {comanda.mode === "takeaway" ? "🥡 Pedido PARA LLEVAR confirmado" : "🍽️ Pedido de mesa confirmado"}
+              {comanda.mode === "takeaway" ? "Pedido PARA LLEVAR confirmado" : "🍽️ Pedido de mesa confirmado"}
             </p>
             <p className="mt-0.5 text-xs">
               🖨️ Comanda{comanda.mode === "takeaway" ? " (PARA LLEVAR)" : ""} enviada —{" "}
@@ -347,7 +347,7 @@ export function QrMenu({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-2xl font-bold">{modal.dish.name}</h3>
-                  {isTakeaway && <Badge className="text-[10px]">🥡 Para llevar</Badge>}
+                  {isTakeaway && <Badge className="text-[10px]"> Para llevar</Badge>}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {modal.dish.tags.map((t) => (
@@ -522,7 +522,7 @@ export function QrMenu({
                   // Pedido de mesa: Confirmar Orden + el boton "Para llevar" AL LADO.
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="lg" onClick={startTakeaway}>
-                      🥡 Para llevar
+                       Para llevar
                     </Button>
                     <Button size="lg" onClick={confirmOrder}>Confirmar Orden</Button>
                   </div>

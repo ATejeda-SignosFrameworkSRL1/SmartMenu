@@ -140,7 +140,7 @@ export function QrOrderReview({ initialLines, className }: QrOrderReviewProps) {
         <div className="flex flex-col gap-2 rounded-2xl border bg-card p-4 shadow-sm sm:flex-row">
           {/* Boton visual "Para llevar" — placeholder de diseno, sin funcion. */}
           <Button variant="outline" size="lg" type="button" className="sm:w-52">
-            🥡 Para llevar
+             Para llevar
           </Button>
           <Button size="lg" className="flex-1 bg-gradient-to-r from-blue-500 to-emerald-500 text-base font-bold hover:from-blue-600 hover:to-emerald-600">
             <DollarSign className="mr-2 h-5 w-5" /> Agregar a mi Orden

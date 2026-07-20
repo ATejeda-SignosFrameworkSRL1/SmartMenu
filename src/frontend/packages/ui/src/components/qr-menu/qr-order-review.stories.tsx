@@ -14,7 +14,7 @@ const meta: Meta<typeof QrOrderReview> = {
           "PROTOTIPO (solo maquetación, sin BD/APIs): pantalla 'Agregar a mi Orden' del cliente " +
           "(revisión antes de sumar a la orden existente): Tus Platos con steppers y eliminar, " +
           "Instrucciones Especiales, Tu orden detallada y Resumen fiscal (ITBIS 18% + propina " +
-          "legal 10%, Ley 13-07). Aquí se colocó el botón VISUAL '🥡 Para llevar' junto al botón " +
+          "legal 10%, Ley 13-07). Aquí se colocó el botón VISUAL ' Para llevar' junto al botón " +
           "'Agregar a mi Orden' — placeholder de diseño, sin función.",
       },
     },
