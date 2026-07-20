@@ -290,7 +290,7 @@ export default function KitchenPage() {
                       !isWarning && !isUrgent && 'border-green-500'
                     )}>
                       <div>
-                        <span className="text-2xl font-bold">{t('tableLabel', { number: order.tableNumber ?? order.TableNumber ?? '-' })}</span>
+                        <span className="text-2xl font-bold">{((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Delivery' ? '🛵 Delivery' : ((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Pickup' ? '🛍️ Pickup' : t('tableLabel', { number: order.tableNumber ?? order.TableNumber ?? '-' })}</span>
                         <p className="text-xs text-muted-foreground">{t('orderNumber', { number: (String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-' })}</p>
                         {hasAllergies && (
                           <div className="flex items-center gap-1 text-destructive mt-1">

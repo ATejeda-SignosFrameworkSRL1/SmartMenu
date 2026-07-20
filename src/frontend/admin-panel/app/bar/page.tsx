@@ -254,7 +254,7 @@ export default function BarPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-4 pb-2 border-b">
                       <div>
-                        <span className="text-xl font-bold">{t('table')} {order.tableNumber ?? order.TableNumber ?? '-'}</span>
+                        <span className="text-xl font-bold">{((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Delivery' ? '🛵 Delivery' : ((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Pickup' ? '🛍️ Pickup' : `${t('table')} ${order.tableNumber ?? order.TableNumber ?? '-'}`}</span>
                         <p className="text-xs text-muted-foreground">{t('order')} #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase() || '-'}</p>
                       </div>
                       <span className={cn(

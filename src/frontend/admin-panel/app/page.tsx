@@ -329,7 +329,7 @@ function AdminDashboardInner() {
                         </div>
                         <div>
                           <p className="font-medium text-sm">{t('activeOrders.orderLabel')} #{(String(order.orderNumber ?? order.OrderNumber ?? '')).split('-').pop()?.toUpperCase()}</p>
-                          <p className="text-xs text-muted-foreground">{t('activeOrders.tableLabel')} {order.tableNumber ?? order.TableNumber ?? order.tableId ?? order.TableId}</p>
+                          <p className="text-xs text-muted-foreground">{((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Delivery' ? '🛵 Delivery' : ((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Pickup' ? '🛍️ Pickup' : `${t('activeOrders.tableLabel')} ${order.tableNumber ?? order.TableNumber ?? order.tableId ?? order.TableId}`}</p>
                         </div>
                       </div>
                       

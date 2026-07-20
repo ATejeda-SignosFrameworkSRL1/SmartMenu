@@ -248,6 +248,7 @@ export default function OrdersPage() {
               const nextStatuses = NEXT_STATUS[status] ?? [];
               const orderNumber = (order as any).orderNumber ?? (order as any).OrderNumber ?? '';
               const tableNum = (order as any).tableNumber ?? (order as any).TableNumber ?? '–';
+              const ft = (order as any).fulfillmentType ?? (order as any).FulfillmentType;
               const createdAt = (order as any).createdAt ?? (order as any).CreatedAt ?? '';
               const total = (order as any).total ?? (order as any).Total ?? 0;
               const items = order.items ?? [];
@@ -273,7 +274,10 @@ export default function OrdersPage() {
                       {/* Table */}
                       <div className="flex items-center gap-1.5">
                         <TableProperties className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm font-semibold text-gray-800">{t('table', { number: tableNum })}</span>
+                        {/* Pedidos del portal (sin mesa): mostrar la modalidad, no "Mostrador" */}
+                        <span className="text-sm font-semibold text-gray-800">
+                          {ft === 'Delivery' ? '🛵 Delivery' : ft === 'Pickup' ? '🛍️ Pickup' : t('table', { number: tableNum })}
+                        </span>
                       </div>
                       {/* Time */}
                       {createdAt && (
