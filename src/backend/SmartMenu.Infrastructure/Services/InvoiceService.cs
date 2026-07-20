@@ -135,7 +135,11 @@ public class InvoiceService : IInvoiceService
                     Tax = tax,
                     Tip = tip,
                     Total = total,
-                    Status = OrderStatus.Pending,
+                    // Portal (Pickup/Delivery): NO hay mesero que confirme, así que la orden va
+                    // DIRECTO a cocina (Confirmed) y aparece en la pantalla del KDS de inmediato
+                    // (el KDS solo muestra Confirmed/Preparing/Ready). El POST /api/invoices ya
+                    // emite NewKitchenOrder; sin esto solo se imprimía la comanda, sin verse en pantalla.
+                    Status = OrderStatus.Confirmed,
                     SpecialInstructions = dto.Notes,
                     EstimatedTimeMinutes = items.Count * 10,
                     // Fiscal por franquicia (RNC propio): se propaga la solicitud del cliente a cada Order.
