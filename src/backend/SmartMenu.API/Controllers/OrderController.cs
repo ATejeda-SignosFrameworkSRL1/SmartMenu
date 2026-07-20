@@ -509,6 +509,47 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
+    /// DESPACHO del KDS para pedidos SIN mesa (portal Pickup/Delivery, mostrador): NO hay
+    /// mesero, así que el propio chef/bartender marca su parte como despachada (= servida) para
+    /// sacarla del tablero tras colocarla en la zona de recogida. Guard: solo IsPickup (los
+    /// pedidos de mesa DineIn siguen siendo servidos por el mesero vía kitchen-served/bar-served).
+    /// </summary>
+    [HttpPut("{id}/kitchen-dispatch")]
+    [Authorize(Roles = "Admin,Manager,Chef,KitchenStaff,Bartender")]
+    public async Task<IActionResult> KitchenDispatch(int id)
+    {
+        try
+        {
+            var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == id);
+            if (order == null) return NotFound(new { error = "Orden no encontrada" });
+            if (!order.IsPickup)
+                return BadRequest(new { error = "Solo pedidos para llevar/portal se despachan desde el KDS; los de mesa los sirve el mesero." });
+            var result = await _orderService.SetKitchenServedAsync(id);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (Exception ex) { _logger.LogError(ex, "Error kitchen dispatch"); return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Despacho del bar para pedidos SIN mesa (ver KitchenDispatch).</summary>
+    [HttpPut("{id}/bar-dispatch")]
+    [Authorize(Roles = "Admin,Manager,Chef,KitchenStaff,Bartender")]
+    public async Task<IActionResult> BarDispatch(int id)
+    {
+        try
+        {
+            var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == id);
+            if (order == null) return NotFound(new { error = "Orden no encontrada" });
+            if (!order.IsPickup)
+                return BadRequest(new { error = "Solo pedidos para llevar/portal se despachan desde el KDS; los de mesa los sirve el mesero." });
+            var result = await _orderService.SetBarServedAsync(id);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (Exception ex) { _logger.LogError(ex, "Error bar dispatch"); return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>
     /// Cliente marca que terminó de comer. Anónimo: lo dispara el customer-app desde su QR.
     /// </summary>
     [HttpPut("{id}/customer-finished")]

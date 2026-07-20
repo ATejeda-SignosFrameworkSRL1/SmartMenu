@@ -99,6 +99,8 @@ interface Order {
   tableNumber?: string;
   status: string;
   createdAt: string;
+  /** DineIn (mesa) | Pickup | Delivery. Los del portal NO tienen mesero. */
+  fulfillmentType?: string;
   items: OrderItem[];
   kitchenPreparing?: boolean;
   kitchenReady?: boolean;
@@ -310,6 +312,20 @@ export default function KDSPage() {
     try {
       await api.put(`/api/order/${orderId}/${endpoint}`);
       toast.success(t('toastReady'));
+      loadOrders();
+    } catch {
+      toast.error(t('toastUpdateError'));
+    }
+  };
+
+  // Pedidos del portal/para-llevar (sin mesero): el chef/bartender DESPACHA su parte
+  // (la coloca en la zona de recogida) y así sale del tablero. No aplica a pedidos de mesa.
+  const handleDispatch = async (orderId: number) => {
+    const isBar = isBarUser(userRef.current);
+    const endpoint = isBar ? `bar-dispatch` : `kitchen-dispatch`;
+    try {
+      await api.put(`/api/order/${orderId}/${endpoint}`);
+      toast.success(t('toastDispatched'));
       loadOrders();
     } catch {
       toast.error(t('toastUpdateError'));
@@ -585,10 +601,30 @@ export default function KDSPage() {
                       const isServed   = isBar ? order.barServed     : order.kitchenServed;
                       const emoji      = isBar ? '🍹' : '👨‍🍳';
 
+                      const ft = order.fulfillmentType;
+                      const isPortal = ft === 'Delivery' || ft === 'Pickup';
+
                       if (isServed) {
                         return <div className="text-center py-2 text-teal-400 font-medium">{t('served')}</div>;
                       }
                       if (isReady) {
+                        // Portal/para-llevar: no hay mesero → el chef despacha (lo coloca para
+                        // recogida) y saca la tarjeta del tablero.
+                        if (isPortal) {
+                          return (
+                            <div className="space-y-2">
+                              <div className="text-center text-green-400 font-medium">
+                                {ft === 'Delivery' ? t('readyDeliveryDispatch') : t('readyPickupDispatch')}
+                              </div>
+                              <button
+                                onClick={() => handleDispatch(order.id)}
+                                className="w-full px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg transition-colors"
+                              >
+                                {t('dispatchButton')}
+                              </button>
+                            </div>
+                          );
+                        }
                         return <div className="text-center py-2 text-green-400 font-medium">{t('readyWaiting')}</div>;
                       }
                       if (isPreparing) {
