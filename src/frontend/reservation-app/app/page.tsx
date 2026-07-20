@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { createAuthApi } from '@/lib/auth-client';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -190,6 +191,13 @@ export default function ReservationPage() {
               >
                 {t('hero.ctaMenu')}
               </button>
+              {/* Portal de pedidos pickup/delivery */}
+              <Link
+                href="/pedir"
+                className="btn-outline border-primary/50 text-primary-light hover:border-primary hover:bg-primary hover:text-white"
+              >
+                {t('pedidos.homeCta')}
+              </Link>
             </div>
 
             {/* Trust */}
@@ -604,6 +612,7 @@ function MenuHighlights() {
    ═══════════════════════════════════════════════════════ */
 function ReservationSection() {
   const t = useTranslations('reservation');
+  const tp = useTranslations('pedidos');
   return (
     <section id="reservar" className="section-padding bg-warm-950">
       <div className="container-narrow">
@@ -619,13 +628,19 @@ function ReservationSection() {
           </p>
         </div>
         <BookingEngineWarm forceMode="mesa" />
-        <div className="mx-auto mt-6 max-w-md text-center">
+        <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-3 text-center">
           <a
             href="/area-completa"
             className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-semibold text-primary-light transition hover:bg-primary/20"
           >
             {t('areaButton')}
           </a>
+          <Link
+            href="/pedir"
+            className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-semibold text-primary-light transition hover:bg-primary/20"
+          >
+            {tp('homeCta')}
+          </Link>
         </div>
       </div>
     </section>

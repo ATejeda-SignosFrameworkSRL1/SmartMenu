@@ -497,7 +497,13 @@ export default function KDSPage() {
                   <div className={`${alertColor} p-4`}>
                     <div className="flex flex-wrap justify-between items-center gap-2 text-white">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-2xl font-bold">{t('table', { number: order.tableId ?? (order as any).tableNumber ?? '-' })}</p>
+                        {/* FULFILLMENT — pedidos del portal (sin mesa): badge en vez de "Mesa -" */}
+                        {(() => {
+                          const ft = (order as any).fulfillmentType ?? (order as any).FulfillmentType;
+                          if (ft === 'Delivery') return <p className="text-2xl font-bold">🛵 DELIVERY</p>;
+                          if (ft === 'Pickup')   return <p className="text-2xl font-bold">🛍️ PICKUP</p>;
+                          return <p className="text-2xl font-bold">{t('table', { number: order.tableId ?? (order as any).tableNumber ?? '-' })}</p>;
+                        })()}
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock className="w-5 h-5" />
