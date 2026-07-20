@@ -35,6 +35,7 @@ const targets = {
   host:        ipurl(8447, '/login'),
   cashier:     ipurl(8448, '/login'),
   reservation: ipurl(8449, '/login'),
+  delivery:    ipurl(8452, '/login'),
 };
 
 const outDir = path.join(__dirname, 'qr');

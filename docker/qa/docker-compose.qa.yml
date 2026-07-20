@@ -5,7 +5,7 @@
 #   docker compose -f docker-compose.qa.yml up -d --build
 #
 # Hosts (agregar a Windows: C:\Windows\System32\drivers\etc\hosts):
-#   127.0.0.1 qa.smartmenu.local api.qa.smartmenu.local admin.qa.smartmenu.local kds.qa.smartmenu.local waiter.qa.smartmenu.local host.qa.smartmenu.local cashier.qa.smartmenu.local reservation.qa.smartmenu.local
+#   127.0.0.1 qa.smartmenu.local api.qa.smartmenu.local admin.qa.smartmenu.local kds.qa.smartmenu.local waiter.qa.smartmenu.local host.qa.smartmenu.local cashier.qa.smartmenu.local reservation.qa.smartmenu.local delivery.qa.smartmenu.local
 
 name: smartmenu-qa
 
@@ -100,6 +100,7 @@ services:
       Cors__AllowedOrigins__4: https://host.qa.smartmenu.local
       Cors__AllowedOrigins__5: https://cashier.qa.smartmenu.local
       Cors__AllowedOrigins__6: https://reservation.qa.smartmenu.local
+      Cors__AllowedOrigins__7: https://delivery.qa.smartmenu.local
       # ── Stripe / DGII placeholders ──
       Stripe__SecretKey:        ${STRIPE_SECRET}
       Stripe__PublishableKey:   ${STRIPE_PUBLISHABLE}
@@ -193,6 +194,12 @@ services:
     image: smartmenu-qa/reservation-app:latest
     container_name: smartmenu-qa-reservation
 
+  delivery-app:
+    <<: *frontend-base
+    build: { context: ../../src/frontend/delivery-app, dockerfile: ../../../docker/qa/Dockerfile.frontend, args: { APP_PORT: "3008" } }
+    image: smartmenu-qa/delivery-app:latest
+    container_name: smartmenu-qa-delivery
+
   # ─── Caddy HTTPS reverse proxy ─────────────────────────────────────────
   caddy:
     image: caddy:2.8-alpine
@@ -212,6 +219,7 @@ services:
       - "8447:8447"           # host-app
       - "8448:8448"           # cashier-app
       - "8449:8449"           # reservation-app
+      - "8452:8452"           # delivery-app
       - "8450:8450"           # backend API
       - "8451:8451"           # client-app PWA (localhost direct)
       - "8455:8455"           # kds-app 2º origen (Bar) — abrir Cocina+Bar a la vez
@@ -230,6 +238,7 @@ services:
       - host-app
       - cashier-app
       - reservation-app
+      - delivery-app
     networks:
       - smartmenu-qa
     restart: unless-stopped

@@ -10,6 +10,7 @@
 #   host.qa.smartmenu.local
 #   cashier.qa.smartmenu.local
 #   reservation.qa.smartmenu.local
+#   delivery.qa.smartmenu.local
 #
 # Para que el browser no marque rojo, instala el root CA de Caddy:
 #   docker exec smartmenu-qa-caddy cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
@@ -150,6 +151,15 @@ reservation.{$QA_LAN_NIP}.nip.io {
 	reverse_proxy reservation-app:3007
 }
 
+delivery.{$QA_LAN_NIP}.nip.io {
+	import tls-long
+	import security-headers
+	encode gzip zstd
+	@apipath path /api/* /uploads/* /hubs/*
+	reverse_proxy @apipath backend:8080
+	reverse_proxy delivery-app:3008
+}
+
 # â”€â”€â”€ Landing page en https://localhost:8443/ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Si no agregaste las entradas al hosts file todavÃ­a y abres directo localhost,
 # te mostramos un Ã­ndice con todas las URLs del stack QA.
@@ -179,7 +189,7 @@ code{background:#f1f5f9;padding:.1rem .4rem;border-radius:4px;font-size:.85em}
 <section class="warn">
 <h2>âš ï¸ Antes de empezar</h2>
 <p>Para que las URLs <code>*.qa.smartmenu.local</code> resuelvan, agrega esta lÃ­nea a tu hosts file (Admin):</p>
-<p><code>127.0.0.1 qa.smartmenu.local api.qa.smartmenu.local admin.qa.smartmenu.local kds.qa.smartmenu.local waiter.qa.smartmenu.local host.qa.smartmenu.local cashier.qa.smartmenu.local reservation.qa.smartmenu.local</code></p>
+<p><code>127.0.0.1 qa.smartmenu.local api.qa.smartmenu.local admin.qa.smartmenu.local kds.qa.smartmenu.local waiter.qa.smartmenu.local host.qa.smartmenu.local cashier.qa.smartmenu.local reservation.qa.smartmenu.local delivery.qa.smartmenu.local</code></p>
 <p>Para certificado verde (no warning):</p>
 <p><code>docker exec smartmenu-qa-caddy cat /data/caddy/pki/authorities/local/root.crt &gt; caddy-root.crt &amp;&amp; certutil -addstore -f Root caddy-root.crt</code></p>
 </section>
@@ -197,6 +207,7 @@ code{background:#f1f5f9;padding:.1rem .4rem;border-radius:4px;font-size:.85em}
 <a class="app" href="https://host.qa.smartmenu.local:8443/login"><span>ðŸ¤µ Host App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
 <a class="app" href="https://cashier.qa.smartmenu.local:8443/login"><span>ðŸ’° Cashier App <code>cashier@smartmenu.com / Cash123!</code></span><span class="badge">Cashier</span></a>
 <a class="app" href="https://reservation.qa.smartmenu.local:8443/login"><span>ðŸ“… Reservation App <code>host@smartmenu.com / Host123!</code></span><span class="badge">Host</span></a>
+<a class="app" href="https://delivery.qa.smartmenu.local:8443/login"><span>🛵 Delivery App <code>delivery@smartmenu.com / Delivery123!</code></span><span class="badge">Delivery</span></a>
 </section>
 
 <section>
@@ -268,6 +279,11 @@ localhost:8449, {$QA_LAN_IP}:8449 {
 	reverse_proxy reservation-app:3007
 }
 
+localhost:8452, {$QA_LAN_IP}:8452 {
+	import app-with-backend
+	reverse_proxy delivery-app:3008
+}
+
 localhost:8450, {$QA_LAN_IP}:8450 {
 	import tls-long
 	import security-headers
@@ -330,6 +346,11 @@ cashier.qa.smartmenu.local {
 reservation.qa.smartmenu.local {
 	import app-with-backend
 	reverse_proxy reservation-app:3007
+}
+
+delivery.qa.smartmenu.local {
+	import app-with-backend
+	reverse_proxy delivery-app:3008
 }
 
 # ─── Staff hub — landing con QR de cada panel (LAN, scannable desde el cell) ─

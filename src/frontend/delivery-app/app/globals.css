@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-900 text-white;
+}
+
+@layer utilities {
+  /* Cards de entrega — acento teal "delivery" en vez del rojo de cocina */
+  .delivery-card {
+    @apply bg-slate-800 rounded-xl shadow-lg border-2 border-slate-700 transition-all;
+  }
+
+  .delivery-ready {
+    @apply border-amber-500;
+  }
+
+  .delivery-enroute {
+    @apply border-primary-500;
+  }
+
+  .delivery-prep {
+    @apply border-slate-600 opacity-80;
+  }
+}

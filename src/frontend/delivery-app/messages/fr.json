@@ -1,0 +1,35 @@
+{
+  "delivery": {
+    "title": "🛵 Panel de Repartidor",
+    "activeDeliveries": "Pedidos activos",
+    "logout": "Salir",
+    "loading": "Cargando...",
+    "trackingDisabled": "El seguimiento de pedidos está deshabilitado por el administrador",
+    "trackingDisabledHint": "Pide al administrador activar el switch de tracking para ver los pedidos.",
+    "readySection": "📦 Listos para recoger",
+    "enRouteSection": "🛵 En camino",
+    "prepSection": "⏳ En preparación",
+    "emptyReady": "No hay pedidos listos para recoger",
+    "emptyEnRoute": "No hay pedidos en camino",
+    "emptyAll": "¡Todo entregado! No hay pedidos de delivery pendientes",
+    "pickUp": "🛵 Recoger pedido",
+    "markDelivered": "✅ Entregado",
+    "updating": "Actualizando…",
+    "orderNumber": "Pedido #{id}",
+    "address": "Dirección",
+    "noAddress": "Sin dirección registrada",
+    "itemsCount": "{count, plural, one {# artículo} other {# artículos}}",
+    "toastPickedUp": "Pedido en camino 🛵",
+    "toastDelivered": "Pedido entregado ✅",
+    "toastUpdateError": "Error al actualizar el pedido",
+    "status": {
+      "Pending": "Pendiente",
+      "Confirmed": "Confirmado",
+      "Preparing": "En preparación",
+      "ReadyForPickup": "Listo para recoger",
+      "OutForDelivery": "En camino",
+      "Delivered": "Entregado",
+      "Cancelled": "Cancelado"
+    }
+  }
+}
