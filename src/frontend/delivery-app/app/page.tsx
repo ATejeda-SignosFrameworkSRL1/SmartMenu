@@ -86,16 +86,18 @@ export default function DeliveryPage() {
       setInvoices((data as Invoice[]).filter((inv) => inv.fulfillmentType === 'Delivery'));
     } catch (error: unknown) {
       if (isStale()) return;
-      const status = (error as { response?: { status?: number } })?.response?.status;
-      if (status === 403) {
-        // El admin apagó el switch de tracking → estado explícito, no error de red.
+      const resp = (error as { response?: { status?: number; data?: { error?: string } } })?.response;
+      // Distinguir los DOS 403: el del switch apagado trae body { error: "...deshabilitado..." };
+      // el 403 de ROL del [Authorize] (p.ej. token stale de otro rol) viene sin ese texto y
+      // NO debe pintarse como "tracking deshabilitado" (UX engañosa).
+      if (resp?.status === 403 && /deshabilitad/i.test(resp?.data?.error ?? '')) {
         setTrackingDisabled(true);
         setInvoices([]);
         return;
       }
       console.error('Error loading deliveries:', error);
-      // Fallo transitorio (red/timeout/backend reiniciando): CONSERVAR el tablero
-      // actual — el próximo poll (10s) reconcilia.
+      // Fallo transitorio (red/timeout/backend reiniciando) u otro 403: CONSERVAR el
+      // tablero actual — el próximo poll (10s) reconcilia.
     }
   }, []);
 

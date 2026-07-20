@@ -249,6 +249,7 @@ public class OrderService : IOrderService
         var orders = await _context.Orders
             .AsNoTracking()
             .Include(o => o.Table)
+            .Include(o => o.Invoice) // modalidad Pickup/Delivery (FulfillmentType correcto tambien aqui)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
             .OrderByDescending(o => o.CreatedAt)
@@ -266,6 +267,7 @@ public class OrderService : IOrderService
         var total = await baseQuery.CountAsync();
         var orders = await baseQuery
             .Include(o => o.Table)
+            .Include(o => o.Invoice) // modalidad Pickup/Delivery (FulfillmentType correcto tambien aqui)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
             .OrderByDescending(o => o.CreatedAt)

@@ -156,6 +156,16 @@ builder.Services.AddRateLimiter(options =>
         o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
     });
 
+    // Policy for POST /api/invoices — endpoint ANONIMO del portal (Pickup/Delivery):
+    // crea comandas reales en cocina/impresora, hay que frenar spam por IP.
+    options.AddFixedWindowLimiter("invoices", o =>
+    {
+        o.PermitLimit = 6;                  // 6 pedidos
+        o.Window = TimeSpan.FromMinutes(1); // por minuto por IP (via GlobalLimiter particiona por IP)
+        o.QueueLimit = 0;
+        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+
     // Global default — generous; specific policies override per-endpoint
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(

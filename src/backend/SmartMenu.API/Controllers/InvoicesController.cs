@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using SmartMenu.API.Hubs;
@@ -33,8 +34,10 @@ public class InvoicesController : ControllerBase
     }
 
     // POST /api/invoices — checkout del cliente (carrito mixto → una Invoice + N Orders).
+    // Rate-limited: endpoint anónimo que genera comandas reales (anti-spam por IP).
     [HttpPost]
     [AllowAnonymous]
+    [EnableRateLimiting("invoices")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> Create([FromBody] CreateInvoiceDto dto)
     {
@@ -125,20 +128,18 @@ public class InvoicesController : ControllerBase
         try
         {
             var newStatus = body?.Status ?? "";
+            string[]? allowedCurrent = null;
             if (User.IsInRole("Delivery") && !User.IsInRole("Admin") && !User.IsInRole("Manager"))
             {
                 if (!DriverAllowedTransitions.TryGetValue(newStatus, out var validFrom))
                     return StatusCode(StatusCodes.Status403Forbidden,
                         new { error = "El repartidor solo puede marcar 'En camino' o 'Entregado'." });
-
-                var current = await _invoices.GetInvoiceByIdAsync(id);
-                if (current == null) return NotFound(new { error = "Factura no encontrada" });
-                if (!validFrom.Contains(current.DeliveryStatus, StringComparer.OrdinalIgnoreCase))
-                    return StatusCode(StatusCodes.Status403Forbidden,
-                        new { error = $"Transición no permitida para el repartidor: {current.DeliveryStatus} → {newStatus}." });
+                // El guard de estado-actual se aplica DENTRO del servicio, sobre la entidad
+                // trackeada (evita el TOCTOU de leer aquí y escribir después).
+                allowedCurrent = validFrom;
             }
 
-            return Ok(await _invoices.UpdateDeliveryStatusAsync(id, newStatus));
+            return Ok(await _invoices.UpdateDeliveryStatusAsync(id, newStatus, allowedCurrent));
         }
         catch (ArgumentException ex)
         {
@@ -159,8 +160,10 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> SetTrackingSettings([FromBody] TrackingSettingsDto body)
     {
-        var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.IsActive)
-                         ?? await _context.Restaurants.FirstOrDefaultAsync();
+        // OrderBy(Id): con 2+ restaurantes activos el GET y el PUT deben apuntar al MISMO
+        // (sin orden estable el toggle podia escribir en uno y leerse de otro).
+        var restaurant = await _context.Restaurants.Where(r => r.IsActive).OrderBy(r => r.Id).FirstOrDefaultAsync()
+                         ?? await _context.Restaurants.OrderBy(r => r.Id).FirstOrDefaultAsync();
         if (restaurant == null) return NotFound(new { error = "Restaurante no encontrado" });
 
         if (body?.Enabled.HasValue == true) restaurant.DeliveryTrackingEnabled = body.Enabled.Value;
@@ -172,8 +175,10 @@ public class InvoicesController : ControllerBase
     /// <summary>Switch del dueño (nivel restaurante activo). Default true si no hay restaurante.</summary>
     private async Task<bool> IsTrackingEnabledAsync()
     {
+        // Mismo orden estable (Id) que SetTrackingSettings: GET y PUT ven el MISMO restaurante.
         var cfg = await _context.Restaurants
             .Where(r => r.IsActive)
+            .OrderBy(r => r.Id)
             .Select(r => (bool?)r.DeliveryTrackingEnabled)
             .FirstOrDefaultAsync();
         return cfg ?? true;

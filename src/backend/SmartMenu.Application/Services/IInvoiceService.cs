@@ -9,5 +9,8 @@ public interface IInvoiceService
     Task<InvoiceDto?> GetInvoiceByIdAsync(int id);
     /// <summary>Listado para el tracking del admin. Filtro opcional por nombre de DeliveryStatus.</summary>
     Task<IEnumerable<InvoiceDto>> GetTrackingAsync(string? deliveryStatus = null);
-    Task<InvoiceDto> UpdateDeliveryStatusAsync(int id, string newStatus);
+    /// <summary>Avanza el tracking. Si <paramref name="allowedCurrent"/> viene, la transición
+    /// solo procede cuando el estado ACTUAL (leído en la misma transacción) está en la lista —
+    /// guard autoritativo para el rol Delivery.</summary>
+    Task<InvoiceDto> UpdateDeliveryStatusAsync(int id, string newStatus, IReadOnlyCollection<string>? allowedCurrent = null);
 }

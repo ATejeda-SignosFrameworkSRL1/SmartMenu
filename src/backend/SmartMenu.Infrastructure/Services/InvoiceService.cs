@@ -33,6 +33,12 @@ public class InvoiceService : IInvoiceService
     {
         if (dto.Items == null || dto.Items.Count == 0)
             throw new ArgumentException("El carrito está vacío.");
+        // Topes anti-abuso (endpoint anónimo): sin esto un carrito absurdo genera comandas
+        // gigantes reales en cocina/impresora.
+        if (dto.Items.Count > 50)
+            throw new ArgumentException("El carrito no puede tener más de 50 líneas.");
+        if (dto.Items.Any(i => i.Quantity > 50))
+            throw new ArgumentException("Cantidad máxima por plato: 50.");
 
         var fulfillment = Enum.TryParse<FulfillmentType>(dto.FulfillmentType, ignoreCase: true, out var ft)
             ? ft : FulfillmentType.Delivery;
@@ -197,13 +203,22 @@ public class InvoiceService : IInvoiceService
         return invoices.Select(MapToDto).ToList();
     }
 
-    public async Task<InvoiceDto> UpdateDeliveryStatusAsync(int id, string newStatus)
+    public async Task<InvoiceDto> UpdateDeliveryStatusAsync(int id, string newStatus, IReadOnlyCollection<string>? allowedCurrent = null)
     {
         if (!Enum.TryParse<DeliveryStatus>(newStatus, ignoreCase: true, out var ds))
             throw new ArgumentException($"Estado de entrega inválido: {newStatus}");
 
         var invoice = await _context.Invoices.FirstOrDefaultAsync(inv => inv.Id == id)
                       ?? throw new ArgumentException($"Invoice {id} no encontrada.");
+
+        // Guard de transicion AUTORITATIVO sobre la entidad trackeada (cierra el TOCTOU:
+        // un pre-check en el controller podia quedar stale si el admin cancelaba entre el
+        // check y el update — el repartidor habria "entregado" una factura Cancelled).
+        if (allowedCurrent != null
+            && !allowedCurrent.Contains(invoice.DeliveryStatus.ToString(), StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException(
+                $"Transición no permitida: {invoice.DeliveryStatus} → {ds}.");
+
         invoice.DeliveryStatus = ds;
         invoice.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
