@@ -94,7 +94,7 @@ function CartPageInner() {
       // orden como al AGREGAR a una orden viva de la mesa (AddItemsToOrderAsync persiste
       // notes pero NO specialInstructions), y el print-agent la imprime en la línea de
       // cada plato para llevar. En mesa compartida solo se marcan los ítems para llevar.
-      notes: [takeaway ? '🥡 PARA LLEVAR' : '', item.notes || item.specialInstructions || '']
+      notes: [takeaway ? 'PARA LLEVAR' : '', item.notes || item.specialInstructions || '']
         .filter(Boolean).join(' · ') || undefined,
       drinkTiming: item.drinkTiming || undefined,
       withAlcohol: item.withAlcohol !== undefined ? item.withAlcohol : undefined,
@@ -345,21 +345,23 @@ function CartPageInner() {
               🥡 {t('takeawayBanner')}
             </div>
           )}
-          <div className="flex gap-3">
+          {/* Móvil: apilados (CTA principal arriba, cada uno ancho completo → sin quiebre de
+              texto ni botones apretados). ≥sm: lado a lado. */}
+          <div className="flex flex-col-reverse sm:flex-row gap-3">
             {/* Secundario: entra al modo PARA LLEVAR (→ menú) o sigue agregando.
                 UX/UI: mismo alto/radio/tipografía que el primario; delineado = acción secundaria. */}
             <button
               type="button"
               onClick={() => { setTakeaway(true); setAddToOrderId(null); router.push('/menu'); }}
-              className="px-6 py-4 rounded-xl border-2 border-primary-600 bg-white text-primary-700 font-semibold text-lg whitespace-nowrap shadow-sm hover:bg-primary-50 hover:shadow-md transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-6 py-4 rounded-xl border-2 border-primary-600 bg-white text-primary-700 font-semibold text-lg whitespace-nowrap shadow-sm hover:bg-primary-50 hover:shadow-md transition-all duration-200 flex items-center justify-center gap-2"
             >
-              {takeaway ? <Plus className="w-6 h-6" /> : <ShoppingBag className="w-6 h-6" />}
+              {takeaway ? <Plus className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
               {takeaway ? t('takeawayContinue') : t('takeawayButton')}
             </button>
             <button
               onClick={takeaway ? () => setShowTakeawayConfirm(true) : handleCheckout}
               disabled={isPending}
-              className="flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+              className="w-full sm:flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-4 rounded-xl font-semibold text-lg whitespace-nowrap shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isPending ? (
                 <>
