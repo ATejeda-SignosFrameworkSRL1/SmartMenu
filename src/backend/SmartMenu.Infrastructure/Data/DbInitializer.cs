@@ -427,6 +427,32 @@ public static class DbInitializer
         Console.WriteLine("✅ Cajero creado: cashier@smartmenu.com");
     }
 
+    /// <summary>Repartidor para la delivery-app (recoge y entrega pedidos del portal). Idempotente.</summary>
+    public static async Task EnsureDeliveryUserAsync(ApplicationDbContext context)
+    {
+        if (await context.Users.AnyAsync(u => u.Email == "delivery@smartmenu.com"))
+            return;
+
+        var restaurantId = await context.Restaurants.OrderBy(r => r.Id).Select(r => r.Id).FirstOrDefaultAsync();
+        if (restaurantId == 0)
+            return;
+
+        var driver = new User
+        {
+            Email = "delivery@smartmenu.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Delivery123!"),
+            FirstName = "Pedro",
+            LastName = "Repartidor",
+            Phone = "809-555-0107",
+            Role = UserRole.Delivery,
+            IsActive = true,
+            RestaurantId = restaurantId
+        };
+        context.Users.Add(driver);
+        await context.SaveChangesAsync();
+        Console.WriteLine("✅ Repartidor creado: delivery@smartmenu.com");
+    }
+
     /// <summary>
     /// Crea tablas y columnas de la migración AddVirtualTableTransferDishTags si no existen (para no depender de dotnet ef database update).
     /// </summary>

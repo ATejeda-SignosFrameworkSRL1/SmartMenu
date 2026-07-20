@@ -231,6 +231,7 @@ public class OrderService : IOrderService
             .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.KitchenZone)
             .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.Category)
             .Include(o => o.Table)
+            .Include(o => o.Invoice) // modalidad Pickup/Delivery del portal (FulfillmentType)
             .AsSplitQuery()
             .OrderBy(o => o.CreatedAt)
             .Skip((page - 1) * pageSize).Take(pageSize)
@@ -663,8 +664,51 @@ public class OrderService : IOrderService
         if (hasFood && (!hasDrinks || order.BarReady))
             order.Status = OrderStatus.Ready;
         await _orderRepository.UpdateAsync(order);
+        await AdvanceInvoiceIfReadyAsync(order);
         var updated = await _orderRepository.GetByIdWithItemsAsync(orderId);
         return MapToOrderDto(updated!, false, 0);
+    }
+
+    /// <summary>
+    /// FULFILLMENT — auto-avance del tracking del portal: cuando TODAS las ordenes de una
+    /// Invoice (pedido Pickup/Delivery) tienen su parte de cocina y bar lista, la Invoice
+    /// pasa a ReadyForPickup sin intervencion del admin (el repartidor la ve al instante).
+    /// Nunca regresa estados posteriores (OutForDelivery/Delivered/Cancelled) y es fail-safe.
+    /// </summary>
+    private async Task AdvanceInvoiceIfReadyAsync(Order order)
+    {
+        if (order.InvoiceId == null) return;
+        try
+        {
+            var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == order.InvoiceId.Value);
+            if (invoice == null) return;
+            if (invoice.DeliveryStatus is not (DeliveryStatus.Pending or DeliveryStatus.Confirmed or DeliveryStatus.Preparing))
+                return;
+
+            var siblings = await _context.Orders
+                .Include(o => o.Items).ThenInclude(it => it.Dish).ThenInclude(d => d!.KitchenZone)
+                .Where(o => o.InvoiceId == invoice.Id && o.Status != OrderStatus.Cancelled)
+                .ToListAsync();
+            if (siblings.Count == 0) return;
+
+            var allReady = siblings.All(o =>
+            {
+                var (f, d) = GetOrderItemTypes(o);
+                return (!f || o.KitchenReady) && (!d || o.BarReady);
+            });
+            if (allReady)
+            {
+                invoice.DeliveryStatus = DeliveryStatus.ReadyForPickup;
+                invoice.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Invoice {InvoiceId} auto-avanzada a ReadyForPickup (cocina/bar listos).", invoice.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            // El auto-avance nunca debe romper el flujo del KDS.
+            _logger.LogWarning(ex, "No se pudo auto-avanzar la invoice de la orden {OrderId}", order.Id);
+        }
     }
 
     public async Task<OrderDto> SetBarPreparingAsync(int orderId)
@@ -689,6 +733,7 @@ public class OrderService : IOrderService
         if (hasDrinks && (!hasFood || order.KitchenReady))
             order.Status = OrderStatus.Ready;
         await _orderRepository.UpdateAsync(order);
+        await AdvanceInvoiceIfReadyAsync(order);
         var updated = await _orderRepository.GetByIdWithItemsAsync(orderId);
         return MapToOrderDto(updated!, false, 0);
     }
@@ -845,6 +890,11 @@ public class OrderService : IOrderService
             OrderNumber = order.OrderNumber,
             TableId = order.TableId,
             IsPickup = order.IsPickup,
+            // Modalidad: la Invoice del portal manda (Pickup/Delivery); sin invoice, IsPickup
+            // distingue mostrador del POS; el resto es mesa (DineIn).
+            FulfillmentType = order.Invoice != null
+                ? order.Invoice.FulfillmentType.ToString()
+                : (order.IsPickup ? "Pickup" : "DineIn"),
             TableNumber = order.IsPickup ? "Mostrador" : (order.Table?.TableNumber.ToString() ?? "N/A"),
             CustomerName = order.CustomerName,
             AssignedWaiterId = order.AssignedWaiterId,

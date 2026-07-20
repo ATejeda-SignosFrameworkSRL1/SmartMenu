@@ -10,5 +10,6 @@ public enum UserRole
     Cashier = 5,       // Cajero
     Manager = 6,
     Admin = 7,
-    Bartender = 8      // Personal de bar / KDS del bar
+    Bartender = 8,     // Personal de bar / KDS del bar
+    Delivery = 9       // Repartidor (delivery-app): recoge y entrega pedidos del portal
 }

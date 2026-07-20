@@ -74,6 +74,9 @@ public record OrderDto
     public int? TableId { get; init; }
     public string TableNumber { get; init; } = string.Empty;
     public bool IsPickup { get; init; }
+    /// <summary>Modalidad de entrega: DineIn (mesa) | Pickup | Delivery. Derivada de la
+    /// Invoice del portal si existe; si no, de IsPickup (mostrador). Para badges KDS/admin.</summary>
+    public string FulfillmentType { get; init; } = "DineIn";
     public string? CustomerName { get; init; }
     public int? AssignedWaiterId { get; init; }
     public decimal Subtotal { get; init; }

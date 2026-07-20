@@ -90,10 +90,10 @@ public class InvoicesController : ControllerBase
         return invoice == null ? NotFound(new { error = "Factura no encontrada" }) : Ok(invoice);
     }
 
-    // GET /api/invoices/tracking?status=OutForDelivery — seguimiento del admin.
-    // Gate por el switch DeliveryTrackingEnabled (permiso del admin).
+    // GET /api/invoices/tracking?status=OutForDelivery — seguimiento del admin y del REPARTIDOR
+    // (delivery-app). Gate por el switch DeliveryTrackingEnabled (permiso del admin).
     [HttpGet("tracking")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Delivery")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Tracking([FromQuery] string? status)
     {
@@ -104,9 +104,18 @@ public class InvoicesController : ControllerBase
         return Ok(await _invoices.GetTrackingAsync(status));
     }
 
+    /// <summary>Transiciones que puede hacer el ROL Delivery (repartidor): recoger y entregar.
+    /// Los estados tempranos (Confirmed/Preparing/ReadyForPickup) los maneja admin/manager.</summary>
+    private static readonly Dictionary<string, string[]> DriverAllowedTransitions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["OutForDelivery"] = new[] { "ReadyForPickup" },
+        ["Delivered"]      = new[] { "OutForDelivery" },
+    };
+
     // PUT /api/invoices/{id}/delivery-status — avanzar el tracking (Confirmed, OutForDelivery, Delivered…).
+    // El repartidor (rol Delivery) solo puede ReadyForPickup→OutForDelivery y OutForDelivery→Delivered.
     [HttpPut("{id:int}/delivery-status")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Delivery")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateDeliveryStatus(int id, [FromBody] UpdateDeliveryStatusDto body)
     {
@@ -115,7 +124,21 @@ public class InvoicesController : ControllerBase
                 new { error = "El seguimiento de órdenes está deshabilitado por el administrador." });
         try
         {
-            return Ok(await _invoices.UpdateDeliveryStatusAsync(id, body?.Status ?? ""));
+            var newStatus = body?.Status ?? "";
+            if (User.IsInRole("Delivery") && !User.IsInRole("Admin") && !User.IsInRole("Manager"))
+            {
+                if (!DriverAllowedTransitions.TryGetValue(newStatus, out var validFrom))
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        new { error = "El repartidor solo puede marcar 'En camino' o 'Entregado'." });
+
+                var current = await _invoices.GetInvoiceByIdAsync(id);
+                if (current == null) return NotFound(new { error = "Factura no encontrada" });
+                if (!validFrom.Contains(current.DeliveryStatus, StringComparer.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        new { error = $"Transición no permitida para el repartidor: {current.DeliveryStatus} → {newStatus}." });
+            }
+
+            return Ok(await _invoices.UpdateDeliveryStatusAsync(id, newStatus));
         }
         catch (ArgumentException ex)
         {

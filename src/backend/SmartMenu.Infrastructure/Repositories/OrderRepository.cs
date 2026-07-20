@@ -20,6 +20,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
                 .ThenInclude(i => i.Dish)
                 .ThenInclude(d => d!.KitchenZone)
             .Include(o => o.Table)
+            .Include(o => o.Invoice) // modalidad Pickup/Delivery del portal (FulfillmentType)
             .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
     }
 
@@ -60,6 +61,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
                 .ThenInclude(i => i.Dish)
                 .ThenInclude(d => d!.Category)
             .Include(o => o.Table)
+            .Include(o => o.Invoice) // modalidad Pickup/Delivery del portal (FulfillmentType)
             .AsSplitQuery()
             .Where(o => o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled)
             .OrderBy(o => o.CreatedAt)

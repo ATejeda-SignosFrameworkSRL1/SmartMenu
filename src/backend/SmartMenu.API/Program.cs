@@ -456,6 +456,7 @@ if (app.Environment.IsDevelopment())
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureCashierAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDishTagsSeedAsync(context);
     await SmartMenu.Infrastructure.Data.DbInitializer.EnsureBartenderRoleAsync(context);
+    await SmartMenu.Infrastructure.Data.DbInitializer.EnsureDeliveryUserAsync(context);
 
     // 4. Reservas — turnos (ServicePeriods) por defecto para la capacidad dinámica
     //    por intervalo (seed de DATOS, no schema).
