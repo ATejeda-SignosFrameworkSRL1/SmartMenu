@@ -605,8 +605,16 @@ public class OrderService : IOrderService
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
             .Where(o => o.AssignedWaiterId == waiterId
-                && (o.Status != Domain.Enums.OrderStatus.Completed
-                    || (o.Table != null && o.Table.Status == Domain.Enums.TableStatus.Cleaning)))
+                && (
+                    // Activas (ni Completed ni Cancelled): siempre en "Mis Mesas".
+                    (o.Status != Domain.Enums.OrderStatus.Completed && o.Status != Domain.Enums.OrderStatus.Cancelled)
+                    // Completadas: solo si la mesa aún está por limpiar.
+                    || (o.Status == Domain.Enums.OrderStatus.Completed && o.Table != null && o.Table.Status == Domain.Enums.TableStatus.Cleaning)
+                    // Canceladas: solo MIENTRAS su mesa siga sin liberar (el mesero debe confirmar y
+                    // liberarla). Si la mesa ya está Available (o no tiene mesa), no hay nada que
+                    // hacer → no debe seguir contando/apareciendo en "Mis Mesas".
+                    || (o.Status == Domain.Enums.OrderStatus.Cancelled && o.Table != null && o.Table.Status != Domain.Enums.TableStatus.Available)
+                ))
             .OrderBy(o => o.CreatedAt)
             .ToListAsync();
 
