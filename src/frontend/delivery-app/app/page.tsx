@@ -6,6 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useTranslations, useLocale } from 'next-intl';
 import { createAuthApi, SessionUser } from '@/lib/auth-client';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import DeliveryMap from '@/components/DeliveryMap';
 import { dateLocale } from '@/i18n/config';
 
 // Auth centralizado — mismo factory genérico que el resto de las staff apps.
@@ -45,6 +46,12 @@ interface Invoice {
   deliveryStatus: DeliveryStatus;
   createdAt: string;
   orders: InvoiceOrder[];
+  // Campos geo (nullable) del contrato /api/invoices/tracking.
+  restaurantLat?: number | null; // PUNTO A
+  restaurantLng?: number | null;
+  driverLat?: number | null; // última posición reportada del repartidor
+  driverLng?: number | null;
+  driverLocationAt?: string | null;
 }
 
 const PREP_STATUSES: DeliveryStatus[] = ['Pending', 'Confirmed', 'Preparing'];
@@ -70,6 +77,13 @@ export default function DeliveryPage() {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [showPrep, setShowPrep] = useState(false);
+  // Mapa: un solo pedido con el mapa abierto a la vez (mantiene el watch de GPS
+  // sin ambigüedad y es el foco natural del repartidor).
+  const [mapOpenId, setMapOpenId] = useState<number | null>(null);
+  const [livePosition, setLivePosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoDenied, setGeoDenied] = useState(false);
+  // Throttle del reporte de GPS al backend: máx ~1 request / 5s.
+  const lastReportRef = useRef(0);
 
   const loadInvoices = useCallback(async () => {
     // Captura el número de secuencia de ESTA llamada; si al volver la respuesta
@@ -130,6 +144,46 @@ export default function DeliveryPage() {
     };
   }, [loadInvoices]);
 
+  // Solo reportamos GPS cuando el pedido con el mapa abierto está EN CAMINO
+  // (OutForDelivery). Derivado (no estado) para que el poll de 10s no reinicie
+  // el watch: el effect solo se re-ejecuta si CAMBIA este id.
+  const openInvoice = mapOpenId != null ? invoices.find((i) => i.id === mapOpenId) : undefined;
+  const trackingInvoiceId =
+    openInvoice && openInvoice.deliveryStatus === 'OutForDelivery' ? openInvoice.id : null;
+
+  // GPS en vivo del repartidor -> marcador + PUT throttled al backend.
+  useEffect(() => {
+    if (trackingInvoiceId == null) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    // Reset por cada pedido rastreado: primer fix reporta de inmediato.
+    setLivePosition(null);
+    setGeoDenied(false);
+    lastReportRef.current = 0;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLivePosition({ lat, lng }); // (a) mueve el marcador en cada update
+        const now = Date.now();
+        if (now - lastReportRef.current >= 5000) {
+          lastReportRef.current = now;
+          // (b) reporta al backend (rol Delivery). Silencioso: el próximo fix reintenta.
+          api
+            .put(`/api/invoices/${trackingInvoiceId}/driver-location`, { lat, lng })
+            .catch(() => {});
+        }
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) setGeoDenied(true);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [trackingInvoiceId]);
+
   const updateStatus = async (invoiceId: number, status: 'OutForDelivery' | 'Delivered') => {
     setUpdatingId(invoiceId);
     try {
@@ -172,6 +226,7 @@ export default function DeliveryPage() {
   const renderCard = (inv: Invoice, variant: 'ready' | 'enroute' | 'prep') => {
     const isExpanded = !!expanded[inv.id];
     const isUpdating = updatingId === inv.id;
+    const mapOpen = mapOpenId === inv.id;
     const borderClass =
       variant === 'ready' ? 'delivery-ready' : variant === 'enroute' ? 'delivery-enroute' : 'delivery-prep';
 
@@ -247,6 +302,30 @@ export default function DeliveryPage() {
                 </ul>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Mapa de seguimiento (solo pedidos listos / en camino) */}
+        {(variant === 'ready' || variant === 'enroute') && (
+          <div className="mx-4 mt-3">
+            <button
+              type="button"
+              onClick={() => setMapOpenId((prev) => (prev === inv.id ? null : inv.id))}
+              className="w-full px-4 py-2 rounded-lg border border-slate-600 bg-slate-900/60 hover:bg-slate-700/60 text-sm font-medium text-primary-200 transition-colors"
+              aria-expanded={mapOpen}
+            >
+              {mapOpen ? t('hideMap') : t('viewMap')}
+            </button>
+            {mapOpen && (
+              <div className="mt-3 space-y-2">
+                {geoDenied && trackingInvoiceId === inv.id && (
+                  <p className="rounded-md bg-amber-900/30 border border-amber-600/50 px-3 py-2 text-xs text-amber-200">
+                    ⚠️ {t('geoDenied')}
+                  </p>
+                )}
+                <DeliveryMap invoice={inv} livePosition={livePosition} />
+              </div>
+            )}
           </div>
         )}
 
