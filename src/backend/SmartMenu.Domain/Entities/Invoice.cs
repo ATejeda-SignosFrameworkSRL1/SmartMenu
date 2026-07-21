@@ -31,6 +31,12 @@ public class Invoice : BaseEntity
     public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;
     public DeliveryStatus DeliveryStatus { get; set; } = DeliveryStatus.Pending;
 
+    // ─── Seguimiento en vivo del repartidor (Google Maps) ───
+    /// <summary>Última posición GPS reportada por el repartidor (para el tracking del cliente).</summary>
+    public double? DriverLat { get; set; }
+    public double? DriverLng { get; set; }
+    public DateTime? DriverLocationAt { get; set; }
+
     // Navigation
     public User? Customer { get; set; }
     public ICollection<Order> Orders { get; set; } = new List<Order>();

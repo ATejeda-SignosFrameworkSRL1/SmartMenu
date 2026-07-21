@@ -231,6 +231,19 @@ public class InvoiceService : IInvoiceService
                ?? throw new InvalidOperationException("Invoice actualizada pero no recuperable.");
     }
 
+    public async Task<InvoiceDto> UpdateDriverLocationAsync(int id, double lat, double lng)
+    {
+        var invoice = await _context.Invoices.FirstOrDefaultAsync(inv => inv.Id == id)
+                      ?? throw new ArgumentException($"Invoice {id} no encontrada.");
+        invoice.DriverLat = lat;
+        invoice.DriverLng = lng;
+        invoice.DriverLocationAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return await GetInvoiceByIdAsync(id)
+               ?? throw new InvalidOperationException("Invoice actualizada pero no recuperable.");
+    }
+
     private static InvoiceDto MapToDto(Invoice inv) => new()
     {
         Id = inv.Id,
@@ -247,6 +260,12 @@ public class InvoiceService : IInvoiceService
         PaymentStatus = inv.PaymentStatus.ToString(),
         DeliveryStatus = inv.DeliveryStatus.ToString(),
         CreatedAt = inv.CreatedAt,
+        // Geo para el mapa: A = restaurante (de la Order de la franquicia), Driver = posición en vivo.
+        RestaurantLat = inv.Orders.Select(o => o.Restaurant).FirstOrDefault(r => r != null && r.Latitude != null)?.Latitude,
+        RestaurantLng = inv.Orders.Select(o => o.Restaurant).FirstOrDefault(r => r != null && r.Longitude != null)?.Longitude,
+        DriverLat = inv.DriverLat,
+        DriverLng = inv.DriverLng,
+        DriverLocationAt = inv.DriverLocationAt,
         Orders = inv.Orders.Select(o => new InvoiceOrderDto
         {
             OrderId = o.Id,

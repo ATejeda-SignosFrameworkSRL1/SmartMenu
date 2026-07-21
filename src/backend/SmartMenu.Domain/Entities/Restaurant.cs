@@ -31,6 +31,10 @@ public class Restaurant : BaseEntity
     /// <summary>Switch del admin: habilita/oculta el seguimiento (tracking) de órdenes delivery en el admin-panel. Default true.</summary>
     public bool DeliveryTrackingEnabled { get; set; } = true;
 
+    /// <summary>Ubicación del restaurante (PUNTO A del delivery en Google Maps). Null = no configurada.</summary>
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+
     // Navigation properties
     public ICollection<User> Staff { get; set; } = new List<User>();
     public ICollection<Table> Tables { get; set; } = new List<Table>();

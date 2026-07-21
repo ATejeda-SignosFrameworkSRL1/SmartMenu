@@ -38,6 +38,13 @@ public class UpdateDeliveryStatusDto
     public string Status { get; set; } = string.Empty;
 }
 
+/// <summary>El repartidor reporta su posición GPS actual (tracking en vivo del delivery).</summary>
+public class DriverLocationDto
+{
+    public double Lat { get; set; }
+    public double Lng { get; set; }
+}
+
 // ── Respuesta ──
 public class InvoiceDto
 {
@@ -55,6 +62,15 @@ public class InvoiceDto
     public string PaymentStatus { get; set; } = "Pending";
     public string DeliveryStatus { get; set; } = "Pending";
     public DateTime CreatedAt { get; set; }
+    // ─── Geo para el mapa (Google Maps): A = restaurante, B = dirección del cliente (se
+    // geocodifica en el front), Driver = posición en vivo del repartidor. ───
+    /// <summary>Punto A: ubicación del restaurante (null si no está configurada).</summary>
+    public double? RestaurantLat { get; set; }
+    public double? RestaurantLng { get; set; }
+    /// <summary>Posición en vivo del repartidor (null hasta que reporte GPS).</summary>
+    public double? DriverLat { get; set; }
+    public double? DriverLng { get; set; }
+    public DateTime? DriverLocationAt { get; set; }
     /// <summary>Una Order por franquicia (así el KDS de cada una ve solo lo suyo).</summary>
     public List<InvoiceOrderDto> Orders { get; set; } = new();
 }

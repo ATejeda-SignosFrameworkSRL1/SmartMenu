@@ -147,6 +147,26 @@ public class InvoicesController : ControllerBase
         }
     }
 
+    // PUT /api/invoices/{id}/driver-location — el REPARTIDOR reporta su GPS en vivo (tracking).
+    // Se guarda en la Invoice; la vista del cliente (fase posterior) lo consume por polling/SignalR.
+    [HttpPut("{id:int}/driver-location")]
+    [Authorize(Roles = "Admin,Manager,Delivery")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateDriverLocation(int id, [FromBody] DriverLocationDto body)
+    {
+        if (body == null || body.Lat < -90 || body.Lat > 90 || body.Lng < -180 || body.Lng > 180)
+            return BadRequest(new { error = "Coordenadas inválidas." });
+        try
+        {
+            var updated = await _invoices.UpdateDriverLocationAsync(id, body.Lat, body.Lng);
+            return Ok(updated);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     // GET /api/invoices/tracking-settings — estado del switch (para pintar el toggle del admin).
     [HttpGet("tracking-settings")]
     [Authorize(Roles = "Admin,Manager")]
