@@ -162,23 +162,35 @@ function MapInner({
     };
   }, [isLoaded, pointA, pointB]);
 
-  // Encuadra A + B (+ repartidor si ya se conoce) UNA vez que B se resuelve.
-  // No re-encuadramos en cada tick del GPS para no marear con zooms constantes.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !isLoaded) return;
+  // Centro INICIAL fijo (capturado una sola vez): el prop `center` de GoogleMap compara por
+  // referencia y llama map.setCenter() en cada objeto nuevo — con driverPos cambiando en cada
+  // tick del GPS, el mapa saltaría constantemente y pisaría el pan/zoom del repartidor.
+  const initialCenterRef = useRef<google.maps.LatLngLiteral | null>(null);
+  if (initialCenterRef.current === null) initialCenterRef.current = driverPos ?? pointA;
+
+  // Encuadre A + B (+ repartidor si ya se conoce): helper reutilizado por el effect (cuando B
+  // se resuelve) y por onMapLoad (cubre el caso geocode-resuelto-antes-de-cargar-el-mapa,
+  // donde mapRef aún era null y el effect no volvía a correr).
+  const fitAll = useCallback((map: google.maps.Map) => {
     const bounds = new google.maps.LatLngBounds();
     bounds.extend(pointA);
     if (pointB) bounds.extend(pointB);
     if (driverPos) bounds.extend(driverPos);
     map.fitBounds(bounds, 64);
-    // driverPos a propósito FUERA de las deps: solo reencuadramos al resolver B.
+    // driverPos entra solo en el encuadre puntual; NO re-encuadramos en cada tick del GPS.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, pointB, pointA]);
+  }, [pointA, pointB]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isLoaded) return;
+    fitAll(map);
+  }, [isLoaded, fitAll]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
-  }, []);
+    fitAll(map);
+  }, [fitAll]);
   const onMapUnmount = useCallback(() => {
     mapRef.current = null;
   }, []);
@@ -220,7 +232,7 @@ function MapInner({
 
       <GoogleMap
         mapContainerStyle={CONTAINER_STYLE}
-        center={driverPos ?? pointA}
+        center={initialCenterRef.current}
         zoom={14}
         onLoad={onMapLoad}
         onUnmount={onMapUnmount}

@@ -154,11 +154,18 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateDriverLocation(int id, [FromBody] DriverLocationDto body)
     {
-        if (body == null || body.Lat < -90 || body.Lat > 90 || body.Lng < -180 || body.Lng > 180)
+        // Mismo gate del switch que tracking/delivery-status: con el tracking apagado por el
+        // admin, tampoco se aceptan reportes de GPS.
+        if (!await IsTrackingEnabledAsync())
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "El seguimiento de órdenes está deshabilitado por el administrador." });
+
+        if (body?.Lat is not double lat || body.Lng is not double lng
+            || lat < -90 || lat > 90 || lng < -180 || lng > 180)
             return BadRequest(new { error = "Coordenadas inválidas." });
         try
         {
-            var updated = await _invoices.UpdateDriverLocationAsync(id, body.Lat, body.Lng);
+            var updated = await _invoices.UpdateDriverLocationAsync(id, lat, lng);
             return Ok(updated);
         }
         catch (ArgumentException ex)

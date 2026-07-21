@@ -235,6 +235,15 @@ public class InvoiceService : IInvoiceService
     {
         var invoice = await _context.Invoices.FirstOrDefaultAsync(inv => inv.Id == id)
                       ?? throw new ArgumentException($"Invoice {id} no encontrada.");
+
+        // Guard de estado sobre la entidad trackeada: el GPS solo tiene sentido con el pedido
+        // EN CAMINO. Evita sobrescribir la posición de una invoice Delivered/Cancelled (p.ej.
+        // un tick de GPS rezagado justo después de marcar "Entregado") — importa para
+        // auditoría y para la vista del cliente de la fase 2.
+        if (invoice.DeliveryStatus != DeliveryStatus.OutForDelivery)
+            throw new ArgumentException(
+                $"Solo se reporta ubicación con el pedido en camino (estado actual: {invoice.DeliveryStatus}).");
+
         invoice.DriverLat = lat;
         invoice.DriverLng = lng;
         invoice.DriverLocationAt = DateTime.UtcNow;
@@ -260,9 +269,12 @@ public class InvoiceService : IInvoiceService
         PaymentStatus = inv.PaymentStatus.ToString(),
         DeliveryStatus = inv.DeliveryStatus.ToString(),
         CreatedAt = inv.CreatedAt,
-        // Geo para el mapa: A = restaurante (de la Order de la franquicia), Driver = posición en vivo.
-        RestaurantLat = inv.Orders.Select(o => o.Restaurant).FirstOrDefault(r => r != null && r.Latitude != null)?.Latitude,
-        RestaurantLng = inv.Orders.Select(o => o.Restaurant).FirstOrDefault(r => r != null && r.Longitude != null)?.Longitude,
+        // Geo para el mapa: A = restaurante (de la Order de la franquicia), Driver = posición en
+        // vivo. UN solo restaurante con AMBAS coords (no mezclar lat de uno con lng de otro).
+        RestaurantLat = inv.Orders.Select(o => o.Restaurant)
+            .FirstOrDefault(r => r is { Latitude: not null, Longitude: not null })?.Latitude,
+        RestaurantLng = inv.Orders.Select(o => o.Restaurant)
+            .FirstOrDefault(r => r is { Latitude: not null, Longitude: not null })?.Longitude,
         DriverLat = inv.DriverLat,
         DriverLng = inv.DriverLng,
         DriverLocationAt = inv.DriverLocationAt,

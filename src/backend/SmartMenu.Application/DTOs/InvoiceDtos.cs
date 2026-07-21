@@ -38,11 +38,12 @@ public class UpdateDeliveryStatusDto
     public string Status { get; set; } = string.Empty;
 }
 
-/// <summary>El repartidor reporta su posición GPS actual (tracking en vivo del delivery).</summary>
+/// <summary>El repartidor reporta su posición GPS actual (tracking en vivo del delivery).
+/// Nullables a propósito: un body {} NO debe bindear a (0,0) "Null Island" y pasar el rango.</summary>
 public class DriverLocationDto
 {
-    public double Lat { get; set; }
-    public double Lng { get; set; }
+    public double? Lat { get; set; }
+    public double? Lng { get; set; }
 }
 
 // ── Respuesta ──

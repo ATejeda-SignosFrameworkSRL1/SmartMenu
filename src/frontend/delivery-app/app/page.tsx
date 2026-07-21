@@ -181,7 +181,12 @@ export default function DeliveryPage() {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      // Sin tracking activo no hay posición "en vivo": evita que el mapa de OTRO pedido
+      // muestre el 🛵 congelado en la última posición del pedido anterior (dato stale).
+      setLivePosition(null);
+    };
   }, [trackingInvoiceId]);
 
   const updateStatus = async (invoiceId: number, status: 'OutForDelivery' | 'Delivered') => {

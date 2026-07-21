@@ -148,10 +148,41 @@ public class RestaurantController : ControllerBase
             waiterAuthModeName = r.WaiterAuthMode.ToString()
         });
     }
+
+    /// <summary>
+    /// Configura la ubicación del restaurante (PUNTO A de la ruta de delivery en Google Maps).
+    /// Solo Admin/Manager. Sin esto, el mapa del repartidor usa un fallback genérico.
+    /// </summary>
+    [HttpPut("{id}/location")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> SetLocation(int id, [FromBody] SetLocationDto dto)
+    {
+        if (dto?.Latitude is not double lat || dto.Longitude is not double lng
+            || lat < -90 || lat > 90 || lng < -180 || lng > 180)
+            return BadRequest(new { error = "Coordenadas inválidas (latitude [-90,90], longitude [-180,180])." });
+
+        var r = await _context.Restaurants.FirstOrDefaultAsync(x => x.Id == id);
+        if (r == null) return NotFound(new { error = "Restaurante no encontrado" });
+
+        r.Latitude = lat;
+        r.Longitude = lng;
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Ubicación del restaurante {RestaurantId} configurada: {Lat}, {Lng}", r.Id, lat, lng);
+        return Ok(new { message = "Ubicación actualizada", latitude = r.Latitude, longitude = r.Longitude });
+    }
 }
 
 public class SetAuthModeDto
 {
     /// <summary>0=PrivateOnly, 1=PublicPin, 2=Hybrid</summary>
     public int Mode { get; set; }
+}
+
+/// <summary>Ubicación del restaurante (punto A de la ruta de delivery en Google Maps).
+/// Nullables para que un body {} no bindee a (0,0).</summary>
+public class SetLocationDto
+{
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
 }
