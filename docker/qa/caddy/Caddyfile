@@ -224,7 +224,7 @@ HTML 200
 # Tres maneras de acceder al PWA del cliente:
 #   - qa.smartmenu.local:8443   (con hosts file en la PC)
 #   - localhost:8451            (acceso local sin hosts file / MCP)
-#   - {$QA_LAN_IP}:8443         (LAN IP â€” QR scannable desde el cell)
+#   - {$QA_LAN_IP}:8451         (LAN IP â€” QR scannable desde el cell)
 qa.smartmenu.local, localhost:8451, {$QA_LAN_IP}:8451 {
 	import tls-long
 	import security-headers
@@ -356,8 +356,17 @@ delivery.qa.smartmenu.local {
 # ─── Staff hub — landing con QR de cada panel (LAN, scannable desde el cell) ─
 # Pagina estatica servida desde /srv/hub (bind-mount docker/qa/staff-hub).
 # Lista todos los paneles de rol con su URL nip.io + QR + credenciales seed.
-# Accesible desde cualquier device de la LAN: https://hub.{$QA_LAN_NIP}.nip.io:8443
-hub.{$QA_LAN_NIP}.nip.io {
+# Accesible desde cualquier device de la LAN de DOS formas:
+#   https://hub.{$QA_LAN_NIP}.nip.io:8443   (requiere que el device resuelva nip.io)
+#   https://{$QA_LAN_IP}:8443               (IP cruda, sin DNS — muchos routers bloquean nip.io)
+#
+# OJO con el puerto: el compose mapea "8443:443", o sea el :8443 del HOST entra al
+# :443 del CONTENEDOR. Por eso el site address se escribe :443 (no :8443) — Caddy
+# escucha dentro del contenedor. Un `{$QA_LAN_IP}:8443` aqui abriria un listener
+# en el 8443 del contenedor, que NO esta publicado, y no responderia nada.
+# No colisiona con el bloque `localhost` (mismo puerto 443, host distinto) ni con
+# {$QA_LAN_IP}:8451 (client-app, otro puerto): Caddy separa sitios por Host.
+hub.{$QA_LAN_NIP}.nip.io, {$QA_LAN_IP}:443 {
 	import tls-long
 	import security-headers
 	encode gzip zstd
