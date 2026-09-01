@@ -69,9 +69,20 @@ http://localhost http://*.qa.smartmenu.local {
 # â”€â”€â”€ HTTP plano vÃ­a LAN IP (legado â€” se queda como fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 http://{$QA_LAN_IP} {
 	encode gzip
-	@apipath path /api/* /uploads/* /hubs/*
-	reverse_proxy @apipath backend:8080
-	reverse_proxy client-app:3000
+	# CA raiz por HTTP PLANO (sin TLS) -> resuelve el problema del huevo y la
+	# gallina: el device no confia en el sitio hasta instalar la CA, pero la CA
+	# se descarga del propio sitio. Sirviendola sin TLS no hay advertencia.
+	# Necesario para instalarla en un smartwatch/telefono Android o en iOS.
+	handle /caddy-root-ca.crt {
+		root * /srv/hub
+		header Content-Type "application/x-x509-ca-cert"
+		file_server
+	}
+	handle {
+		@apipath path /api/* /uploads/* /hubs/*
+		reverse_proxy @apipath backend:8080
+		reverse_proxy client-app:3000
+	}
 }
 
 # â”€â”€â”€ nip.io HTTPS â€” URLs limpias, accesibles desde cualquier device LAN â”€â”€â”€
