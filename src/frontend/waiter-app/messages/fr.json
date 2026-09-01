@@ -54,7 +54,7 @@
     "noConnection": "Pas de connexion"
   },
   "nav": {
-    "generalTables": "Tables générales ({count})",
+    "generalTables": "Tables générales",
     "myTables": "Mes tables ({count})",
     "floorPlan": "Plan de salle",
     "createVirtualTable": "Créer une table virtuelle",

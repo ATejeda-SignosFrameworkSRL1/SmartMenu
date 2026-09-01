@@ -54,7 +54,7 @@
     "noConnection": "Keine Verbindung"
   },
   "nav": {
-    "generalTables": "Alle Tische ({count})",
+    "generalTables": "Alle Tische",
     "myTables": "Meine Tische ({count})",
     "floorPlan": "Grundriss",
     "createVirtualTable": "Virtuellen Tisch erstellen",

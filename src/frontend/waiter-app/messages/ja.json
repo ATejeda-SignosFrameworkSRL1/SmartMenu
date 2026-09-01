@@ -54,7 +54,7 @@
     "noConnection": "接続なし"
   },
   "nav": {
-    "generalTables": "全テーブル ({count})",
+    "generalTables": "全テーブル",
     "myTables": "担当テーブル ({count})",
     "floorPlan": "フロアプラン",
     "createVirtualTable": "バーチャルテーブルを作成",

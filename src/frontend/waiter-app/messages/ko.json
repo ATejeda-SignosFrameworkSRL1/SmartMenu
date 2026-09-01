@@ -54,7 +54,7 @@
     "noConnection": "연결 없음"
   },
   "nav": {
-    "generalTables": "전체 테이블 ({count})",
+    "generalTables": "전체 테이블",
     "myTables": "내 테이블 ({count})",
     "floorPlan": "좌석 배치도",
     "createVirtualTable": "가상 테이블 만들기",

@@ -1819,13 +1819,9 @@ export default function WaiterPage() {
               view === 'general' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            {t('nav.generalTables', { count: (() => {
-              const vtTableIds = virtualTablesList.flatMap((vt: any) => {
-                const vtTables = Array.isArray(vt?.tables) ? vt.tables : (Array.isArray(vt?.Tables) ? vt.Tables : []);
-                return vtTables.map((tbl: any) => tbl?.id ?? tbl?.Id);
-              });
-              return generalOrders.filter(o => !vtTableIds.includes((o as any).tableId ?? (o as any).TableId)).length;
-            })() })}
+            {/* Sin contador a proposito: el numero solo se muestra en "Mis Mesas".
+                Se elimino tambien el calculo (recorria las mesas virtuales en cada render). */}
+            {t('nav.generalTables')}
           </button>
           <button
             onClick={() => setView('my-tables')}

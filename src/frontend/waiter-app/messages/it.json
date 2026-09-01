@@ -54,7 +54,7 @@
     "noConnection": "Nessuna connessione"
   },
   "nav": {
-    "generalTables": "Tavoli Generali ({count})",
+    "generalTables": "Tavoli Generali",
     "myTables": "I Miei Tavoli ({count})",
     "floorPlan": "Mappa",
     "createVirtualTable": "Crea tavolo virtuale",

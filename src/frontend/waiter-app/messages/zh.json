@@ -54,7 +54,7 @@
     "noConnection": "无连接"
   },
   "nav": {
-    "generalTables": "所有桌台 ({count})",
+    "generalTables": "所有桌台",
     "myTables": "我的桌台 ({count})",
     "floorPlan": "平面图",
     "createVirtualTable": "创建虚拟桌",
