@@ -43,3 +43,75 @@ body {
     @apply border-blue-500 hover:shadow-lg;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODO RELOJ (smartwatch Android — p. ej. LOKMAT APPLLP 5 MAX, ~400x400)
+   ───────────────────────────────────────────────────────────────────────────
+   DETECCION: pantalla pequeña en AMBAS dimensiones. Un telefono vertical mide
+   ~375x812 y uno horizontal ~812x375, asi que ninguno entra aqui: solo entran
+   pantallas tipo reloj. (Se puede forzar con la clase .watch-mode en <html>,
+   que activa exactamente las mismas reglas — ver bloque de abajo.)
+
+   TECNICA: Tailwind dimensiona TODO en rem (spacing, tipografia, radios), asi
+   que bajar la raiz escala la interfaz completa de forma proporcional sin
+   tocar miles de clases ni arriesgar la vista normal.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 520px) and (max-height: 560px) {
+  html { font-size: 10.5px; }        /* 16px -> 10.5px  (~66% de escala) */
+
+  /* Contenedores anchos: recuperar los margenes laterales que se comian la pantalla */
+  .max-w-7xl, .max-w-6xl, .max-w-5xl, .max-w-4xl, .max-w-3xl, .max-w-2xl {
+    max-width: 100% !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  /* Rejillas multi-columna -> una sola columna (en 400px dos columnas son ilegibles) */
+  [class*="grid-cols-2"], [class*="grid-cols-3"], [class*="grid-cols-4"],
+  [class*="grid-cols-5"], [class*="grid-cols-6"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Modales a PANTALLA COMPLETA: en un reloj no sobra espacio para overlays flotantes */
+  .fixed.inset-0 { padding: 0 !important; align-items: stretch !important; }
+  .fixed.inset-0 > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    height: 100% !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Objetivo tactil minimo: aunque la UI se reduzca, los botones siguen pulsables
+     con el dedo (el escalado rem los haria demasiado pequeños para tocar). */
+  button, a[role="button"], [role="checkbox"] { min-height: 2.75rem; }
+
+  /* La barra de pestañas (General / Mis Mesas / Plano) puede desbordar: que se
+     deslice en horizontal en vez de romper el layout. */
+  .flex.gap-2, .flex.gap-3 { flex-wrap: wrap; }
+
+  /* Scroll mas comodo y sin barras que roben ancho */
+  body { overscroll-behavior: contain; }
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-thumb { background: rgba(100,116,139,.5); border-radius: 3px; }
+}
+
+/* Override MANUAL del modo reloj (por si la deteccion automatica no aplica en tu
+   dispositivo): añade ?watch=1 a la URL una vez y queda guardado. Mismas reglas. */
+html.watch-mode { font-size: 10.5px; }
+html.watch-mode .max-w-7xl, html.watch-mode .max-w-6xl, html.watch-mode .max-w-5xl,
+html.watch-mode .max-w-4xl, html.watch-mode .max-w-3xl, html.watch-mode .max-w-2xl {
+  max-width: 100% !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important;
+}
+html.watch-mode [class*="grid-cols-2"], html.watch-mode [class*="grid-cols-3"],
+html.watch-mode [class*="grid-cols-4"], html.watch-mode [class*="grid-cols-5"],
+html.watch-mode [class*="grid-cols-6"] { grid-template-columns: 1fr !important; }
+html.watch-mode .fixed.inset-0 { padding: 0 !important; align-items: stretch !important; }
+html.watch-mode .fixed.inset-0 > div {
+  width: 100% !important; max-width: 100% !important; max-height: 100% !important;
+  height: 100% !important; border-radius: 0 !important; margin: 0 !important; overflow-y: auto !important;
+}
+html.watch-mode button, html.watch-mode a[role="button"] { min-height: 2.75rem; }
