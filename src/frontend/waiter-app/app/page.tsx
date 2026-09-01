@@ -346,6 +346,14 @@ export default function WaiterPage() {
   }, []);
   const [myOrderModalOrder, setMyOrderModalOrder] = useState<Order | null>(null);
   const [myOrderModalTab, setMyOrderModalTab] = useState<'kitchen' | 'bar'>('kitchen');
+  // SERVE-FIX.1 — id de la orden con una accion de servir EN VUELO. Sin esto ningun boton de
+  // servir se deshabilitaba y cada tap disparaba 1 PUT + 5 GET; a 5-10 taps impacientes la UI
+  // se congelaba (lo que el mesero percibe como "loop infinito").
+  const [servingId, setServingId] = useState<number | null>(null);
+  // SERVE-FIX.2 — guard de secuencia de loadData: se invoca desde el poll de 30s y desde cada
+  // mutacion sin coordinacion; una respuesta VIEJA que llega tarde pisaba el estado recien
+  // servido y el boton reaparecia (ciclo). Solo la llamada mas reciente puede pintar.
+  const loadSeqRef = useRef(0);
   const [abandonConfirmOrder, setAbandonConfirmOrder] = useState<Order | null>(null);
   // CLAIM-MODAL.1: estado del modal eliminado — el botón "Quedarme con esta Mesa" envía la solicitud directamente.
   // tableIds donde el mesero tiene sesión reclamada (pin activo); se pierde al soltar
@@ -847,6 +855,9 @@ export default function WaiterPage() {
       return;
     }
 
+    // SERVE-FIX.2 — captura la secuencia de ESTA llamada; si al volver ya entro otra mas
+    // reciente, se descarta (evita que el poll de 30s pise el estado recien servido).
+    const seq = ++loadSeqRef.current;
     try {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
@@ -856,6 +867,8 @@ export default function WaiterPage() {
         api.get(`/api/order/my-orders/${waiterId}`),
         api.get(`/api/payment/waiter-stats/${waiterId}`)
       ]);
+
+      if (seq !== loadSeqRef.current) return; // respuesta vieja: no pintar
 
       const unassigned = Array.isArray(unassignedRes.data) ? unassignedRes.data : (unassignedRes.data?.data ?? []);
       const myOrdersList = Array.isArray(myOrdersRes.data) ? myOrdersRes.data : (myOrdersRes.data?.data ?? []);
@@ -867,6 +880,60 @@ export default function WaiterPage() {
       setStats(statsRes?.data ?? { totalSales: 0, totalTips: 0, totalAmount: 0, transactionCount: 0 });
     } catch (error: any) {
       console.error('Error loading data:', error);
+    }
+  };
+
+  // SERVE-FIX.3 — re-sincroniza la orden abierta en el modal con los datos frescos del poll.
+  // Antes, myOrderModalOrder era un SNAPSHOT congelado del momento de abrir: si cocina/bar
+  // pasaban a "listo" despues, los botones "Servir Cocina"/"Servir Bar" quedaban deshabilitados
+  // PARA SIEMPRE (leian el snapshot viejo) y solo se arreglaba cerrando y reabriendo el modal.
+  useEffect(() => {
+    if (!showMyOrderModal || !myOrderModalOrder) return;
+    const openId = getOrderId(myOrderModalOrder);
+    const fresh = myOrders.find((o: any) => getOrderId(o) === openId);
+    if (fresh && fresh !== myOrderModalOrder) setMyOrderModalOrder(fresh);
+    // myOrderModalOrder fuera de deps a proposito: solo reaccionamos a datos nuevos del poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myOrders, showMyOrderModal]);
+
+  // SERVE-FIX.4 — SERVIR TODO lo pendiente en UNA sola accion.
+  // El backend solo pasa la orden a Served cuando AMBAS partes estan servidas
+  // (SetKitchenServedAsync: `if (!hasDrinks || order.BarServed)`), asi que en una orden mixta
+  // servir solo cocina devolvia 200 pero dejaba la orden en Ready/Confirmed — sin aviso — y el
+  // mesero se quedaba sin salida visible (el boton de Bar vivia detras del 2do tab del modal,
+  // y "Marcar Servido" exigia que YA estuviera todo servido). Esto sirve cocina y bar segun
+  // corresponda y deja la orden efectivamente Servida.
+  const serveAll = async (order: Order) => {
+    if (!user) return;
+    const orderId = getOrderId(order);
+    if (servingId === orderId) return; // ya hay una accion en vuelo para esta orden
+    const items = (order as any).items ?? [];
+    const hasFood = items.some((i: any) => !itemIsDrink(i));
+    const hasDrinks = items.some((i: any) => itemIsDrink(i));
+    const kServed = (order as any).kitchenServed ?? (order as any).KitchenServed ?? false;
+    const bServed = (order as any).barServed ?? (order as any).BarServed ?? false;
+
+    setServingId(orderId);
+    try {
+      let done = 0;
+      const errors: string[] = [];
+      if (hasFood && !kServed) {
+        try { await api.put(`/api/order/${orderId}/kitchen-served`); done++; }
+        catch (e: any) { errors.push(e?.response?.data?.error ?? 'cocina'); }
+      }
+      if (hasDrinks && !bServed) {
+        try { await api.put(`/api/order/${orderId}/bar-served`); done++; }
+        catch (e: any) { errors.push(e?.response?.data?.error ?? 'bar'); }
+      }
+      if (errors.length > 0) {
+        toast.error(errors[0]);
+      } else if (done > 0) {
+        toast.success(t('orders.markServedSuccess'));
+      }
+      await loadData(getUserId(user));
+      loadVirtualTables();
+    } finally {
+      setServingId(null); // siempre se limpia: sin esto el boton quedaria muerto
     }
   };
 
@@ -2333,21 +2400,33 @@ export default function WaiterPage() {
                         )}
                         {/* TAREA 5: en modo transferencia ocultamos las acciones por-mesa para evitar
                             clicks accidentales; el card sólo se marca/desmarca. */}
-                        {!transferMode && (!hasFoodItems || kitchenServed) && (!hasDrinkItems || barServed) && order.status !== 'Served' && order.status !== 'Completed' && order.status !== 'Pending' && (
+                        {/* SERVE-FIX.5 — un SOLO boton que siempre da salida:
+                            · si falta servir cocina y/o bar -> serveAll (sirve TODO lo pendiente).
+                              Antes este boton exigia que ya estuviera todo servido, asi que en una
+                              orden mixta (comida + bebida) el mesero no tenia ninguna accion
+                              visible y la orden se quedaba atascada en Ready = "loop infinito".
+                            · si ya esta todo servido pero la orden no cerro -> marcar Served.
+                            Deshabilitado mientras la peticion vuela (evita la avalancha de taps). */}
+                        {!transferMode && order.status !== 'Served' && order.status !== 'Completed' && order.status !== 'Pending' && order.status !== 'Cancelled' && (
                           <button
+                            disabled={servingId === getOrderId(order)}
                             onClick={async (e) => {
                               e.stopPropagation();
                               const oid = getOrderId(order);
+                              const bothServedNow = (!hasFoodItems || kitchenServed) && (!hasDrinkItems || barServed);
+                              if (!bothServedNow) { await serveAll(order); return; }
+                              setServingId(oid);
                               try {
                                 await api.put(`/api/order/${oid}/status`, { newStatus: 'Served' });
                                 toast.success(t('orders.markServedSuccess'));
-                                loadData(getUserId(user));
+                                await loadData(getUserId(user));
                                 loadVirtualTables();
                               } catch (err: any) { toast.error(err?.response?.data?.error || t('orders.markServedError')); }
+                              finally { setServingId(null); }
                             }}
-                            className="w-full mt-2 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-bold flex items-center justify-center gap-1"
+                            className="w-full mt-2 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center justify-center gap-1"
                           >
-                            {t('tables.markServed')}
+                            {servingId === getOrderId(order) ? '…' : t('tables.markServed')}
                           </button>
                         )}
                         {/* Confirmar cancelación: la card Cancelled se queda en my-orders sin
@@ -3178,22 +3257,31 @@ export default function WaiterPage() {
 
         const closeModal = () => { setShowMyOrderModal(false); setMyOrderModalOrder(null); };
 
+        // SERVE-FIX.1 — setServingId envuelve la peticion: el boton queda deshabilitado mientras
+        // vuela, y el finally SIEMPRE lo libera (sin esto, taps repetidos encimaban 6 requests
+        // cada uno y congelaban la UI).
         const doKitchenServed = async () => {
+          if (servingId === orderId) return;
+          setServingId(orderId);
           try {
             const res = await api.put(`/api/order/${orderId}/kitchen-served`);
             toast.success(t('orders.foodServedSuccess'));
             setMyOrderModalOrder((prev: any) => prev ? { ...prev, ...(res.data ?? {}), kitchenServed: true, KitchenServed: true } : prev);
-            loadData(getUserId(user));
+            await loadData(getUserId(user));
           } catch (e: any) { toast.error(e?.response?.data?.error || t('orders.registerError')); }
+          finally { setServingId(null); }
         };
 
         const doBarServed = async () => {
+          if (servingId === orderId) return;
+          setServingId(orderId);
           try {
             const res = await api.put(`/api/order/${orderId}/bar-served`);
             toast.success(t('orders.drinksServedSuccess'));
             setMyOrderModalOrder((prev: any) => prev ? { ...prev, ...(res.data ?? {}), barServed: true, BarServed: true } : prev);
-            loadData(getUserId(user));
+            await loadData(getUserId(user));
           } catch (e: any) { toast.error(e?.response?.data?.error || t('orders.registerError')); }
+          finally { setServingId(null); }
         };
 
         return (
@@ -3277,10 +3365,23 @@ export default function WaiterPage() {
                     {(order as any).isTakeaway ? `🥡 ${t('orders.confirmSend')}` : t('orders.confirmSend')}
                   </button>
                 )}
+                {/* SERVE-FIX.6 — SERVIR TODO: en una orden mixta el boton de Bar solo se renderiza
+                    si el tab activo es "bar", asi que tras servir cocina el mesero se quedaba sin
+                    ninguna accion a la vista y la orden nunca cerraba. Este boton sirve cocina Y
+                    bar de una, sin depender del tab. Se muestra solo si falta algo por servir. */}
+                {order.status !== 'Pending' && order.status !== 'Cancelled' && !bothServed && (
+                  <button
+                    disabled={servingId === orderId}
+                    onClick={() => serveAll(order)}
+                    className="w-full py-2.5 rounded-lg font-bold text-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2"
+                  >
+                    {servingId === orderId ? '…' : `✅ ${t('tables.markServed')}`}
+                  </button>
+                )}
                 {/* Servir Cocina */}
                 {order.status !== 'Pending' && (!hasDrinkItems || myOrderModalTab === 'kitchen' || !hasFoodItems) && hasFoodItems && (
                   <button
-                    disabled={!kitchenReady || kitchenServed}
+                    disabled={!kitchenReady || kitchenServed || servingId === orderId}
                     onClick={doKitchenServed}
                     className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 ${
                       kitchenServed ? 'bg-teal-100 text-teal-700 cursor-default'
@@ -3291,10 +3392,11 @@ export default function WaiterPage() {
                     {kitchenServed ? t('orders.kitchenServedDone') : kitchenReady ? t('orders.kitchenReadyBtn') : t('orders.kitchenPreparing')}
                   </button>
                 )}
-                {/* Servir Bar */}
-                {order.status !== 'Pending' && (!hasFoodItems || myOrderModalTab === 'bar' || !hasDrinkItems) && hasDrinkItems && (
+                {/* Servir Bar — SERVE-FIX.6: ya no depende del tab activo; en una orden mixta el
+                    mesero debe poder servir el bar sin cambiar de pestaña. */}
+                {order.status !== 'Pending' && hasDrinkItems && (
                   <button
-                    disabled={!barReady || barServed}
+                    disabled={!barReady || barServed || servingId === orderId}
                     onClick={doBarServed}
                     className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 ${
                       barServed ? 'bg-teal-100 text-teal-700 cursor-default'
