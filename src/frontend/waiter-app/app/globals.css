@@ -57,7 +57,10 @@ body {
    tocar miles de clases ni arriesgar la vista normal.
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 520px) and (max-height: 560px) {
-  html { font-size: 10.5px; }        /* 16px -> 10.5px  (~66% de escala) */
+  /* Respaldo SIN JavaScript. Normalmente manda el script inline del layout, que
+     calcula la raiz desde el viewport real (ancho de diseño fijo) y gana por ser
+     estilo inline. Esto solo actua si el JS no corrio. */
+  html { font-size: 11px; }
 
   /* Contenedores anchos: recuperar los margenes laterales que se comian la pantalla */
   .max-w-7xl, .max-w-6xl, .max-w-5xl, .max-w-4xl, .max-w-3xl, .max-w-2xl {
@@ -101,7 +104,7 @@ body {
 
 /* Override MANUAL del modo reloj (por si la deteccion automatica no aplica en tu
    dispositivo): añade ?watch=1 a la URL una vez y queda guardado. Mismas reglas. */
-html.watch-mode { font-size: 10.5px; }
+html.watch-mode { font-size: 11px; }   /* respaldo; el script inline lo sobreescribe */
 html.watch-mode .max-w-7xl, html.watch-mode .max-w-6xl, html.watch-mode .max-w-5xl,
 html.watch-mode .max-w-4xl, html.watch-mode .max-w-3xl, html.watch-mode .max-w-2xl {
   max-width: 100% !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important;
@@ -115,3 +118,21 @@ html.watch-mode .fixed.inset-0 > div {
   height: 100% !important; border-radius: 0 !important; margin: 0 !important; overflow-y: auto !important;
 }
 html.watch-mode button, html.watch-mode a[role="button"] { min-height: 2.75rem; }
+
+/* ─── MODO RELOJ · altura ──────────────────────────────────────────────────────
+   La pantalla mide 480 px de alto en 2.4 pulgadas, asi que el espacio vertical
+   es el recurso escaso: se recorta el relleno vertical y se compacta la cabecera
+   para que quepan mas tarjetas de mesa sin tener que desplazarse tanto. */
+@media (max-width: 520px) and (max-height: 560px) {
+  .py-6, .py-8 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+  .mb-6, .mb-8 { margin-bottom: 0.5rem !important; }
+  .gap-6, .gap-8 { gap: 0.5rem !important; }
+  header, .sticky { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+  /* El reloj no tiene cursor: los estados hover solo estorban */
+  * { -webkit-tap-highlight-color: rgba(22,163,74,.25); }
+}
+html.watch-mode .py-6, html.watch-mode .py-8 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+html.watch-mode .mb-6, html.watch-mode .mb-8 { margin-bottom: 0.5rem !important; }
+html.watch-mode .gap-6, html.watch-mode .gap-8 { gap: 0.5rem !important; }
+html.watch-mode header, html.watch-mode .sticky { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+html.watch-mode * { -webkit-tap-highlight-color: rgba(22,163,74,.25); }
