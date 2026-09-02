@@ -20,6 +20,7 @@
 	# Caddy genera su propio CA local; se persiste en el volumen caddy-data.
 	# Si quisieras emitir certs reales (Let's Encrypt) tendrÃ­as que cambiar a global email + hosts pÃºblicos.
 	auto_https disable_redirects
+	default_sni {$QA_LAN_IP}
 	admin off
 }
 

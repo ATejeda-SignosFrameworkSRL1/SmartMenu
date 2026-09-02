@@ -21,7 +21,7 @@ try {
 
 // Server IP (dotted). Override via argv[2]. nip.io needs the dashed form.
 // El default debe coincidir con QA_LAN_IP en docker/qa/.env (lo escribe update-lan-ip.ps1).
-const ip = process.argv[2] || '172.31.98.82';
+const ip = process.argv[2] || '172.31.98.87';
 const dashed = ip.replace(/\./g, '-');
 // DNS-free: IP cruda + puerto por panel. El cell NO necesita resolver nip.io
 // (su router suele bloquear DNS que apunta a IP privada). Solo acepta el cert una vez.
