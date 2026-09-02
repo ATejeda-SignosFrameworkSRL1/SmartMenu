@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
+import { Toaster } from "react-hot-toast";
 import { InactivityGuard } from "./components/InactivityGuard";
 import { dirFor } from "@/i18n/config";
 
@@ -15,9 +16,9 @@ export const metadata: Metadata = {
 };
 
 // SMARTWATCH — viewport explícito. Sin esto quedaba el default de Next y no había control
-// de zoom ni del área segura: en un reloj (pantalla ~400px, a veces con bisel redondo) el
-// contenido se recortaba en los bordes. `viewport-fit: cover` respeta las safe-areas y
-// maximumScale 5 deja al mesero hacer zoom si necesita leer algo puntual.
+// de zoom ni del área segura: en un panel de 2.4" (640x480, ~333 PPI) el contenido se
+// recortaba en los bordes. `viewport-fit: cover` respeta las safe-areas y maximumScale 5
+// deja al mesero hacer zoom si necesita leer algo puntual.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -97,6 +98,26 @@ export default async function RootLayout({
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}
+          {/* page.tsx hace 66 llamadas a toast.* pero <Toaster/> no estaba montado en
+              ninguna parte, asi que NINGUNA se pintaba: al confirmar un cobro no habia
+              señal alguna y los errores del catch eran completamente mudos. Es lo que
+              hacia sentir la app "colgada". client-app y reservation-app si lo montan,
+              o sea que era un olvido, no un diseño.
+              Medidas en rem a proposito: los valores por defecto de la libreria son px
+              duros y no escalarian con el modo reloj. */}
+          <Toaster
+            position="top-center"
+            containerStyle={{ top: '0.5rem' }}
+            toastOptions={{
+              duration: 3000,
+              style: {
+                fontSize: '0.875rem',
+                padding: '0.5rem 0.75rem',
+                maxWidth: '20rem',
+                lineHeight: '1.25',
+              },
+            }}
+          />
           {/* Sprint 4.1 — auto-logout 90s para sesiones PIN (no afecta login normal) */}
           <InactivityGuard timeoutSeconds={90} warningSeconds={15} />
         </NextIntlClientProvider>

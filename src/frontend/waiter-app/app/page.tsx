@@ -2137,7 +2137,7 @@ export default function WaiterPage() {
               <h2 className="text-xl font-bold text-gray-900 mb-4">
                 {t('tables.allTables', { count: tablesNotMine.length })}
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="watch-cols grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {tablesNotMine.map((table) => {
                   const unassignedOrder = generalOrders.find(o => String(o.tableNumber) === String(table.tableNumber));
                   const hasUnassigned = !!unassignedOrder;
@@ -2911,7 +2911,7 @@ export default function WaiterPage() {
                 {/* Propina */}
                 <div>
                   <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.tipTitle')}</p>
-                  <div className="grid grid-cols-4 gap-2 mb-2">
+                  <div className="watch-cols grid grid-cols-4 gap-2 mb-2">
                     {[{pct:10,label:'10%'},{pct:15,label:'15%'},{pct:20,label:'20%'},{pct:0,label:t('payment.noTip')}].map(({pct,label}) => (
                       <button key={label} type="button"
                         onClick={() => { setPmTipPct(pct); setPmCustomTip(''); }}
@@ -2933,7 +2933,7 @@ export default function WaiterPage() {
                 {/* Método de pago */}
                 <div>
                   <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.methodTitle')}</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="watch-cols grid grid-cols-2 gap-2">
                     {[
                       { id: 'Cash',     name: t('payment.methodCash') },
                       { id: 'Card',     name: t('payment.methodCard') },

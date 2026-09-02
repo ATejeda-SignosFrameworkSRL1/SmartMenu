@@ -109,7 +109,7 @@ export function PinPad({
       )}
 
       {/* Keypad 3x4 */}
-      <div className="grid grid-cols-3 gap-3 w-full">
+      <div className="watch-cols grid grid-cols-3 gap-3 w-full">
         {digits.slice(0, 9).map(d => (
           <button
             key={d}

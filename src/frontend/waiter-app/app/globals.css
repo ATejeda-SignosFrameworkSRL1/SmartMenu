@@ -45,94 +45,84 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MODO RELOJ (smartwatch Android — p. ej. LOKMAT APPLLP 5 MAX, ~400x400)
+   MODO RELOJ (smartwatch Android — LOKMAT APPLLP 5 MAX: 2.4", 640x480, ~333 PPI)
    ───────────────────────────────────────────────────────────────────────────
-   DETECCION: pantalla pequeña en AMBAS dimensiones. Un telefono vertical mide
-   ~375x812 y uno horizontal ~812x375, asi que ninguno entra aqui: solo entran
-   pantallas tipo reloj. (Se puede forzar con la clase .watch-mode en <html>,
-   que activa exactamente las mismas reglas — ver bloque de abajo.)
+   ACTIVACION: la clase .watch-mode la pone el script inline de layout.tsx, que
+   ademas deriva la raiz del viewport real (ancho de diseño fijo de 360px). Se
+   activa con ?watch=1 (persistido) o por deteccion automatica.
 
-   TECNICA: Tailwind dimensiona TODO en rem (spacing, tipografia, radios), asi
-   que bajar la raiz escala la interfaz completa de forma proporcional sin
-   tocar miles de clases ni arriesgar la vista normal.
+   POR QUE NO HAY @media DE RESPALDO: esta app no renderiza nada sin JavaScript
+   (todo el contenido entra por useEffect), asi que un respaldo sin-JS no sirve
+   de nada. Y una media query NO PUEDE cubrir este panel: a DPR 1 el viewport es
+   640x480 y cualquier limite de ancho que lo incluyera atraparia tambien a un
+   telefono Android en horizontal (640x360). Un unico selector = una sola fuente
+   de verdad, sin reglas que se desincronicen.
+
+   LIENZO DE TRABAJO: 360 x 270 px de diseño. El ALTO es el recurso escaso.
    ═══════════════════════════════════════════════════════════════════════════ */
-@media (max-width: 520px) and (max-height: 560px) {
-  /* Respaldo SIN JavaScript. Normalmente manda el script inline del layout, que
-     calcula la raiz desde el viewport real (ancho de diseño fijo) y gana por ser
-     estilo inline. Esto solo actua si el JS no corrio. */
-  html { font-size: 11px; }
-
-  /* Contenedores anchos: recuperar los margenes laterales que se comian la pantalla */
-  .max-w-7xl, .max-w-6xl, .max-w-5xl, .max-w-4xl, .max-w-3xl, .max-w-2xl {
-    max-width: 100% !important;
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
-  }
-
-  /* Rejillas multi-columna -> una sola columna (en 400px dos columnas son ilegibles) */
-  [class*="grid-cols-2"], [class*="grid-cols-3"], [class*="grid-cols-4"],
-  [class*="grid-cols-5"], [class*="grid-cols-6"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Modales a PANTALLA COMPLETA: en un reloj no sobra espacio para overlays flotantes */
-  .fixed.inset-0 { padding: 0 !important; align-items: stretch !important; }
-  .fixed.inset-0 > div {
-    width: 100% !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
-    height: 100% !important;
-    border-radius: 0 !important;
-    margin: 0 !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* Objetivo tactil minimo: aunque la UI se reduzca, los botones siguen pulsables
-     con el dedo (el escalado rem los haria demasiado pequeños para tocar). */
-  button, a[role="button"], [role="checkbox"] { min-height: 2.75rem; }
-
-  /* La barra de pestañas (General / Mis Mesas / Plano) puede desbordar: que se
-     deslice en horizontal en vez de romper el layout. */
-  .flex.gap-2, .flex.gap-3 { flex-wrap: wrap; }
-
-  /* Scroll mas comodo y sin barras que roben ancho */
-  body { overscroll-behavior: contain; }
-  ::-webkit-scrollbar { width: 3px; height: 3px; }
-  ::-webkit-scrollbar-thumb { background: rgba(100,116,139,.5); border-radius: 3px; }
-}
-
-/* Override MANUAL del modo reloj (por si la deteccion automatica no aplica en tu
-   dispositivo): añade ?watch=1 a la URL una vez y queda guardado. Mismas reglas. */
 html.watch-mode { font-size: 11px; }   /* respaldo; el script inline lo sobreescribe */
+
+/* ─── Ancho ─────────────────────────────────────────────────────────────────── */
 html.watch-mode .max-w-7xl, html.watch-mode .max-w-6xl, html.watch-mode .max-w-5xl,
 html.watch-mode .max-w-4xl, html.watch-mode .max-w-3xl, html.watch-mode .max-w-2xl {
   max-width: 100% !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important;
 }
-html.watch-mode [class*="grid-cols-2"], html.watch-mode [class*="grid-cols-3"],
-html.watch-mode [class*="grid-cols-4"], html.watch-mode [class*="grid-cols-5"],
-html.watch-mode [class*="grid-cols-6"] { grid-template-columns: 1fr !important; }
+
+/* Rejillas multi-columna -> una columna. La lista va ENUMERADA a proposito: un
+   [class*="grid-cols-"] generico atraparia grid-cols-1, 7..12 y arbitrarios.
+   .watch-cols es la valvula de escape para las rejillas que SI deben conservar
+   sus columnas (propina, metodo de pago, mesas, teclado del PIN): apiladas
+   ocupan mas alto que toda la pantalla. */
+html.watch-mode [class*="grid-cols-2"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-3"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-4"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-5"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-6"]:not(.watch-cols) { grid-template-columns: 1fr !important; }
+
+/* ─── Modales a pantalla completa ───────────────────────────────────────────── */
 html.watch-mode .fixed.inset-0 { padding: 0 !important; align-items: stretch !important; }
 html.watch-mode .fixed.inset-0 > div {
   width: 100% !important; max-width: 100% !important; max-height: 100% !important;
-  height: 100% !important; border-radius: 0 !important; margin: 0 !important; overflow-y: auto !important;
+  height: 100% !important; border-radius: 0 !important; margin: 0 !important;
+  overflow-y: auto !important; -webkit-overflow-scrolling: touch;
 }
-html.watch-mode button, html.watch-mode a[role="button"] { min-height: 2.75rem; }
 
-/* ─── MODO RELOJ · altura ──────────────────────────────────────────────────────
-   La pantalla mide 480 px de alto en 2.4 pulgadas, asi que el espacio vertical
-   es el recurso escaso: se recorta el relleno vertical y se compacta la cabecera
-   para que quepan mas tarjetas de mesa sin tener que desplazarse tanto. */
-@media (max-width: 520px) and (max-height: 560px) {
-  .py-6, .py-8 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
-  .mb-6, .mb-8 { margin-bottom: 0.5rem !important; }
-  .gap-6, .gap-8 { gap: 0.5rem !important; }
-  header, .sticky { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
-  /* El reloj no tiene cursor: los estados hover solo estorban */
-  * { -webkit-tap-highlight-color: rgba(22,163,74,.25); }
+/* ─── Area tactil ───────────────────────────────────────────────────────────── */
+/* El escalado rem volveria los controles intocables, asi que se les pone un
+   suelo. Los botones-icono ([data-icon-btn]) quedan EXENTOS: un suelo de 2.75rem
+   los infla y arrastra el alto de toda su fila. */
+html.watch-mode button:not([data-icon-btn]),
+html.watch-mode a[role="button"],
+html.watch-mode [role="checkbox"] { min-height: 2.75rem; }
+html.watch-mode button[data-icon-btn] {
+  min-height: 0; width: 2.25rem; height: 2.25rem; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
 }
+/* min-height no cubre los campos de formulario, y los importes del cobro
+   quedaban en 3 mm de alto. */
+html.watch-mode input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+html.watch-mode select, html.watch-mode textarea { min-height: 2.75rem; }
+
+/* ─── Alto: el recurso escaso (270 px de diseño) ────────────────────────────── */
+/* Solo se colapsaban py-6/py-8, pero las cabeceras y pies de TODOS los modales
+   usan p-6/p-4/py-4. Esto es lo que mas alto recupera. */
+html.watch-mode .p-6, html.watch-mode .p-5 { padding: 0.5rem !important; }
+html.watch-mode .p-4 { padding: 0.375rem !important; }
 html.watch-mode .py-6, html.watch-mode .py-8 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+html.watch-mode .py-4, html.watch-mode .py-3 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+html.watch-mode .px-6, html.watch-mode .px-5 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+html.watch-mode .pb-6, html.watch-mode .pb-8 { padding-bottom: 0.5rem !important; }
 html.watch-mode .mb-6, html.watch-mode .mb-8 { margin-bottom: 0.5rem !important; }
 html.watch-mode .gap-6, html.watch-mode .gap-8 { gap: 0.5rem !important; }
-html.watch-mode header, html.watch-mode .sticky { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
-html.watch-mode * { -webkit-tap-highlight-color: rgba(22,163,74,.25); }
+html.watch-mode .gap-2, html.watch-mode .gap-3,
+html.watch-mode .gap-4, html.watch-mode .gap-5 { gap: 0.375rem !important; }
+html.watch-mode .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem !important; }
+/* Nota: no se toca `header` — en page.tsx no existe ningun <header>; la regla
+   anterior no casaba con nada. Los .sticky si existen (cabeceras de modal). */
+html.watch-mode .sticky { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+
+/* ─── Tacto y scroll ────────────────────────────────────────────────────────── */
+html.watch-mode { -webkit-tap-highlight-color: rgba(22,163,74,.25); }
+html.watch-mode body { overscroll-behavior: contain; }
+html.watch-mode ::-webkit-scrollbar { width: 3px; height: 3px; }
+html.watch-mode ::-webkit-scrollbar-thumb { background: rgba(100,116,139,.5); border-radius: 3px; }
