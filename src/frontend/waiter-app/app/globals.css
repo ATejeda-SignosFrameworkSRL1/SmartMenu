@@ -95,12 +95,19 @@ html.watch-mode .fixed.inset-0 {
   padding: 0.25rem !important;
   align-items: center !important;
   overflow-y: auto !important;
+  max-height: 100vh !important;
 }
 html.watch-mode .fixed.inset-0 > div {
   width: 100% !important;
   max-width: 100% !important;
   height: auto !important;
-  max-height: 100% !important;
+  /* El tope va en vh, NO en %. Medido en el reloj real (640x480, DPR 1): con
+     max-height:100% el panel salio 552 px de alto sobre una pantalla de 480 y
+     se desbordaba 72 px. Un porcentaje depende de que el padre resuelva su
+     altura; vh se mide contra el viewport y no falla. Se usa vh y no dvh a
+     proposito: dvh es Chrome 108+ y el WebView de Android 10 puede descartar
+     la declaracion en silencio. Se resta el padding del overlay. */
+  max-height: calc(100vh - 0.5rem) !important;
   margin: auto !important;
   border-radius: 0.5rem !important;
   overflow-y: auto !important;

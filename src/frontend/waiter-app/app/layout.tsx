@@ -114,8 +114,15 @@ export default async function RootLayout({
                 var desc=(t.tagName||'?')+(cn?'.'+cn.split(/\s+/).slice(0,2).join('.'):'');
                 setTimeout(function(){
                   mount();
-                  var m=document.querySelector('.fixed.inset-0');
-                  var geo=m?Math.round(m.getBoundingClientRect().width)+'x'+Math.round(m.getBoundingClientRect().height):'-';
+                  var ms=document.querySelectorAll('.fixed.inset-0');
+                  var m=ms[ms.length-1];   // el ultimo montado = el que se ve
+                  var geo='-';
+                  if(m){
+                    var pn=m.firstElementChild, R=function(x){var r=x.getBoundingClientRect();
+                      return Math.round(r.width)+'x'+Math.round(r.height);};
+                    geo=ms.length+'  capa '+R(m)+(pn?('  panel '+R(pn)+
+                      '  cabe:'+(pn.getBoundingClientRect().height<=window.innerHeight?'si':'NO')):'');
+                  }
                   put('taps:'+taps+'  vw:'+window.innerWidth+'x'+window.innerHeight+'  fs:'+d.style.fontSize+
                       NL+'tap: '+desc.slice(0,58)+
                       NL+'modal en DOM: '+(m?('SI  '+geo):'NO'));
