@@ -91,6 +91,36 @@ export default async function RootLayout({
               scale();
               window.addEventListener('resize',scale);
               window.addEventListener('orientationchange',function(){setTimeout(scale,250);});
+              // ?wdebug=1 -> barra de diagnostico en el propio dispositivo. Existe
+              // porque el entorno de desarrollo no puede reproducir el tactil del
+              // reloj: dice si un toque llego al handler y si el modal entro al DOM,
+              // que es justo lo que distingue "el tap no registra" de "el modal se
+              // abre pero no se ve".
+              if(p.get('wdebug')==='1'&&LS){LS.setItem('waiter_watch_debug','1');}
+              else if(p.get('wdebug')==='0'&&LS){LS.removeItem('waiter_watch_debug');}
+              if(!(LS&&LS.getItem('waiter_watch_debug')==='1')) return;
+              var bar=document.createElement('div');
+              bar.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147483647;'+
+                'background:rgba(0,0,0,.85);color:#4ade80;font:9px/1.3 monospace;padding:2px 4px;'+
+                'pointer-events:none;white-space:pre-wrap';
+              var taps=0, NL=String.fromCharCode(10);
+              function put(msg){bar.textContent=msg;}
+              function mount(){ if(document.body&&!bar.parentNode){document.body.appendChild(bar);
+                put('listo vw:'+window.innerWidth+'x'+window.innerHeight+' fs:'+d.style.fontSize);} }
+              if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',mount);}else{mount();}
+              document.addEventListener('click',function(e){
+                taps++;
+                var t=e.target||{}, cn=(typeof t.className==='string'?t.className:'');
+                var desc=(t.tagName||'?')+(cn?'.'+cn.split(/\s+/).slice(0,2).join('.'):'');
+                setTimeout(function(){
+                  mount();
+                  var m=document.querySelector('.fixed.inset-0');
+                  var geo=m?Math.round(m.getBoundingClientRect().width)+'x'+Math.round(m.getBoundingClientRect().height):'-';
+                  put('taps:'+taps+'  vw:'+window.innerWidth+'x'+window.innerHeight+'  fs:'+d.style.fontSize+
+                      NL+'tap: '+desc.slice(0,58)+
+                      NL+'modal en DOM: '+(m?('SI  '+geo):'NO'));
+                },150);
+              },true);
             }catch(e){}})();`,
           }}
         />

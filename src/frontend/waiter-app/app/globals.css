@@ -121,6 +121,22 @@ html.watch-mode .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25r
    anterior no casaba con nada. Los .sticky si existen (cabeceras de modal). */
 html.watch-mode .sticky { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
 
+/* ─── Fiabilidad del toque ──────────────────────────────────────────────────── */
+/* La app no declaraba touch-action en ninguna parte y el viewport permite zoom,
+   asi que Chrome trata cada toque como posible primera mitad de un doble-toque:
+   retrasa el click y, en una pantalla de 49 mm donde el dedo cubre varios
+   controles, a veces lo descarta. `manipulation` desactiva el doble-toque-zoom
+   SOLO en los controles (el pinch-zoom de la pagina se conserva), asi que el tap
+   se dispara de inmediato. */
+html.watch-mode button, html.watch-mode a, html.watch-mode input,
+html.watch-mode select, html.watch-mode textarea, html.watch-mode label,
+html.watch-mode [role="button"], html.watch-mode [class*="cursor-pointer"] {
+  touch-action: manipulation;
+}
+/* Las tarjetas de mesa son el objetivo mas tocado: darles un alto minimo real
+   para que el dedo acierte sin necesidad de precision. */
+html.watch-mode .watch-cols > [class*="cursor-pointer"] { min-height: 3.25rem; }
+
 /* ─── Tacto y scroll ────────────────────────────────────────────────────────── */
 html.watch-mode { -webkit-tap-highlight-color: rgba(22,163,74,.25); }
 html.watch-mode body { overscroll-behavior: contain; }
