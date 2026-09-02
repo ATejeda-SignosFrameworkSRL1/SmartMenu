@@ -79,13 +79,58 @@ html.watch-mode [class*="grid-cols-4"]:not(.watch-cols),
 html.watch-mode [class*="grid-cols-5"]:not(.watch-cols),
 html.watch-mode [class*="grid-cols-6"]:not(.watch-cols) { grid-template-columns: 1fr !important; }
 
-/* ─── Modales a pantalla completa ───────────────────────────────────────────── */
-html.watch-mode .fixed.inset-0 { padding: 0 !important; align-items: stretch !important; }
-html.watch-mode .fixed.inset-0 > div {
-  width: 100% !important; max-width: 100% !important; max-height: 100% !important;
-  height: 100% !important; border-radius: 0 !important; margin: 0 !important;
-  overflow-y: auto !important; -webkit-overflow-scrolling: touch;
+/* ─── Modales ───────────────────────────────────────────────────────────────────
+   Antes se forzaban a pantalla completa con height:100%. Eso era un error: los
+   modales de esta app son `flex flex-col` con cuerpos `flex-1` + `overflow-y-auto`,
+   y al fijar el alto del panel esos cuerpos colapsaban a 0 px. Como ademas
+   recortan su contenido (overflow auto con alto cero), el modal se abria VACIO
+   y parecia no abrirse. Es lo que dejaba inalcanzables confirmar, servir, cobrar
+   y liberar mesa.
+
+   Ahora el panel se dimensiona por su CONTENIDO (height:auto) con techo en la
+   pantalla, y es el UNICO eje de scroll: los scrollers internos se neutralizan
+   para que todo fluya en una sola columna. Sale mas pequeño que la pantalla
+   cuando el contenido es corto, que es justo lo deseable en 2.4". */
+html.watch-mode .fixed.inset-0 {
+  padding: 0.25rem !important;
+  align-items: center !important;
+  overflow-y: auto !important;
 }
+html.watch-mode .fixed.inset-0 > div {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 100% !important;
+  margin: auto !important;
+  border-radius: 0.5rem !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+/* Un solo eje de scroll: sin esto, cada contenedor anidado con flex-1 y
+   overflow-y-auto se queda sin alto y recorta lo que contiene. */
+html.watch-mode .fixed.inset-0 > div .overflow-y-auto,
+html.watch-mode .fixed.inset-0 > div .overflow-auto {
+  overflow: visible !important;
+  max-height: none !important;
+}
+html.watch-mode .fixed.inset-0 > div .flex-1 {
+  flex: 0 0 auto !important;
+  min-height: auto !important;
+}
+/* Alturas fijas en px o vh que no escalan con rem (foto del detalle de plato,
+   listas con max-h-*): que no se coman la pantalla ni recorten. */
+html.watch-mode .fixed.inset-0 > div [class*="max-h-"] { max-height: none !important; }
+html.watch-mode .fixed.inset-0 > div [class*="h-44"],
+html.watch-mode .fixed.inset-0 > div [class*="h-52"] { height: 3.5rem !important; }
+/* Las cabeceras/pies sticky de modal pierden sentido con un solo scroller y
+   ademas tapaban botones. */
+html.watch-mode .fixed.inset-0 > div .sticky { position: static !important; }
+
+/* ─── Cromo que se oculta en el reloj ───────────────────────────────────────────
+   El atributo no lleva ningun estilo fuera del modo reloj, asi que en telefono y
+   tablet no cambia nada. Los dos envoltorios usan `contents` (no generan caja),
+   de modo que ahi siguen siendo hijos directos del flex de la cabecera. */
+html.watch-mode [data-watch-hide] { display: none !important; }
 
 /* ─── Area tactil ───────────────────────────────────────────────────────────── */
 /* El escalado rem volveria los controles intocables, asi que se les pone un

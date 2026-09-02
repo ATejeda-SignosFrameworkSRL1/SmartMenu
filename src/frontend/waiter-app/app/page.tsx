@@ -1687,7 +1687,9 @@ export default function WaiterPage() {
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
             {/* IZQUIERDA: título + Ventas/Propinas */}
             <div className="flex flex-wrap items-center gap-3 sm:gap-5">
-              <div>
+              {/* data-watch-hide: en el reloj (2.4") la cabecera se reduce a Ventas y
+                  Propinas; el titulo y el saludo no aportan y cuestan alto. */}
+              <div data-watch-hide>
                 <h1 className="text-2xl font-bold text-gray-900">{t('header.title')}</h1>
                 <p className="text-sm text-gray-600">{t('header.welcome', { name: user?.firstName || user?.name || 'Usuario' })}</p>
               </div>
@@ -1729,10 +1731,11 @@ export default function WaiterPage() {
               )}
 
               {/* Reloj digital — movido a la derecha, antes de Salir */}
-              <DigitalClock />
-              <LanguageSwitcher />
+              <span className="contents" data-watch-hide><DigitalClock /></span>
+              <span className="contents" data-watch-hide><LanguageSwitcher /></span>
 
               <button
+                data-watch-hide
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
@@ -1845,6 +1848,7 @@ export default function WaiterPage() {
         {/* QR-MESA-DIRECT.1: botón "Identificar mesa por QR" eliminado.
             La identificación se hace tap directo en la card de la mesa (vista Mesas General). */}
         <button
+          data-watch-hide
           onClick={() => { setShowVirtualTableModal(true); loadVirtualTables(); }}
           className="ml-auto flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
         >
