@@ -6,6 +6,7 @@ import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
 import { dirFor } from '@/i18n/config';
 
+import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
@@ -19,6 +20,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
+  manifest: "/manifest.json",
   title: 'SmartMenu - Reservaciones',
   description: 'Reserva tu mesa y disfruta de una experiencia gastronómica única. Cocina de autor en un ambiente exclusivo.',
   keywords: ['restaurante', 'reservaciones', 'cocina gourmet', 'Santo Domingo'],
@@ -47,6 +49,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             error: { iconTheme: { primary: '#EF4444', secondary: '#FAF7F0' } },
           }}
         />
+              <ServiceWorkerRegister />
       </body>
     </html>
   );

@@ -6,6 +6,7 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { InactivityGuard } from "./components/InactivityGuard";
 import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
+import { ScreenWakeLock } from "./components/ScreenWakeLock";
 import { dirFor } from "@/i18n/config";
 
 // Inter como variable CSS: el font-stack de Tailwind antepone Inter y cae a CJK.
@@ -159,6 +160,7 @@ export default async function RootLayout({
             }}
           />
           <ServiceWorkerRegister />
+          <ScreenWakeLock />
           {/* Sprint 4.1 — auto-logout 90s para sesiones PIN (no afecta login normal) */}
           <InactivityGuard timeoutSeconds={90} warningSeconds={15} />
         </NextIntlClientProvider>

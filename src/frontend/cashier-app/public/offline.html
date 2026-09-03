@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sin conexion — SmartMenu Mesero</title>
+<style>
+  :root { color-scheme: light }
+  html,body { margin:0; height:100%; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:.75rem; text-align:center; padding:1rem; background:#f9fafb; color:#111827;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .ic { font-size:2rem }
+  h1 { font-size:1rem; margin:0 }
+  p { font-size:.8rem; color:#4b5563; margin:0; max-width:22rem }
+  button { margin-top:.5rem; min-height:2.75rem; padding:0 1rem; border:0; border-radius:.5rem;
+    background:#16a34a; color:#fff; font:inherit; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="ic">📶</div>
+  <h1>Sin conexion</h1>
+  <p>No se pudo alcanzar el servidor. Revisa que sigues en el Wi-Fi del local y vuelve a intentar.</p>
+  <button onclick="location.reload()">Reintentar</button>
+</body>
+</html>
