@@ -69,7 +69,7 @@
     <b>⚠️ Aviso de certificado (una vez por dispositivo):</b> al abrir cada URL verás
     <i>"La conexión no es privada"</i> → <b>Avanzado → Continuar</b>. Para quitar el aviso
     (y que funcione la <b>cámara</b> del waiter), instala el certificado QA:
-    <div><a class="btn-cert" href="caddy-root-ca.crt">⬇️ Descargar certificado QA</a></div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap"><a class="btn-cert" href="smartmenu-ca.crt">🤖 Android — descargar CA</a><a class="btn-cert" href="caddy-root-ca.crt">🍏 iOS — descargar CA</a></div>
     <span style="font-size:.82rem">¿Prefieres usar las URLs <code>nip.io</code>? Cambia el DNS del Wi-Fi del teléfono a <span class="ip">8.8.8.8</span> y volverán a resolver.</span>
   </div>
 
@@ -84,8 +84,15 @@
     </ol>
     <h3>🤖 Android (Chrome)</h3>
     <ol>
-      <li>Toca <b>⬇️ Descargar certificado QA</b> → <b>Ajustes → Seguridad → Cifrado y credenciales → Instalar un certificado → Certificado de CA</b>.</li>
-      <li>Atajo: basta aceptar <i>"La conexión no es privada → Continuar"</i> una vez.</li>
+      <li>Toca <b>🤖 Android — descargar CA</b>. Se guarda en <b>Descargas</b>.</li>
+      <li><b>NO</b> uses "abrir" en la notificación de descarga: desde Android 7 el sistema
+          ya no instala certificados así y Chrome responde <i>"this file doesn't exist anymore"</i>
+          aunque el archivo esté bien.</li>
+      <li>Ve a <b>Ajustes → Seguridad → Cifrado y credenciales → Instalar un certificado →
+          Certificado de CA</b>, acepta la advertencia y <b>busca el archivo en Descargas</b>.</li>
+      <li>Hace falta tener <b>PIN o patrón</b> en el equipo: Android no instala CAs sin bloqueo de pantalla.</li>
+      <li>Sin la CA instalada el navegador <b>no registra el service worker</b>, así que no aparecerá
+          "Instalar aplicación" ni funcionará la cámara del waiter.</li>
     </ol>
   </details>
 

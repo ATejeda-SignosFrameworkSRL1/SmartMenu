@@ -386,5 +386,15 @@ hub.{$QA_LAN_NIP}.nip.io, {$QA_LAN_IP}:443 {
 	# iOS/Android: forzar el Content-Type para que el .crt se reconozca como CA instalable
 	@cacert path /caddy-root-ca.crt
 	header @cacert Content-Type "application/x-x509-ca-cert"
+	# ANDROID 7+: el tipo x-x509-ca-cert dejo de abrir el instalador (eso era
+	# Android <=6). Chrome entrega el archivo al sistema, nadie lo reclama y el
+	# gestor de descargas responde "this file doesn't exist anymore" — aunque la
+	# descarga si fue correcta. Sirviendo la MISMA CA como descarga normal, el
+	# archivo queda en Descargas y el selector de Ajustes lo encuentra.
+	# La ruta de arriba se conserva intacta porque iOS si necesita ese tipo
+	# para el flujo de perfiles.
+	@cacert_android path /smartmenu-ca.crt
+	header @cacert_android Content-Type "application/octet-stream"
+	header @cacert_android Content-Disposition "attachment; filename=\"smartmenu-ca.crt\""
 	file_server
 }
