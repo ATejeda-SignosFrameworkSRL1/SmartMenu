@@ -5,6 +5,7 @@ import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { InactivityGuard } from "./components/InactivityGuard";
+import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
 import { dirFor } from "@/i18n/config";
 
 // Inter como variable CSS: el font-stack de Tailwind antepone Inter y cae a CJK.
@@ -13,6 +14,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 export const metadata: Metadata = {
   title: "SmartMenu Mesero - App para Meseros",
   description: "Aplicación para meseros de SmartMenu",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Mesero" },
 };
 
 // SMARTWATCH — viewport explícito. Sin esto quedaba el default de Next y no había control
@@ -155,6 +158,7 @@ export default async function RootLayout({
               },
             }}
           />
+          <ServiceWorkerRegister />
           {/* Sprint 4.1 — auto-logout 90s para sesiones PIN (no afecta login normal) */}
           <InactivityGuard timeoutSeconds={90} warningSeconds={15} />
         </NextIntlClientProvider>
