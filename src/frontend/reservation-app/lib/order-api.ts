@@ -1,12 +1,9 @@
 import axios from 'axios';
 
-// Cliente anónimo: el portal público de pedidos (pickup/delivery) no requiere login.
-// Next reescribe /api → backend (igual que booking-api.ts).
 const api = axios.create({ baseURL: '' });
 
 export type FulfillmentType = 'Pickup' | 'Delivery';
 
-/** Forma de GET /api/dish (DishDto del backend, camelCase). Sin ?page devuelve array plano. */
 export interface MenuDish {
   id: number;
   name: string;
@@ -18,8 +15,6 @@ export interface MenuDish {
   isAvailable: boolean;
   preparationTimeMinutes?: number | null;
 }
-
-// ── POST /api/invoices (CreateInvoiceDto) ──
 
 export interface CreateInvoiceItem {
   dishId: number;
@@ -34,13 +29,11 @@ export interface CreateInvoicePayload {
   customerPhone: string;
   customerEmail?: string;
   fulfillmentType: FulfillmentType;
-  /** Obligatoria cuando fulfillmentType = 'Delivery'. */
+
   deliveryAddress?: string;
   notes?: string;
   items: CreateInvoiceItem[];
 }
-
-// ── Respuesta (InvoiceDto) ──
 
 export interface InvoiceOrderItem {
   dishId: number;
@@ -89,14 +82,12 @@ function extractError(e: unknown, fallback: string): string {
   return fallback;
 }
 
-/** Catálogo público. El backend ya filtra isAvailable sin ?all, pero filtramos defensivamente. */
 export async function getMenu(): Promise<MenuDish[]> {
   const { data } = await api.get<MenuDish[] | { items?: MenuDish[] }>('/api/dish');
   const list: MenuDish[] = Array.isArray(data) ? data : data?.items ?? [];
   return list.filter((d) => d.isAvailable);
 }
 
-/** Checkout: crea la factura (1 pago → N órdenes por franquicia) y notifica al KDS. */
 export async function createInvoice(payload: CreateInvoicePayload): Promise<Invoice> {
   try {
     const { data } = await api.post<Invoice>('/api/invoices', payload);

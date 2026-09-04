@@ -11,7 +11,6 @@ export default meta;
 
 type Story = StoryObj;
 
-/** Los 4 tipos de estructura: pared, barra, columna y entrada. */
 export const Tipos: Story = {
   render: () => (
     <div style={{ padding: 12 }}>

@@ -6,7 +6,7 @@ import "./globals.css";
 import { dirFor } from "@/i18n/config";
 
 import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
-// Inter como variable CSS: el font-stack de Tailwind antepone Inter y cae a CJK.
+
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {

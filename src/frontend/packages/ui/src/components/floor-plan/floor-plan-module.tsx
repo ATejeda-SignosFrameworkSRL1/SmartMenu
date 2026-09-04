@@ -16,49 +16,44 @@ import { FloorPlanDashboard, type FloorPlanDashboardMessages, type Reservation }
 import type { FloorPlanData } from "./types";
 import type { StatusLabels, StatusPaletteOverride } from "./status-colors";
 
-/**
- * All hardcoded Spanish UI strings rendered by FloorPlanModule itself
- * (KPI cards + publication bar). Does NOT include FloorPlanDashboard strings —
- * pass those separately via the `dashboardMessages` prop.
- */
 export interface FloorPlanModuleMessages {
-  /** KPI card label. Default: "Mesas" */
+
   kpiTables: string;
-  /** KPI card label. Default: "Ocupación" */
+
   kpiOccupancy: string;
-  /** KPI card label. Default: "Reservas hoy" */
+
   kpiReservations: string;
-  /** KPI card label. Default: "Próxima reserva" */
+
   kpiNextReservation: string;
-  /** Sub-line for Mesas KPI. `(zones, reserved) => string` */
+
   tablesSub: (zones: number, reserved: number) => string;
-  /** Sub-line for Ocupación KPI. `(occupied, total) => string` */
+
   occupancySub: (occupied: number, total: number) => string;
-  /** Sub-line for Reservas hoy KPI. `(guests) => string` */
+
   reservationsSub: (guests: number) => string;
-  /** Sub-line for Próxima reserva KPI. `(customerName, tableId) => string` */
+
   nextSub: (customerName: string, tableId: string | number) => string;
-  /** Sub-line when there is no next reservation. Default: "Sin reservas" */
+
   noReservations: string;
-  /** Publication badge: both channels on. Default: "Visible" */
+
   stateVisible: string;
-  /** Publication badge: one channel on. Default: "Parcial" */
+
   statePartial: string;
-  /** Publication badge: both channels off. Default: "Oculto" */
+
   stateHidden: string;
-  /** Publication bar heading. Default: "Publicación al salón" */
+
   publishTitle: string;
-  /** Publication bar hint. Default: "Activa cada switch para mostrar el plano en su app" */
+
   publishHint: string;
-  /** Channel switch label for host-app. Default: "Host" */
+
   channelHost: string;
-  /** Channel switch label for waiter-app. Default: "Mesero" */
+
   channelWaiter: string;
-  /** aria-label for the channel toggle switch. `(show, label) => string` */
+
   switchAria: (show: boolean, label: string) => string;
-  /** title when switch is ON. `(label) => string` */
+
   switchTitleOn: (label: string) => string;
-  /** title when switch is OFF. `(label) => string` */
+
   switchTitleOff: (label: string) => string;
 }
 
@@ -84,37 +79,35 @@ export const defaultFloorPlanModuleMessages: FloorPlanModuleMessages = {
   switchTitleOff: (label) => `Plano oculto en ${label}`,
 };
 
-/** Canal (app) cuyo plano se muestra/oculta con el switch. */
 export type FloorPlanChannel = "host" | "waiter";
 
 export interface FloorPlanModuleProps {
   data: FloorPlanData;
   reservations: Reservation[];
-  /** Cambios de layout en Modo Diseñador (drag de mesas/estructuras). */
+
   onDataChange?: (data: FloorPlanData) => void;
-  /** Visibilidad del plano en la host-app (switch del admin). Default true. */
+
   hostEnabled?: boolean;
-  /** Visibilidad del plano en la waiter-app (switch del admin). Default true. */
+
   waiterEnabled?: boolean;
-  /** Encender/apagar el plano de un canal (host/waiter) → reflejo en su app. */
+
   onToggleChannel?: (target: FloorPlanChannel, enabled: boolean) => void;
-  /** Alto del dashboard interno en px. Default 620. */
+
   dashboardHeight?: number;
-  /** Paleta de estados (override por restaurante). */
+
   palette?: StatusPaletteOverride;
-  /** Guardar la paleta editada (Diseñador → editor de colores). */
+
   onPaletteChange?: (palette: StatusPaletteOverride) => void;
-  /** Translated UI strings for the module's own KPIs and publication bar. Missing keys fall back to Spanish. */
+
   messages?: Partial<FloorPlanModuleMessages>;
-  /** Translated UI strings forwarded to FloorPlanDashboard. Missing keys fall back to Spanish. */
+
   dashboardMessages?: Partial<FloorPlanDashboardMessages>;
-  /** Translated status labels forwarded to FloorPlanDashboard. Missing keys fall back to Spanish. */
+
   statusLabels?: Partial<StatusLabels>;
 }
 
 const BRAND = "#8a0000";
 
-/** "11:30 AM" → minutos desde medianoche (para ordenar la próxima reserva). */
 function timeToMinutes(t: string): number {
   const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!m) return 24 * 60;
@@ -123,14 +116,6 @@ function timeToMinutes(t: string): number {
   return h * 60 + parseInt(m[2], 10);
 }
 
-/**
- * Módulo "Plano de Planta" del admin-panel (debajo del Header): tira de KPIs +
- * barra de visibilidad —switches Host / Mesero que muestran u ocultan el plano en
- * cada app— sobre el `FloorPlanDashboard` multi-zona.
- *
- * `onToggleChannel` persiste el switch en el backend (PUT /api/floorplan/visibility),
- * que difunde `FloorPlanVisibilityChanged` por SignalR para reflejo en vivo en host/waiter.
- */
 export function FloorPlanModule({
   data,
   reservations,
@@ -147,7 +132,6 @@ export function FloorPlanModule({
 }: FloorPlanModuleProps) {
   const msg: FloorPlanModuleMessages = { ...defaultFloorPlanModuleMessages, ...messages };
 
-  // ── KPIs (resumen global de todas las zonas) ──
   const stats = useMemo(() => {
     const tables = data.zones.flatMap((z) => z.tables);
     const total = tables.length;
@@ -185,7 +169,6 @@ export function FloorPlanModule({
   const stateDot = bothOn ? "bg-emerald-500" : anyOn ? "bg-amber-500" : "bg-slate-400";
   const lastLine = msg.publishHint;
 
-  /** Switch por canal: enciende/apaga la visibilidad del plano en esa app (reflejo en vivo). */
   const channelSwitch = (label: string, Icon: LucideIcon, on: boolean, target: FloorPlanChannel) => (
     <div className="inline-flex items-center gap-2">
       <Icon className={`h-4 w-4 ${on ? "text-slate-700" : "text-slate-400"}`} />
@@ -211,7 +194,7 @@ export function FloorPlanModule({
 
   return (
     <div className="space-y-4">
-      {/* ── KPIs ── */}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpis.map(({ key, label, value, sub, Icon, bar }) => (
           <div key={key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -230,7 +213,6 @@ export function FloorPlanModule({
         ))}
       </div>
 
-      {/* ── Barra de publicación ── */}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -260,7 +242,6 @@ export function FloorPlanModule({
         </div>
       </div>
 
-      {/* ── Dashboard multi-zona ── */}
       <FloorPlanDashboard
         data={data}
         reservations={reservations}

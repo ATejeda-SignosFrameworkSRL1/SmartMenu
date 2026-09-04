@@ -9,7 +9,6 @@ import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
 import { ScreenWakeLock } from "./components/ScreenWakeLock";
 import { dirFor } from "@/i18n/config";
 
-// Inter como variable CSS: el font-stack de Tailwind antepone Inter y cae a CJK.
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
@@ -19,10 +18,6 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Mesero" },
 };
 
-// SMARTWATCH — viewport explícito. Sin esto quedaba el default de Next y no había control
-// de zoom ni del área segura: en un panel de 2.4" (640x480, ~333 PPI) el contenido se
-// recortaba en los bordes. `viewport-fit: cover` respeta las safe-areas y maximumScale 5
-// deja al mesero hacer zoom si necesita leer algo puntual.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -43,19 +38,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} dir={dirFor(locale)} className={inter.variable}>
       <head>
-        {/* SMARTWATCH — modo reloj: activacion + ESCALA ADAPTATIVA.
-            Inline y antes del render para que no haya parpadeo sin escalar.
 
-            Por que escala adaptativa y no un tamaño fijo: el mismo panel fisico de
-            2.4" y 640x480 reales puede presentarse como 640x480, 427x320 o 320x240
-            px CSS segun el devicePixelRatio que declare Android. Un font-size fijo
-            acierta en uno y falla en los otros dos. En su lugar fijamos el ancho de
-            DISEÑO y derivamos la raiz: Tailwind dimensiona todo en rem, asi que la
-            interfaz se comporta igual sea cual sea el viewport real.
-
-            ?watch=1 lo activa y queda guardado (?watch=0 lo quita).
-            ?ws=<px> ajusta el ancho de diseño y tambien queda guardado: bajarlo
-            agranda todo (util en una pantalla de 49 mm), subirlo mete mas contenido. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{
@@ -139,13 +122,7 @@ export default async function RootLayout({
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}
-          {/* page.tsx hace 66 llamadas a toast.* pero <Toaster/> no estaba montado en
-              ninguna parte, asi que NINGUNA se pintaba: al confirmar un cobro no habia
-              señal alguna y los errores del catch eran completamente mudos. Es lo que
-              hacia sentir la app "colgada". client-app y reservation-app si lo montan,
-              o sea que era un olvido, no un diseño.
-              Medidas en rem a proposito: los valores por defecto de la libreria son px
-              duros y no escalarian con el modo reloj. */}
+
           <Toaster
             position="top-center"
             containerStyle={{ top: '0.5rem' }}
@@ -161,7 +138,7 @@ export default async function RootLayout({
           />
           <ServiceWorkerRegister />
           <ScreenWakeLock />
-          {/* Sprint 4.1 — auto-logout 90s para sesiones PIN (no afecta login normal) */}
+
           <InactivityGuard timeoutSeconds={90} warningSeconds={15} />
         </NextIntlClientProvider>
       </body>

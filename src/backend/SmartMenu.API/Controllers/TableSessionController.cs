@@ -74,18 +74,16 @@ public class TableSessionController : ControllerBase
     {
         try
         {
-            // IDOR: el host se toma del JWT (Admin/Manager pueden override con dto.HostId).
+
             if (!IsManagerOrAdmin()) dto.HostId = CurrentUserId();
 
             var table = await _context.Tables.FindAsync(dto.TableId);
             if (table == null)
                 return NotFound(new { error = "Mesa no encontrada" });
 
-            // Verificar que la mesa esté disponible
             if (table.Status != TableStatus.Available && table.Status != TableStatus.Reserved)
                 return BadRequest(new { error = "La mesa no está disponible" });
 
-            // Si está reservada: no usar hasta que pase ReservedUntil (evitar roces con el cliente de la reserva)
             if (table.Status == TableStatus.Reserved)
             {
                 var activeReservation = await _context.TableReservations
@@ -94,7 +92,7 @@ public class TableSessionController : ControllerBase
                     .FirstOrDefaultAsync();
                 if (activeReservation != null)
                     return BadRequest(new { error = "La mesa está reservada hasta " + activeReservation.ReservedUntil!.Value.ToLocalTime().ToString("HH:mm") + ". No se puede asignar." });
-                // Reserva vencida: permitir asignar y la mesa pasará a Occupied
+
             }
 
             var session = new TableSession
@@ -109,7 +107,6 @@ public class TableSessionController : ControllerBase
 
             _context.TableSessions.Add(session);
 
-            // Actualizar estado de la mesa
             table.Status = TableStatus.Occupied;
 
             await _context.SaveChangesAsync();
@@ -140,7 +137,6 @@ public class TableSessionController : ControllerBase
             session.IsActive = false;
             session.EndTime = DateTime.UtcNow;
 
-            // Liberar la mesa
             session.Table.Status = TableStatus.Available;
 
             await _context.SaveChangesAsync();
@@ -156,16 +152,13 @@ public class TableSessionController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Mesero reclama una mesa: crea sesión y se asigna como mesero
-    /// </summary>
     [HttpPost("claim")]
     [Authorize(Roles = "Admin,Manager,Host,Waiter")]
     public async Task<IActionResult> ClaimTable([FromBody] ClaimTableDto dto)
     {
         try
         {
-            // IDOR: un mesero solo reclama para sí mismo (Admin/Manager pueden override).
+
             if (!IsManagerOrAdmin()) dto.WaiterId = CurrentUserId();
 
             var table = await _context.Tables.FindAsync(dto.TableId);

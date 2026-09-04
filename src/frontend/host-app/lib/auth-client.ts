@@ -1,32 +1,14 @@
-/**
- * DRY auth — factory que devuelve un axios instance con interceptor JWT
- * + refresh transparente. Reemplaza ~58 líneas duplicadas inline en cada
- * una de las 6 staff apps (admin/waiter/host/kds/cashier/reservation).
- *
- * Uso:
- *   const { api, logout, setSession, getUser } = createAuthApi('admin');
- *   await api.get('/api/dish');   // Authorization: Bearer <admin_token>
- *   logout();                      // limpia localStorage + redirige a /login
- *
- * Por app, localStorage usa el prefijo `${appKey}_`:
- *   admin_token, admin_refresh, admin_user
- *   waiter_token, waiter_refresh, waiter_user
- *   etc.
- *
- * Singleton lock: si llegan 5 requests con token expirado simultáneos,
- * UNA sola va a /api/auth/refresh; las otras 4 esperan ese resultado.
- */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 
 export interface AuthApiOptions {
-  /** Base URL del API. Default: '' (same-origin, Next.js rewrites se encargan). */
+
   baseURL?: string;
-  /** Path al endpoint de refresh. Default: '/api/auth/refresh'. */
+
   refreshPath?: string;
-  /** Path al login. Default: '/login'. */
+
   loginPath?: string;
-  /** Timeout en ms. Default: 15000. */
+
   timeout?: number;
 }
 
@@ -41,22 +23,18 @@ export interface SessionUser {
 
 export interface AuthApi {
   api: AxiosInstance;
-  /** Limpia tokens + user del localStorage. NO redirige por sí solo. */
+
   clear: () => void;
-  /** Limpia + redirige a /login (o options.loginPath). */
+
   logout: () => void;
-  /** Guarda access/refresh/user tras un login exitoso. */
+
   setSession: (accessToken: string, refreshToken: string | null, user: SessionUser) => void;
-  /** Lee el user actual del localStorage. null si no hay sesión. */
+
   getUser: () => SessionUser | null;
-  /** Lee el access token. null si no hay. */
+
   getToken: () => string | null;
 }
 
-// ── Refresh compartido a nivel de módulo ──────────────────────────────────
-// Un solo refresh en vuelo por appKey, compartido por el interceptor de axios Y por
-// el accessTokenFactory de SignalR. Evita refrescos en paralelo que, con rotación de
-// refresh token, se invalidarían entre sí.
 const _refreshLocks: Record<string, Promise<string | null> | null> = {};
 
 function _tokenExpiringSoon(token: string, withinMs = 60_000): boolean {
@@ -64,7 +42,7 @@ function _tokenExpiringSoon(token: string, withinMs = 60_000): boolean {
     const payload = JSON.parse(atob(token.split('.')[1]));
     return ((payload.exp ?? 0) * 1000) - Date.now() < withinMs;
   } catch {
-    return true; // token ilegible → tratarlo como vencido
+    return true;
   }
 }
 
@@ -92,11 +70,6 @@ async function _refreshAccessToken(appKey: string, baseURL: string, refreshPath:
   return _refreshLocks[appKey];
 }
 
-/**
- * Devuelve un access token VÁLIDO para `appKey`, refrescándolo si está vencido o por
- * vencer (<60s). Pensado para el `accessTokenFactory` de SignalR: la reconexión del hub
- * nunca negocia con un token expirado → se acaban los 401 de reconexión en consola.
- */
 export async function ensureFreshToken(appKey: string, refreshPath = '/api/auth/refresh'): Promise<string> {
   if (typeof window === 'undefined') return '';
   const token = localStorage.getItem(`${appKey}_token`);
@@ -119,13 +92,10 @@ export function createAuthApi(appKey: string, options: AuthApiOptions = {}): Aut
 
   const api = axios.create({ baseURL, timeout, headers: { 'Content-Type': 'application/json' } });
 
-  // Refresh con lock compartido a nivel de módulo (el mismo que usa ensureFreshToken para
-  // SignalR), evitando refrescos en paralelo entre axios y el hub.
   async function tryRefresh(): Promise<string | null> {
     return _refreshAccessToken(appKey, baseURL, refreshPath);
   }
 
-  // Request: inyecta Authorization si hay token.
   api.interceptors.request.use((config) => {
     if (typeof window === 'undefined') return config;
     const token = localStorage.getItem(TOKEN_KEY);
@@ -135,9 +105,6 @@ export function createAuthApi(appKey: string, options: AuthApiOptions = {}): Aut
     return config;
   });
 
-  // Response: 401 → refresh + retry. Si falla refresh, limpiar + /login.
-  // Excepción: si nunca hubo sesión (cliente anónimo a endpoint público), NO redirigir;
-  // propagar el error para que el componente muestre toast.error/etc.
   api.interceptors.response.use(
     (r) => r,
     async (error) => {

@@ -5,30 +5,20 @@ import { X, Delete } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface PinPadProps {
-  /** Largo del PIN. Default: 6 (alineado con backend). */
+
   length?: number;
-  /** Callback cuando el usuario completa los N dígitos. */
+
   onSubmit: (pin: string) => void | Promise<void>;
-  /** Mensaje encima del display (ej. "Ingresa tu PIN"). */
+
   prompt?: string;
-  /** Texto debajo en rojo cuando hay error. */
+
   error?: string | null;
-  /** Si true, deshabilita los botones y muestra spinner. */
+
   loading?: boolean;
-  /** Aleatorizar el orden de los dígitos (anti shoulder-surfing). Default: false. */
+
   shuffleKeys?: boolean;
 }
 
-/**
- * Numpad onscreen para ingreso de PIN.
- *
- * UX:
- * - Display de N dots, los activos se llenan al tipear
- * - Layout estándar de telefono: 1-9 en 3x3, "borrar" + 0 + "limpiar" abajo
- * - Auto-submit al llegar a N dígitos
- * - Borrar individual o todo (Clear)
- * - Opcional: orden aleatorio (Sprint 4 anti-fraud, Toast/Square lo hacen)
- */
 export function PinPad({
   length = 6,
   onSubmit,
@@ -41,11 +31,10 @@ export function PinPad({
   const resolvedPrompt = prompt ?? t('prompt');
   const [pin, setPin] = useState('');
 
-  // Aleatorizar 0-9 si shuffleKeys está activo
   const digits = (() => {
     const base = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
     if (!shuffleKeys) return base;
-    // Fisher-Yates
+
     const arr = [...base];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -61,8 +50,7 @@ export function PinPad({
     setPin(next);
     if (next.length === length) {
       await onSubmit(next);
-      // Si el padre maneja error, dejará `error` set y vaciamos input
-      // Si éxito, el padre típicamente redirige (componente desmonta)
+
     }
   };
 
@@ -76,16 +64,12 @@ export function PinPad({
     setPin('');
   };
 
-  // Reset visual cuando el padre muestra un error nuevo
-  // (en práctica el padre debería resetear via key prop)
-
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xs mx-auto">
       <div className="text-center">
         <p className="text-sm text-gray-600 font-medium">{resolvedPrompt}</p>
       </div>
 
-      {/* Display de N puntos */}
       <div className="flex gap-3 justify-center">
         {Array.from({ length }).map((_, i) => {
           const filled = i < pin.length;
@@ -108,7 +92,6 @@ export function PinPad({
         <p className="text-sm text-red-600 text-center -mt-2">{error}</p>
       )}
 
-      {/* Keypad 3x4 */}
       <div className="watch-cols grid grid-cols-3 gap-3 w-full">
         {digits.slice(0, 9).map(d => (
           <button
@@ -121,7 +104,7 @@ export function PinPad({
             {d}
           </button>
         ))}
-        {/* Fila inferior: Clear | 0 | Backspace */}
+
         <button
           type="button"
           disabled={loading || pin.length === 0}

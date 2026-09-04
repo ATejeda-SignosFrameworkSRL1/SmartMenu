@@ -2,7 +2,7 @@ import type { Config } from "tailwindcss";
 import preset from "@smartmenu/ui/preset";
 
 const config: Config = {
-  // Estructura de tokens/animaciones del design system (aditivo; no rompe el theme actual).
+
   presets: [preset],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -13,7 +13,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // Sistema + fallbacks CJK (zh/ja/ko); host no usa una fuente web propia.
+
         sans: [
           'system-ui', '-apple-system', '"Segoe UI"', 'Roboto',
           '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', '"Noto Sans CJK SC"',
@@ -33,7 +33,7 @@ const config: Config = {
           800: '#166534',
           900: '#14532d',
         },
-        // Tema warm/gold portado del portal público (reservation-app) para el wizard de reservas.
+
         gold: {
           DEFAULT: '#B8860B',
           light: '#DAA520',

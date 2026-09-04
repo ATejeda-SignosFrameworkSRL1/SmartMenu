@@ -33,9 +33,6 @@ public class PaymentController : ControllerBase
         _broadcaster = broadcaster;
     }
 
-    // S1.3 — quien procesa el pago siempre es el usuario autenticado.
-    // Admin/Manager pueden hacer override pasando dto.WaiterId (registrar pago a otro mesero).
-    // Cualquier otro rol: se ignora dto.WaiterId, se usa el del JWT.
     private int? GetProcessorIdFromContext(int? dtoWaiterId)
     {
         var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
@@ -46,19 +43,15 @@ public class PaymentController : ControllerBase
         return int.TryParse(sub, out var id) ? id : null;
     }
 
-    /// <summary>
-    /// Crear nuevo pago
-    /// </summary>
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentDto dto)
     {
-        // S1.3 — usar identidad del JWT salvo override Admin/Manager.
+
         var processorId = GetProcessorIdFromContext(dto.WaiterId);
         if (processorId == null) return Unauthorized(new { error = "Usuario no identificado" });
 
-        // S1.2 — multi-table write protegido por transacción explícita.
         await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -135,7 +128,6 @@ public class PaymentController : ControllerBase
             _logger.LogInformation("Payment {PaymentId} created for Order {OrderId} by processor {ProcessorId}, Method: {Method}, Amount: {Amount}",
                 payment.Id, dto.OrderId, processorId, dto.PaymentMethod, dto.Amount);
 
-            // Sprint 4.2 — audit DGII (fail-safe)
             var authMethod = User.FindFirst("auth_method")?.Value ?? "password";
             await _audit.LogAsync(
                 userId: processorId.Value,
@@ -154,7 +146,6 @@ public class PaymentController : ControllerBase
                     orderCompleted = order.Status == Domain.Enums.OrderStatus.Completed
                 });
 
-            // S5.1 — push a cashier-app (y cualquier suscriptor) para refrescar caja sin polling.
             await _hub.Clients.All.SendAsync("PaymentRegistered", new
             {
                 paymentId = payment.Id,
@@ -186,11 +177,6 @@ public class PaymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// S3.3 — Receipt para el cliente: agrega pagos de una orden completada y devuelve
-    /// los datos del comprobante (orderNumber, totales, propina, método, fiscal data).
-    /// Sin auth: el cliente final no tiene JWT — solo conoce el orderId desde su QR session.
-    /// </summary>
     [HttpGet("by-order/{orderId:int}/receipt")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -244,9 +230,6 @@ public class PaymentController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Obtener pago por ID
-    /// </summary>
     [HttpGet("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -284,9 +267,6 @@ public class PaymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener pagos por orden
-    /// </summary>
     [HttpGet("order/{orderId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
@@ -317,11 +297,6 @@ public class PaymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Solicitar cuenta: el cliente abre la pantalla de pago, la mesa pasa a "Por Cobrar" (Billing).
-    /// Ahora acepta las preferencias del cliente (método de pago y propina).
-    /// Cliente anónimo (QR) — necesita disparar el flujo de cobro sin JWT.
-    /// </summary>
     [HttpPost("request-billing/{orderId}")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -344,7 +319,6 @@ public class PaymentController : ControllerBase
                 billingTableId = order.Table.Id;
             }
 
-            // Guardar preferencias del cliente si se enviaron
             if (dto != null)
             {
                 if (!string.IsNullOrEmpty(dto.PaymentMethod))
@@ -362,16 +336,12 @@ public class PaymentController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            // Plano en vivo: la mesa pasó a "Por cobrar" (aditivo; no afecta el flujo del cliente).
             if (billingTableId != null)
             {
                 try { await _broadcaster.BroadcastAsync(billingTableId.Value); }
                 catch (Exception ex) { _logger.LogWarning(ex, "No se pudo difundir Billing de la mesa {TableId}", billingTableId); }
             }
 
-            // Solo notificar al mesero vía SignalR cuando el cliente envía sus preferencias
-            // de pago (método de pago elegido). La primera llamada automática al abrir la
-            // pantalla no tiene PaymentMethod y solo marca la mesa como Billing.
             bool hasPaymentPreferences = dto != null && !string.IsNullOrEmpty(dto.PaymentMethod);
             if (hasPaymentPreferences)
             {
@@ -409,21 +379,16 @@ public class PaymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cobrar: el mesero registra el pago con todos los detalles (método, propina, división de cuenta).
-    /// Soporta pagos mixtos (múltiples subpagos) y división de cuenta.
-    /// </summary>
     [HttpPost("collect")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> CollectPayment([FromBody] CollectPaymentDto dto)
     {
-        // S1.3 — processor del cobro siempre desde JWT (Admin puede override con dto.WaiterId).
+
         var processorId = GetProcessorIdFromContext(dto.WaiterId);
         if (processorId == null) return Unauthorized(new { error = "Usuario no identificado" });
 
-        // S1.2 — multi-table write protegido por transacción explícita (Order + Payments + Table).
         await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -438,27 +403,20 @@ public class PaymentController : ControllerBase
             if (order.Status == Domain.Enums.OrderStatus.Pending)
                 return BadRequest(new { error = "La orden aún no ha sido servida" });
 
-            // S1.4 — Fiscal RNC sync Order↔Payment. Si Order pidió comprobante O dto lo pide, captura ambos
-            // valores y valida que RNC + BusinessName estén presentes. No se permite emitir sin esos datos.
             var requiresReceipt = dto.RequiresFiscalReceipt || order.ClientRequiresFiscalReceipt;
             var effectiveRnc = string.IsNullOrWhiteSpace(dto.RNC) ? order.ClientRNC : dto.RNC;
             var effectiveBusinessName = string.IsNullOrWhiteSpace(dto.BusinessName) ? order.ClientBusinessName : dto.BusinessName;
             if (requiresReceipt && (string.IsNullOrWhiteSpace(effectiveRnc) || string.IsNullOrWhiteSpace(effectiveBusinessName)))
                 return BadRequest(new { error = "Comprobante fiscal requiere RNC y razón social. Captura los datos del cliente antes de cobrar." });
 
-            // Eliminar pagos previos no completados de esta orden
             var existingPending = _context.Payments
                 .Where(p => p.OrderId == dto.OrderId && p.Status != Domain.Enums.PaymentStatus.Completed);
             _context.Payments.RemoveRange(existingPending);
 
-            // Pagos por partes (división de cuenta): suma de partes YA cobradas (solo COMPLETED).
-            // Se suma Amount (no TotalAmount) para reconciliar contra order.Total, que incluye ITBIS
-            // + propina legal pero NO la propina extra del mesero (esa va aparte en TipAmount).
             decimal alreadyPaid = await _context.Payments
                 .Where(p => p.OrderId == dto.OrderId && p.Status == Domain.Enums.PaymentStatus.Completed)
                 .SumAsync(p => p.Amount);
 
-            // Guard anti-doble-cobro de la misma parte en división por comensal.
             if (dto.BillSplitType == "ByComensal" && dto.SplitPartIndex is int partIdx)
             {
                 bool yaPagada = await _context.Payments.AnyAsync(p =>
@@ -529,26 +487,21 @@ public class PaymentController : ControllerBase
                 totalPaid = baseAmount;
             }
 
-            // S4.6bis — Pago acumulativo por partes (división por comensal): reconciliar contra
-            // order.Total usando la suma de partes ya cobradas (Completed) + esta llamada.
             decimal grandPaid = alreadyPaid + totalPaid;
 
-            // Rechazar SOBREPAGO (tolerancia 1 centavo).
             if (grandPaid > order.Total + 0.01m)
             {
                 throw new InvalidOperationException(
                     $"El cobro excede el total de la orden. Ya cobrado: {alreadyPaid:0.00}, este cobro: {totalPaid:0.00}, total: {order.Total:0.00}.");
             }
 
-            // ¿Esta llamada SALDA la orden? (>= total - tolerancia). Si no, es un pago PARCIAL:
-            // se persiste la parte cobrada pero NO se completa la orden ni se libera la mesa.
             bool ordenSaldada = grandPaid >= order.Total - 0.01m;
 
             int? cleaningTableId = null;
 
             if (ordenSaldada)
             {
-                // Completar la orden
+
                 if (order.Status != Domain.Enums.OrderStatus.Completed)
                 {
                     order.Status = Domain.Enums.OrderStatus.Completed;
@@ -556,13 +509,11 @@ public class PaymentController : ControllerBase
                     order.UpdatedAt = DateTime.UtcNow;
                 }
 
-                // Mesa a Cleaning
                 if (order.Table != null)
                 {
                     order.Table.Status = Domain.Enums.TableStatus.Cleaning;
                     cleaningTableId = order.Table.Id;
-                    // Cerrar la sesión activa de la mesa al cobrar: evita sesiones huérfanas y
-                    // destraba el auto-complete de la reserva Seated (que espera IsActive=false).
+
                     var activeSession = await _context.TableSessions
                         .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
                     if (activeSession != null)
@@ -606,10 +557,6 @@ public class PaymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Validar RNC contra la API pública de la DGII (datos.gob.do).
-    /// Devuelve el nombre de la empresa si el RNC es válido.
-    /// </summary>
     [HttpGet("validate-rnc/{rnc}")]
     [AllowAnonymous]
     [EnableRateLimiting("rnc")]
@@ -630,7 +577,7 @@ public class PaymentController : ControllerBase
                 return NotFound(new { error = "RNC no encontrado en la DGII" });
 
             var json = await response.Content.ReadAsStringAsync();
-            // La API devuelve { data: [{ rnc, nombre, ... }] }
+
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             var dataArr = doc.RootElement.GetProperty("data");
             if (dataArr.GetArrayLength() == 0)
@@ -652,9 +599,6 @@ public class PaymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Listar pagos en un rango de fechas (para cajero/admin)
-    /// </summary>
     [HttpGet("list")]
     [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> ListPayments(
@@ -673,7 +617,6 @@ public class PaymentController : ControllerBase
             .Where(p => p.CompletedAt >= fromDate && p.CompletedAt < toDate && p.Status == Domain.Enums.PaymentStatus.Completed)
             .OrderByDescending(p => p.CompletedAt);
 
-        // Summary se calcula SIEMPRE sobre el set filtrado completo (no por página).
         var summaryRaw = await baseQuery
             .Select(p => new { p.Method, p.Amount, p.TipAmount, p.TotalAmount, p.RequiresFiscalReceipt })
             .ToListAsync();
@@ -702,7 +645,6 @@ public class PaymentController : ControllerBase
                 : null
         });
 
-        // Legacy: sin ?page devuelve la lista completa (compat con reportes EOD existentes).
         if (page is null)
         {
             var all = await projection.ToListAsync();
@@ -725,9 +667,6 @@ public class PaymentController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Agregar o actualizar comprobante fiscal (NCF) a un pago existente
-    /// </summary>
     [HttpPatch("{id}/fiscal")]
     [Authorize(Roles = "Admin,Manager,Cashier")]
     public async Task<IActionResult> UpdateFiscalReceipt(int id, [FromBody] UpdateFiscalReceiptDto dto)
@@ -744,9 +683,6 @@ public class PaymentController : ControllerBase
         return Ok(new { message = "Comprobante fiscal registrado", rnc = payment.RNC, businessName = payment.BusinessName });
     }
 
-    /// <summary>
-    /// Obtener estadísticas de ventas y propinas de un mesero
-    /// </summary>
     [HttpGet("waiter-stats/{waiterId}")]
     [Authorize(Roles = "Admin,Manager,Cashier,Waiter")]
     public async Task<IActionResult> GetWaiterStats(int waiterId, [FromQuery] DateTime? date)
@@ -757,8 +693,8 @@ public class PaymentController : ControllerBase
             var nextDay = targetDate.AddDays(1);
 
             var payments = await _context.Payments
-                .Where(p => p.ProcessedByWaiterId == waiterId 
-                    && p.CompletedAt >= targetDate 
+                .Where(p => p.ProcessedByWaiterId == waiterId
+                    && p.CompletedAt >= targetDate
                     && p.CompletedAt < nextDay
                     && p.Status == Domain.Enums.PaymentStatus.Completed)
                 .ToListAsync();
@@ -782,19 +718,16 @@ public class PaymentController : ControllerBase
     }
 }
 
-/// <summary>
-/// DTO para crear pago
-/// </summary>
 public class CreatePaymentDto
 {
     public int OrderId { get; set; }
-    public string PaymentMethod { get; set; } = string.Empty; // Cash, Card, Transfer
+    public string PaymentMethod { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public decimal TipAmount { get; set; } = 0;
     public decimal TipPercentage { get; set; } = 0;
     public int? WaiterId { get; set; }
     public string? TransactionId { get; set; }
-    public string? BillSplitType { get; set; } // None, ByTime, ByComensal, Proportional, ByCategory
+    public string? BillSplitType { get; set; }
     public int? SplitPartIndex { get; set; }
 }
 
@@ -802,22 +735,21 @@ public class CollectPaymentDto
 {
     public int OrderId { get; set; }
     public int WaiterId { get; set; }
-    /// <summary>Método de pago principal (Cash, Card, Transfer, Mixed).</summary>
+
     public string? PaymentMethod { get; set; }
     public decimal Amount { get; set; } = 0;
     public decimal TipAmount { get; set; } = 0;
     public decimal TipPercentage { get; set; } = 0;
     public string? BillSplitType { get; set; }
     public int? SplitPartIndex { get; set; }
-    /// <summary>Para pagos mixtos o split: lista de subpagos.</summary>
+
     public List<SubPaymentDto>? SubPayments { get; set; }
-    /// <summary>Datos fiscales confirmados por el mesero.</summary>
+
     public bool RequiresFiscalReceipt { get; set; } = false;
     public string? RNC { get; set; }
     public string? BusinessName { get; set; }
 }
 
-/// <summary>Un subpago dentro de un pago mixto o divisón de cuenta.</summary>
 public class SubPaymentDto
 {
     public string Method { get; set; } = "Cash";
@@ -826,7 +758,6 @@ public class SubPaymentDto
     public int? SplitPartIndex { get; set; }
 }
 
-/// <summary>DTO para solicitar cuenta con preferencias del cliente.</summary>
 public class RequestBillingDto
 {
     public string? PaymentMethod { get; set; }
@@ -837,7 +768,6 @@ public class RequestBillingDto
     public string? BusinessName { get; set; }
 }
 
-/// <summary>DTO para actualizar comprobante fiscal en un pago existente.</summary>
 public class UpdateFiscalReceiptDto
 {
     public string RNC { get; set; } = string.Empty;

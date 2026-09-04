@@ -38,7 +38,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Fuentes display/body + fallbacks CJK del sistema (zh/ja/ko) para evitar "tofu".
+
         display: [
           'var(--font-playfair)',
           'Georgia',

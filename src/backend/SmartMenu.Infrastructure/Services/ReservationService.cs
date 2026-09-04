@@ -14,13 +14,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.Infrastructure.Services;
 
-/// <summary>
-/// Operaciones transaccionales de reservas (capacidad dinámica por intervalo).
-/// La sección crítica de booking re-valida la disponibilidad DENTRO de un sp_getapplock
-/// (keyed por restaurante:turno:slot) + transacción, de modo que el overbooking es imposible.
-/// Las ediciones de host usan RowVersion (concurrencia optimista). Status es la fuente de verdad;
-/// IsConfirmed/IsCancelled se sincronizan (dual-write) para compatibilidad con el código legacy.
-/// </summary>
 public class ReservationService : IReservationService
 {
     private readonly ApplicationDbContext _context;
@@ -52,14 +45,8 @@ public class ReservationService : IReservationService
         _broadcaster = broadcaster;
     }
 
-    /// <summary>
-    /// Difunde el estado EFECTIVO de la(s) mesa(s) afectada(s) por una acción de reserva, vía el
-    /// punto único <see cref="ITableStatusBroadcaster"/> (calcula efectivo + emite TableStatusChanged).
-    /// </summary>
     private Task BroadcastTableStatusAsync(IEnumerable<int> tableIds, CancellationToken ct)
         => _broadcaster.BroadcastAsync(tableIds, ct);
-
-    // ─────────────────────────── Booking público (hold) ───────────────────────────
 
     public async Task<ReservationActionResult> CreateHoldAsync(HoldRequestDto dto, CancellationToken ct = default)
     {
@@ -146,10 +133,7 @@ public class ReservationService : IReservationService
         res.CustomerEmail = dto.CustomerEmail?.Trim();
         res.OccasionType = (OccasionType)dto.OccasionType;
         res.SpecialRequests = dto.SpecialRequests;
-        // El cliente completa sus datos por el portal, pero la reserva queda PENDIENTE de
-        // aprobación del host (flujo "Aceptar" en host-app). HoldExpiresAt=null → el barrido
-        // de ciclo de vida no la expira (solo expira Pending con hold vencido). Si el host ya
-        // la aprobó (Confirmed) entre reintentos, no la revertimos a Pending.
+
         if (res.Status != ReservationStatus.Confirmed)
             res.Status = ReservationStatus.Pending;
         res.HoldExpiresAt = null;
@@ -169,8 +153,6 @@ public class ReservationService : IReservationService
             ReservationDateTime = res.ReservationDateTime.ToString("yyyy-MM-ddTHH:mm:ss"),
         };
     }
-
-    // ─────────────────────────── Creación staff ───────────────────────────
 
     public async Task<ReservationActionResult> CreateStaffAsync(CreateReservationStaffDto dto, CancellationToken ct = default)
     {
@@ -274,20 +256,16 @@ public class ReservationService : IReservationService
         catch (DbUpdateConcurrencyException) { return Stale(); }
 
         await SafeNotifyAsync(() => _notify.SendConfirmationAsync(res.Id, ct));
-        // Plano en vivo: confirmar puede dejar la mesa como Reservada (si la ventana ya abrió).
+
         if (res.TableId.HasValue) await BroadcastTableStatusAsync(new[] { res.TableId.Value }, ct);
         return Ok(res);
     }
-
-    // ─────────────────────────── Asignación de mesa ───────────────────────────
 
     public async Task<ReservationActionResult> AssignTableAsync(int id, AssignTableDto dto, CancellationToken ct = default)
     {
         var res = await _context.TableReservations.Include(r => r.AssignedTables).FirstOrDefaultAsync(r => r.Id == id, ct);
         if (res == null) return ReservationActionResult.Fail("Reserva no encontrada", "NOT_FOUND");
-        // El host puede aceptar/sentar reservas vencidas (No-Show / Expired): el cliente
-        // llegó tarde → al asignarles mesa se re-activan a Confirmed y se traen a "ahora".
-        // Solo se bloquean las canceladas y las ya completadas.
+
         if (res.Status is ReservationStatus.Cancelled or ReservationStatus.Completed)
             return ReservationActionResult.Fail("La reserva no está activa", "BAD_STATE");
 
@@ -297,10 +275,6 @@ public class ReservationService : IReservationService
         if (tableIds.Count == 0)
             return ReservationActionResult.Fail("Debe indicar al menos una mesa", "BAD_INPUT");
 
-        // Re-activación de una reserva vencida (No-Show / Expired): el cliente llegó tarde.
-        // La traemos a "ahora" conservando su duración ANTES de validar disponibilidad, para
-        // que el lock y el chequeo de solape usen la ventana real (hoy) — evita doble-reserva —
-        // y para que el barrido de ciclo de vida no la vuelva a marcar No-Show (exige hora < corte).
         if (res.Status is ReservationStatus.NoShow or ReservationStatus.Expired)
         {
             var shift = RestaurantClock.Now - res.ReservationDateTime;
@@ -334,8 +308,7 @@ public class ReservationService : IReservationService
         foreach (var tid in tableIds)
             _context.ReservationTables.Add(new ReservationTable { ReservationId = res.Id, TableId = tid });
         res.TableId = tableIds[0];
-        // Pending → Confirmed (flujo normal). NoShow/Expired ya fueron traídas a "ahora"
-        // arriba; aquí se confirman (el host las aceptó porque el cliente llegó tarde).
+
         if (res.Status is ReservationStatus.Pending or ReservationStatus.NoShow or ReservationStatus.Expired)
         {
             res.Status = ReservationStatus.Confirmed;
@@ -346,8 +319,6 @@ public class ReservationService : IReservationService
         catch (DbUpdateConcurrencyException) { await tx.RollbackAsync(ct); return Stale(); }
         await tx.CommitAsync(ct);
 
-        // Plano en vivo: difunde el estado efectivo de las mesas viejas (liberadas) y las nuevas
-        // (Reservada si la ventana de bloqueo ya abrió). waiter/host/admin se actualizan sin recargar.
         await BroadcastTableStatusAsync(previousTableIds.Concat(tableIds), ct);
 
         var r2 = Ok(res);
@@ -359,8 +330,7 @@ public class ReservationService : IReservationService
     {
         var res = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (res == null) return ReservationActionResult.Fail("Reserva no encontrada", "NOT_FOUND");
-        // Igual que AssignTableAsync: se admiten vencidas (No-Show / Expired); se re-activan
-        // al asignarles mesa. Solo se bloquean canceladas y completadas.
+
         if (res.Status is ReservationStatus.Cancelled or ReservationStatus.Completed)
             return ReservationActionResult.Fail("La reserva no está activa", "BAD_STATE");
 
@@ -378,8 +348,6 @@ public class ReservationService : IReservationService
         }
         return ReservationActionResult.Fail("No hay mesa libre para auto-asignar en esa ventana", "NO_TABLE");
     }
-
-    // ─────────────────────────── Sentar (seat) ───────────────────────────
 
     public async Task<ReservationActionResult> SeatAsync(int id, SeatReservationDto dto, CancellationToken ct = default)
     {
@@ -430,7 +398,6 @@ public class ReservationService : IReservationService
         await _context.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        // Plano en vivo: al sentar la reserva la mesa queda ocupada (aditivo; no afecta el seat).
         try
         {
             await _broadcaster.BroadcastAsync(tableId.Value, ct);
@@ -456,8 +423,6 @@ public class ReservationService : IReservationService
         return result;
     }
 
-    // ─────────────────────────── No-show / cancel / reschedule ───────────────────────────
-
     public async Task<ReservationActionResult> MarkNoShowAsync(int id, CancellationToken ct = default)
     {
         var res = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id, ct);
@@ -470,7 +435,7 @@ public class ReservationService : IReservationService
         SyncLegacyFlags(res);
         await _context.SaveChangesAsync(ct);
         await SafeNotifyAsync(() => _notify.SendNoShowAsync(res.Id, ct));
-        // Plano en vivo: no-show libera la mesa (vuelve a su estado base).
+
         if (res.TableId.HasValue) await BroadcastTableStatusAsync(new[] { res.TableId.Value }, ct);
         return Ok(res);
     }
@@ -480,13 +445,12 @@ public class ReservationService : IReservationService
         var res = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (res == null) return ReservationActionResult.Fail("Reserva no encontrada", "NOT_FOUND");
 
-        // Cancelación pública requiere el código (capability).
         if (!string.IsNullOrWhiteSpace(dto.ConfirmationCode)
             && !string.Equals(dto.ConfirmationCode, res.ConfirmationCode, StringComparison.OrdinalIgnoreCase))
             return ReservationActionResult.Fail("Código de confirmación inválido", "BAD_CODE");
 
         if (res.Status is ReservationStatus.Cancelled or ReservationStatus.Completed)
-            return Ok(res); // idempotente
+            return Ok(res);
 
         ApplyRowVersion(res, dto.RowVersion);
         res.Status = ReservationStatus.Cancelled;
@@ -497,7 +461,7 @@ public class ReservationService : IReservationService
         SyncLegacyFlags(res);
         try { await _context.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { return Stale(); }
-        // Plano en vivo: al cancelar, la mesa vuelve a su estado base (típicamente Disponible).
+
         if (cancelledTableId.HasValue) await BroadcastTableStatusAsync(new[] { cancelledTableId.Value }, ct);
         return Ok(res);
     }
@@ -541,15 +505,12 @@ public class ReservationService : IReservationService
         catch (DbUpdateConcurrencyException) { await tx.RollbackAsync(ct); return Stale(); }
         await tx.CommitAsync(ct);
 
-        // Plano en vivo: la ventana de bloqueo cambió → recalcular el estado efectivo de la mesa.
         if (res.TableId.HasValue) await BroadcastTableStatusAsync(new[] { res.TableId.Value }, ct);
 
         var result = Ok(res);
         result.ReservationDateTime = startLocal.ToString("yyyy-MM-ddTHH:mm:ss");
         return result;
     }
-
-    // ─────────────────────────── Reserva de ZONA completa (exclusiva) ───────────────────────────
 
     public async Task<ReservationActionResult> CreateZoneRequestAsync(ZoneRequestDto dto, CancellationToken ct = default)
     {
@@ -567,8 +528,7 @@ public class ReservationService : IReservationService
             return ReservationActionResult.Fail("Zona no válida", "BAD_INPUT");
 
         var startLocal = date.ToDateTime(time);
-        // Para una solicitud de zona NO bloqueamos por pacing: el host decide si es posible.
-        // Igual resolvemos el turno (si existe) para la duración/ventana usadas al chequear solape.
+
         var period = await ResolvePeriodAsync(date, time, ct);
         int duration = period != null ? ReservationMath.ResolveDuration(period, dto.Guests) : 120;
         int buffer = period?.TurnoverBufferMinutes ?? 0;
@@ -619,8 +579,7 @@ public class ReservationService : IReservationService
         {
             if (res.RequestedZoneId == null)
                 return ReservationActionResult.Fail("La reserva no tiene zona solicitada", "BAD_INPUT");
-            // Aceptar = bloquear TODA la zona: asignar todas sus mesas Dining a esta reserva.
-            // AssignTableAsync revalida solapes → si la zona no está libre devuelve CONFLICT (= "no es posible").
+
             var zoneTableIds = await _context.Tables
                 .Where(t => t.ZoneId == res.RequestedZoneId && t.Zone.Type == "Dining")
                 .Select(t => t.Id).ToListAsync(ct);
@@ -630,7 +589,7 @@ public class ReservationService : IReservationService
             var result = await AssignTableAsync(id, new AssignTableDto { TableIds = zoneTableIds }, ct);
             if (result.Success)
             {
-                res.HostResponseMessage = dto.Message;   // mismo objeto trackeado → persiste el mensaje
+                res.HostResponseMessage = dto.Message;
                 await _context.SaveChangesAsync(ct);
             }
             return result;
@@ -671,8 +630,6 @@ public class ReservationService : IReservationService
         };
     }
 
-    // ─────────────────────────── Helpers ───────────────────────────
-
     private async Task<ServicePeriod?> ResolvePeriodAsync(DateOnly date, TimeOnly time, CancellationToken ct)
     {
         int dayBit = ReservationMath.DayBit(date.DayOfWeek);
@@ -691,7 +648,6 @@ public class ReservationService : IReservationService
         return $"resv:{period.RestaurantId}:{period.Id}:{bucket}";
     }
 
-    /// <summary>sp_getapplock Exclusive (LockOwner=Transaction) sobre la conexión de la transacción actual.</summary>
     private async Task<bool> TryAcquireAppLockAsync(string resource, CancellationToken ct, int timeoutMs = 5000)
     {
         var conn = _context.Database.GetDbConnection();
@@ -733,7 +689,7 @@ public class ReservationService : IReservationService
         {
             _context.Entry(res).Property(r => r.RowVersion).OriginalValue = Convert.FromBase64String(rowVersionBase64);
         }
-        catch (FormatException) { /* rowVersion malformado → se ignora la verificación optimista */ }
+        catch (FormatException) {  }
     }
 
     private static void SyncLegacyFlags(TableReservation r) => ReservationMath.SyncLegacyFlags(r);

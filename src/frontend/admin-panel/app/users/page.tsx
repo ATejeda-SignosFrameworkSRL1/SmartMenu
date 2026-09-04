@@ -40,7 +40,7 @@ interface User {
   role: string;
   isActive: boolean;
   createdAt: string;
-  // Sprint 5 — info PIN
+
   hasPin?: boolean;
   pinSetAt?: string | null;
 }
@@ -81,17 +81,17 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formUser, setFormUser] = useState({ email: '', password: '', firstName: '', lastName: '', phone: '', role: 'Waiter', isActive: true, assignedZoneId: null as number | null });
   const [kitchenBarZones, setKitchenBarZones] = useState<any[]>([]);
-  // USER-CREATE.2 — UX: loading state + error inline persistente + validaciones
+
   const [savingUser, setSavingUser] = useState(false);
   const [userFormError, setUserFormError] = useState<string | null>(null);
-  // Sprint 5 — PIN management
+
   const [pinUser, setPinUser] = useState<User | null>(null);
-  // USER-CRUD.1 — Modal de eliminación con impacto detallado
+
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const [deletionImpact, setDeletionImpact] = useState<any>(null);
   const [loadingImpact, setLoadingImpact] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  // SHIFT — "Tiempo en turno" en vivo por usuario (turno activo del waiter)
+
   const [shiftByWaiter, setShiftByWaiter] = useState<Record<number, { baseMinutes: number; fetchedAt: number }>>({});
   const [shiftNow, setShiftNow] = useState<number>(Date.now());
 
@@ -132,8 +132,8 @@ export default function UsersPage() {
     loadUsers();
     loadKitchenBarZones();
     loadActiveShifts();
-    const refetch = setInterval(loadActiveShifts, 60000);           // refrescar turnos activos
-    const tick = setInterval(() => setShiftNow(Date.now()), 30000); // duración en vivo
+    const refetch = setInterval(loadActiveShifts, 60000);
+    const tick = setInterval(() => setShiftNow(Date.now()), 30000);
     return () => { clearInterval(refetch); clearInterval(tick); };
   }, []);
 
@@ -150,7 +150,6 @@ export default function UsersPage() {
     }
   };
 
-  // SHIFT — turnos activos (waiter) para la columna "Tiempo en turno"
   const loadActiveShifts = async () => {
     try {
       const res = await api.get('/api/waitershift/active');
@@ -162,10 +161,9 @@ export default function UsersPage() {
         if (wid) map[wid] = { baseMinutes: dm, fetchedAt };
       });
       setShiftByWaiter(map);
-    } catch { /* sin turnos o sin permiso: la columna mostrará "Fuera de turno" */ }
+    } catch {  }
   };
 
-  // Duración en vivo = base del servidor + minutos desde el fetch (evita problemas de zona horaria)
   const getOnShift = (u: User): { onShift: boolean; label: string } => {
     const uid = (u as any).id ?? (u as any).Id;
     const e = shiftByWaiter[uid];
@@ -218,7 +216,6 @@ export default function UsersPage() {
     setShowUserModal(true);
   };
 
-  // USER-CREATE.2 — Validación cliente con mensajes claros antes de tocar la red
   const validateUserForm = (): string | null => {
     const email = formUser.email.trim();
     if (!email) return t('validation.emailRequired');
@@ -271,7 +268,7 @@ export default function UsersPage() {
       setUserFormError(null);
       loadUsers();
     } catch (e: any) {
-      // Error inline (queda visible) + toast para usuarios con scroll lejos del modal
+
       const msg = e?.response?.data?.error || e?.response?.data?.message || e?.message || t('toast.saveError');
       setUserFormError(msg);
       toast.error(msg);
@@ -279,9 +276,7 @@ export default function UsersPage() {
       setSavingUser(false);
     }
   };
-  // USER-CRUD.1 — Abrir modal de eliminación: pide el "impact report" al backend
-  // antes de confirmar (cuántas órdenes/audit/etc. quedarán huérfanas), para que
-  // el admin sepa si será hard o soft delete antes de presionar el botón rojo.
+
   const openDeleteModal = async (u: User) => {
     const id = (u as any).id ?? (u as any).Id;
     setDeletingUser(u);
@@ -335,7 +330,7 @@ export default function UsersPage() {
   return (
     <MainLayout title={t('pageTitle')}>
       <div className="space-y-6">
-        {/* Header */}
+
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
@@ -353,7 +348,6 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardContent className="pt-6">
@@ -390,14 +384,12 @@ export default function UsersPage() {
           </Card>
         </div>
 
-        {/* Sprint 5.2 — Selector de modo auth del waiter */}
         <WaiterAuthModeSelector />
 
-        {/* Filters */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
+
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <input
@@ -409,7 +401,6 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Role Filter */}
               <div className="flex gap-2 flex-wrap">
                 <Button
                   variant={selectedRole === 'all' ? 'default' : 'outline'}
@@ -433,7 +424,6 @@ export default function UsersPage() {
           </CardContent>
         </Card>
 
-        {/* Users List */}
         <Card>
           <CardContent className="pt-6">
             {loading ? (
@@ -505,10 +495,10 @@ export default function UsersPage() {
                           })()}
                         </td>
                         <td className="p-3">
-                          {/* Sprint 5.1 — columna PIN */}
+
                           {(() => {
                             const role = getRole(user);
-                            // Solo mostrar PIN-relevante para roles que usan el waiter-app o cashier-app
+
                             const isPinRelevantRole = role === 'Waiter' || role === 'Cashier' || role === 'Manager' || role === 'Admin';
                             if (!isPinRelevantRole) {
                               return <span className="text-xs text-gray-400 italic">{t('pin.notApplicable')}</span>;
@@ -571,7 +561,6 @@ export default function UsersPage() {
           </CardContent>
         </Card>
 
-        {/* USER-CREATE.2 — Modal Crear/Editar usuario rediseñado con UX clara */}
         {showUserModal && (
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
@@ -581,7 +570,7 @@ export default function UsersPage() {
               className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden my-auto"
               onClick={e => e.stopPropagation()}
             >
-              {/* Header */}
+
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-bold">{editingUser ? t('modal.titleEdit') : t('modal.titleCreate')}</h2>
@@ -603,7 +592,7 @@ export default function UsersPage() {
               </div>
 
               <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-                {/* Error banner persistente */}
+
                 {userFormError && (
                   <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 flex items-start gap-2.5">
                     <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -614,7 +603,6 @@ export default function UsersPage() {
                   </div>
                 )}
 
-                {/* Sección: Identidad */}
                 <fieldset className="space-y-3" disabled={savingUser}>
                   <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
                     <div className="w-1 h-3.5 bg-blue-500 rounded-full"></div>
@@ -661,7 +649,6 @@ export default function UsersPage() {
                   </div>
                 </fieldset>
 
-                {/* Sección: Acceso */}
                 <fieldset className="space-y-3 pt-2 border-t border-gray-100" disabled={savingUser}>
                   <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
                     <div className="w-1 h-3.5 bg-emerald-500 rounded-full"></div>
@@ -702,7 +689,6 @@ export default function UsersPage() {
                   </div>
                 </fieldset>
 
-                {/* Sección: Rol */}
                 <fieldset className="space-y-3 pt-2 border-t border-gray-100" disabled={savingUser}>
                   <legend className="text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1 flex items-center gap-2">
                     <div className="w-1 h-3.5 bg-purple-500 rounded-full"></div>
@@ -759,7 +745,6 @@ export default function UsersPage() {
                 </fieldset>
               </div>
 
-              {/* Footer con botones */}
               <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -789,7 +774,6 @@ export default function UsersPage() {
           </div>
         )}
 
-        {/* Sprint 5.1 — Modal de gestión de PIN */}
         {pinUser && (
           <PinManagerModal
             user={pinUser as any}
@@ -798,7 +782,6 @@ export default function UsersPage() {
           />
         )}
 
-        {/* USER-CRUD.1 — Modal de eliminación con impact report */}
         {deletingUser && (
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -808,7 +791,7 @@ export default function UsersPage() {
               className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
               onClick={e => e.stopPropagation()}
             >
-              {/* Header */}
+
               <div className={cn(
                 'px-6 py-4 flex items-start gap-3',
                 deletionImpact?.isBlocked
@@ -890,7 +873,6 @@ export default function UsersPage() {
                       </ul>
                     </div>
 
-                    {/* Resumen de dependencias */}
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                       <p className="text-[11px] uppercase tracking-wider font-bold text-gray-500 mb-2">
                         {t('deleteModal.historyTitle')}
@@ -950,7 +932,6 @@ export default function UsersPage() {
                 )}
               </div>
 
-              {/* Footer */}
               <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex items-center gap-2">
                 <Button
                   variant="outline"

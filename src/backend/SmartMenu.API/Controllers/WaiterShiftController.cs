@@ -22,7 +22,6 @@ public class WaiterShiftController : ControllerBase
         _logger = logger;
     }
 
-    // S1.3 — el turno se asigna al usuario autenticado salvo override Admin/Manager.
     private int? GetShiftOwnerId(int? dtoWaiterId)
     {
         var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
@@ -64,7 +63,6 @@ public class WaiterShiftController : ControllerBase
         if (shift == null)
             return NotFound(new { error = "Turno no encontrado o ya cerrado" });
 
-        // Snapshot de ventas del turno antes de cerrar
         var completedDuringShift = await _context.Orders
             .Where(o => o.AssignedWaiterId == shift.WaiterId
                 && o.Status == SmartMenu.Domain.Enums.OrderStatus.Completed
@@ -75,7 +73,6 @@ public class WaiterShiftController : ControllerBase
         var totalTips = completedDuringShift.Sum(o => o.Tip);
         var completedOrders = completedDuringShift.Count;
 
-        // Transferir / liberar órdenes activas
         int transferredCount = 0;
         string? receiverName = null;
         if (dto?.UnassignOrders == true)
@@ -140,10 +137,6 @@ public class WaiterShiftController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Resumen del turno activo: mesas abiertas, órdenes, totales, propinas.
-    /// Se usa antes de cerrar el turno para mostrar el acta de traspaso.
-    /// </summary>
     [HttpGet("summary/{waiterId}")]
     public async Task<IActionResult> GetShiftSummary(int waiterId)
     {
@@ -153,7 +146,6 @@ public class WaiterShiftController : ControllerBase
         if (shift == null)
             return Ok(new { hasActiveShift = false });
 
-        // Órdenes activas asignadas al mesero
         var activeOrders = await _context.Orders
             .Include(o => o.Table).ThenInclude(t => t.Zone)
             .Include(o => o.Items).ThenInclude(i => i.Dish)
@@ -163,7 +155,6 @@ public class WaiterShiftController : ControllerBase
                 && o.Status != SmartMenu.Domain.Enums.OrderStatus.Cancelled)
             .ToListAsync();
 
-        // Ventas y propinas completadas DURANTE este turno
         var completedDuringShift = await _context.Orders
             .Include(o => o.Payments)
             .Where(o => o.AssignedWaiterId == waiterId

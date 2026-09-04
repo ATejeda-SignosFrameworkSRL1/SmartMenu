@@ -45,12 +45,9 @@ export default function OrderServedPage() {
     router.push(`/payment/${orderId}`);
   };
 
-  // PARA LLEVAR desde el pedido servido: activa el modo y vuelve al menú para armar un
-  // pedido SEPARADO (NO se anexa a la orden de la mesa). Al confirmar se crea una orden
-  // nueva e independiente con solo los platos para llevar → su propia comanda y cuenta.
   const handleTakeaway = () => {
     setTakeaway(true);
-    setAddToOrderId(null); // orden separada: no anexar a la orden viva de la mesa
+    setAddToOrderId(null);
     router.push('/menu');
   };
 
@@ -75,7 +72,6 @@ export default function OrderServedPage() {
     );
   }
 
-  // Forzar interpretación UTC (el servidor devuelve sin 'Z')
   const createdAtRaw: string | undefined = order.data.createdAt;
   const utcStr = createdAtRaw && !createdAtRaw.endsWith('Z') ? createdAtRaw + 'Z' : createdAtRaw;
   const timeElapsed = utcStr ? Math.floor((new Date().getTime() - new Date(utcStr).getTime()) / 60000) : 0;
@@ -83,7 +79,7 @@ export default function OrderServedPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
+
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6 text-center">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-12 h-12 text-green-600" />
@@ -96,7 +92,6 @@ export default function OrderServedPage() {
           </p>
         </div>
 
-        {/* Info Card */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
@@ -113,13 +108,11 @@ export default function OrderServedPage() {
           </div>
         </div>
 
-        {/* Options */}
         <div className="space-y-4">
           <h2 className="text-xl font-semibold text-gray-900 text-center mb-4">
             ¿Qué deseas hacer ahora?
           </h2>
 
-          {/* Terminé mi plato */}
           <button
             onClick={handleFinishedEating}
             className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
@@ -139,7 +132,6 @@ export default function OrderServedPage() {
             </div>
           </button>
 
-          {/* Ver postres */}
           <button
             onClick={handleViewDesserts}
             className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
@@ -159,7 +151,6 @@ export default function OrderServedPage() {
             </div>
           </button>
 
-          {/* Ver bebidas */}
           <button
             onClick={handleViewDrinks}
             className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
@@ -179,7 +170,6 @@ export default function OrderServedPage() {
             </div>
           </button>
 
-          {/* Volver al menú completo */}
           <button
             onClick={handleBackToMenu}
             className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
@@ -199,7 +189,6 @@ export default function OrderServedPage() {
             </div>
           </button>
 
-          {/* Para llevar */}
           <button
             onClick={handleTakeaway}
             className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
@@ -219,7 +208,6 @@ export default function OrderServedPage() {
             </div>
           </button>
 
-          {/* Pagar cuenta */}
           <button
             onClick={handleRequestAccount}
             className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
@@ -240,11 +228,9 @@ export default function OrderServedPage() {
           </button>
         </div>
 
-        {/* Resumen de Cobro */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mt-6">
           <h3 className="text-lg font-bold text-gray-900 mb-5 border-b pb-3">Resumen de Cobro</h3>
 
-          {/* Items */}
           <div className="space-y-2 mb-4">
             {order.data.items.map((item: any, idx: number) => (
               <div key={idx} className="flex justify-between text-sm">
@@ -255,13 +241,12 @@ export default function OrderServedPage() {
           </div>
 
           <div className="border-t border-dashed border-gray-200 pt-4 space-y-3 text-sm">
-            {/* Subtotal */}
+
             <div className="flex justify-between text-gray-700">
               <span>Subtotal</span>
               <span className="font-medium">RD$ {(order.data.subtotal ?? 0).toFixed(2)}</span>
             </div>
 
-            {/* ITBIS 18% */}
             <div className="flex justify-between text-gray-700">
               <span className="flex items-center gap-1">
                 ITBIS
@@ -270,7 +255,6 @@ export default function OrderServedPage() {
               <span className="font-medium">RD$ {(order.data.tax ?? 0).toFixed(2)}</span>
             </div>
 
-            {/* Propina legal 10% */}
             <div className="flex justify-between text-gray-700">
               <span className="flex items-center gap-1">
                 Propina legal
@@ -279,7 +263,6 @@ export default function OrderServedPage() {
               <span className="font-medium">RD$ {(order.data.tip ?? (order.data.subtotal ?? 0) * 0.10).toFixed(2)}</span>
             </div>
 
-            {/* Descuento */}
             {(order.data.discount ?? 0) > 0 && (
               <div className="flex justify-between text-green-700">
                 <span className="flex items-center gap-1">
@@ -290,7 +273,6 @@ export default function OrderServedPage() {
               </div>
             )}
 
-            {/* Total */}
             <div className="border-t border-gray-200 pt-3">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-gray-900">Total a Pagar</span>

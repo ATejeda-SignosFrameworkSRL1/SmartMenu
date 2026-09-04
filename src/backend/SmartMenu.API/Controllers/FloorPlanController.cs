@@ -10,11 +10,6 @@ using System.Text.Json;
 
 namespace SmartMenu.API.Controllers;
 
-/// <summary>
-/// Plano de planta (Gestión de Salón): lee/persiste el LAYOUT diseñado (posiciones,
-/// formas, estructuras) + devuelve el estado dinámico de cada mesa por zona. El estado
-/// en vivo se difunde aparte por el hub /hubs/tables (TableStatusChanged).
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -31,14 +26,12 @@ public class FloorPlanController : ControllerBase
         _notifier = notifier;
     }
 
-    /// <summary>Zona de salón (no cocina/bar) — igual criterio que host-app.</summary>
     private static bool IsDiningZone(string? type)
     {
         var t = (type ?? "").Trim().ToLowerInvariant();
         return t != "kitchen" && t != "bar";
     }
 
-    // GET /api/floorplan → FloorPlanData (zonas → mesas con layout + status + estructuras)
     [HttpGet]
     [Authorize(Roles = "Admin,Manager,Waiter,Host")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -61,10 +54,6 @@ public class FloorPlanController : ControllerBase
                 .Where(s => zoneIds.Contains(s.ZoneId))
                 .ToListAsync();
 
-            // Status dinámico: una mesa Available con reserva activa cuya VENTANA DE BLOQUEO ya empezó
-            // (ReservationDateTime - AdvanceBlockMinutes <= ahora < EndDateTime) se muestra como Reserved.
-            // AdvanceBlockMinutes es POR reserva (default 60); se filtra en memoria porque EF Core no traduce
-            // AddMinutes(-columna). (misma lógica que TableController.GetTables.)
             var nowLocal = RestaurantClock.Now;
             var reservedTableIds = (await _context.TableReservations.AsNoTracking()
                     .Where(r => ReservationMath.ActiveStatuses.Contains(r.Status)
@@ -76,14 +65,9 @@ public class FloorPlanController : ControllerBase
                 .Select(r => r.TableId)
                 .ToHashSet();
 
-            // Estados en minúscula para alinear con TableData.status del plano (@smartmenu/ui).
-            // Regla compartida con TableController + la difusión por SignalR (ReservationMath).
             string EffectiveStatus(Table t) =>
                 TableStatusEvaluator.EffectiveStatus(t.Status, reservedTableIds.Contains(t.Id)).ToString().ToLowerInvariant();
 
-            // Mesero EN VIVO a cargo: SOLO en mesas que se están atendiendo (ocupada/por cobrar),
-            // así el badge nunca queda pegado en una mesa liberada con la sesión sin cerrar.
-            // Prioridad por mesa: sesión activa con waiter → si no, orden viva con waiter.
             var servedTableIds = tables
                 .Where(t => EffectiveStatus(t) is "occupied" or "billing")
                 .Select(t => t.Id).ToList();
@@ -175,7 +159,6 @@ public class FloorPlanController : ControllerBase
         }
     }
 
-    // PUT /api/floorplan → persiste SOLO el layout (posiciones/formas/server por mesa + estructuras por zona).
     [HttpPut]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -189,7 +172,6 @@ public class FloorPlanController : ControllerBase
             {
                 if (!int.TryParse(zone.ZoneId, out var zoneId)) continue;
 
-                // Mesas: actualizar solo campos de layout (match por id real de la mesa).
                 var dtoTables = zone.Tables ?? new List<TableLayoutDto>();
                 var ids = dtoTables.Select(t => t.Id).ToList();
                 if (ids.Count > 0)
@@ -212,7 +194,6 @@ public class FloorPlanController : ControllerBase
                     }
                 }
 
-                // Estructuras: estrategia "reemplazar" las de la zona.
                 var existing = await _context.FloorStructures.Where(s => s.ZoneId == zoneId).ToListAsync();
                 if (existing.Count > 0) _context.FloorStructures.RemoveRange(existing);
                 foreach (var s in zone.Structures ?? new List<StructureLayoutDto>())
@@ -240,7 +221,6 @@ public class FloorPlanController : ControllerBase
         }
     }
 
-    // PUT /api/floorplan/palette → paleta de colores de estado del restaurante (fill por estado).
     [HttpPut("palette")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -265,8 +245,6 @@ public class FloorPlanController : ControllerBase
         }
     }
 
-    // PUT /api/floorplan/visibility → switches del admin: muestra/oculta el plano por app (host/waiter).
-    // Persiste en Restaurant y difunde FloorPlanVisibilityChanged por /hubs/tables para reflejo en vivo.
     [HttpPut("visibility")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -293,7 +271,6 @@ public class FloorPlanController : ControllerBase
         }
     }
 
-    // ── DTOs del PUT (espejo de FloorPlanData de @smartmenu/ui) ──
     public class FloorPlanDto
     {
         public List<ZoneLayoutDto> Zones { get; set; } = new();

@@ -1,21 +1,15 @@
-// lib/countryCodes.ts
-// Prefijos telefónicos internacionales para el input de teléfono de reservas.
-// El nombre va en español (idioma base del catálogo); la bandera se deriva del
-// código ISO-3166-1 alpha-2 (regional indicators), así no hay que hardcodear emojis.
 
 export interface CountryCode {
-  /** ISO-3166-1 alpha-2, ej. "DO" */
+
   iso: string;
-  /** Nombre en español */
+
   name: string;
-  /** Prefijo internacional de marcación, ej. "+1" */
+
   dial: string;
 }
 
-/** País por defecto del input (República Dominicana). */
 export const DEFAULT_COUNTRY_ISO = 'DO';
 
-// Los más frecuentes para RD primero; el resto, alfabético por nombre.
 export const COUNTRIES: CountryCode[] = [
   { iso: 'DO', name: 'República Dominicana', dial: '+1' },
   { iso: 'US', name: 'Estados Unidos', dial: '+1' },
@@ -27,7 +21,7 @@ export const COUNTRIES: CountryCode[] = [
   { iso: 'VE', name: 'Venezuela', dial: '+58' },
   { iso: 'CU', name: 'Cuba', dial: '+53' },
   { iso: 'CA', name: 'Canadá', dial: '+1' },
-  // ── resto, alfabético ──
+
   { iso: 'DE', name: 'Alemania', dial: '+49' },
   { iso: 'AR', name: 'Argentina', dial: '+54' },
   { iso: 'AW', name: 'Aruba', dial: '+297' },
@@ -59,15 +53,13 @@ export const COUNTRIES: CountryCode[] = [
   { iso: 'UY', name: 'Uruguay', dial: '+598' },
 ];
 
-/** Emoji de bandera a partir del ISO-3166-1 alpha-2. */
 export function flagEmoji(iso: string): string {
   const cc = iso.toUpperCase();
   if (cc.length !== 2) return '';
-  const A = 0x1f1e6; // 🇦
+  const A = 0x1f1e6;
   return String.fromCodePoint(A + cc.charCodeAt(0) - 65, A + cc.charCodeAt(1) - 65);
 }
 
-/** País por ISO; cae al primero (RD) si no se encuentra. */
 export function countryByIso(iso: string): CountryCode {
   return COUNTRIES.find((c) => c.iso === iso) ?? COUNTRIES[0];
 }
@@ -76,10 +68,6 @@ export function dialForIso(iso: string): string {
   return countryByIso(iso).dial;
 }
 
-/**
- * Compone el teléfono final con prefijo internacional, ej. ("DO", "809 555 0000")
- * → "+1 809 555 0000". Devuelve "" si el número local viene vacío.
- */
 export function composePhone(iso: string, local: string): string {
   const num = local.trim();
   if (!num) return '';

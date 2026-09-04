@@ -26,11 +26,6 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/**
- * Motor de reservas con capacidad dinámica por intervalo, adaptado al tema warm/gold del landing.
- * Flujo: fecha+party → grid de slots en vivo → contacto → confirmación con código.
- */
-// Hora dominicana 12h (ej. "18:00" → "6:00 PM"). Para horas en string "HH:mm".
 function to12h(t?: string | null): string {
   if (!t) return '';
   const [hs, m = '00'] = String(t).split(':');
@@ -41,11 +36,8 @@ function to12h(t?: string | null): string {
   return `${h}:${m.padStart(2, '0')} ${ap}`;
 }
 
-// Mínimo FIJO de comensales para reservar un área completa. El host confirma la capacidad
-// real de cada zona contactando al cliente; el usuario puede subir desde este piso.
 const AREA_MIN_GUESTS = 7;
 
-// Horas para el modo "Área completa" (no hay grid de slots; el host aprueba). 12:00–22:00 cada 30 min.
 const AREA_TIMES: string[] = (() => {
   const out: string[] = [];
   for (let h = 12; h <= 22; h++) { out.push(`${String(h).padStart(2, '0')}:00`); if (h < 22) out.push(`${String(h).padStart(2, '0')}:30`); }
@@ -57,8 +49,8 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
   const to = useTranslations('occasions');
   const dl = dateLocale(useLocale());
   const [step, setStep] = useState<Step>(1);
-  const [mode, setMode] = useState<'mesa' | 'area'>(forceMode ?? 'mesa');   // 'area' = reservar zona completa (exclusiva)
-  const [areaTime, setAreaTime] = useState('19:00');           // hora elegida en modo área (no hay grid de slots)
+  const [mode, setMode] = useState<'mesa' | 'area'>(forceMode ?? 'mesa');
+  const [areaTime, setAreaTime] = useState('19:00');
   const [date, setDate] = useState(tomorrowStr());
   const [calMonth, setCalMonth] = useState<Date>(() => { const t = new Date(); t.setDate(t.getDate() + 1); return new Date(t.getFullYear(), t.getMonth(), 1); });
   const [guests, setGuests] = useState(forceMode === 'area' ? AREA_MIN_GUESTS : 2);
@@ -72,7 +64,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
   const [holding, setHolding] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);   // prefijo telefónico internacional
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [email, setEmail] = useState('');
   const [occasion, setOccasion] = useState(0);
   const [notes, setNotes] = useState('');
@@ -80,21 +72,16 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
   const [result, setResult] = useState<BookingResult | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
-  // Cargar zonas Dining una sola vez al montar; el cliente puede filtrar slots por zona.
   useEffect(() => {
     (async () => { setZones(await getZones()); })();
   }, []);
 
-  // Mínimo FIJO de comensales para "Área completa" (el host confirma la capacidad real por zona).
   const minGuests = mode === 'area' ? AREA_MIN_GUESTS : 1;
 
-  // Al entrar en modo área, asegura que los comensales arranquen en el mínimo.
   useEffect(() => {
     if (mode === 'area') setGuests((g) => Math.max(g, AREA_MIN_GUESTS));
   }, [mode]);
 
-  // Guard anti out-of-order: solo la respuesta de la ÚLTIMA petición toca el estado
-  // (el polling de 15s y los cambios rápidos de fecha/comensales/zona pueden cruzarse).
   const slotsSeq = useRef(0);
   const fetchSlots = useCallback(async () => {
     const seq = ++slotsSeq.current;
@@ -113,14 +100,12 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
     return () => clearTimeout(tm);
   }, [step, fetchSlots]);
 
-  // Polling cada 15s mientras el grid está visible — grey-out en vivo si otro cliente toma el slot.
   useEffect(() => {
     if (step !== 2) return;
     const id = setInterval(() => { if (document.visibilityState === 'visible') fetchSlots(); }, 15000);
     return () => clearInterval(id);
   }, [step, fetchSlots]);
 
-  // Cuenta regresiva del hold; solo corre en el paso 3 (si expira ahí, regresa a slots).
   useEffect(() => {
     if (!hold?.holdExpiresAt || step !== 3) { setSecondsLeft(null); return; }
     const expiry = new Date(hold.holdExpiresAt).getTime();
@@ -213,7 +198,6 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
     ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
     : '0:00';
 
-  // ─── Confirmación ───
   if (step === 4 && result) {
     if (mode === 'area') {
       const zoneName = zones.find((z) => z.id === zoneId)?.name;
@@ -261,10 +245,9 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
     );
   }
 
-  // ─── Wizard ───
   return (
     <div className="mx-auto max-w-3xl rounded-3xl border border-warm-800 bg-warm-900/50 p-6 shadow-2xl backdrop-blur-sm sm:p-10">
-      {/* Header del wizard */}
+
       <div className="mb-6 flex items-center gap-3">
         {step > 1 && (
           <button onClick={() => setStep((s) => (mode === 'area' && s === 3 ? 1 : (s - 1)) as Step)} className="p-2 -ml-2 rounded-lg text-warm-300 hover:bg-warm-800/60" aria-label={t('back')}>
@@ -286,10 +269,9 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
         <div className="h-full bg-primary transition-all" style={{ width: `${mode === 'area' ? (step === 3 ? 100 : 50) : (step / 3) * 100}%` }} />
       </div>
 
-      {/* Paso 1 — fecha + party */}
       {step === 1 && (
         <div className="space-y-5">
-          {/* Toggle de modo — solo cuando el widget NO está fijado a un modo (en /area-completa va sin toggle). */}
+
           {!forceMode && (
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-warm-700 bg-warm-800/40 p-1">
             <button type="button" onClick={() => setMode('mesa')}
@@ -307,13 +289,13 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
               {t('areaNote')}
             </p>
           )}
-          {/* Fecha — calendario SIEMPRE abierto (mobile-first: un toque para elegir el día) */}
+
           <div className="block">
             <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
               <CalendarDays className="h-4 w-4 text-primary-light" /> {t('dateLabel')} *
             </span>
             <div className="rounded-xl border border-warm-700 bg-warm-800/50 p-3 sm:p-4">
-              {/* Navegación de mes */}
+
               <div className="mb-3 flex items-center justify-between">
                 <button
                   type="button"
@@ -336,13 +318,13 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
                   <ChevronRight className="h-5 w-5" />
                 </button>
               </div>
-              {/* Días de la semana — iniciales localizadas (semana inicia en domingo). */}
+
               <div className="mb-1 grid grid-cols-7">
                 {Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 7 + i).toLocaleDateString(dl, { weekday: 'narrow' })).map((d, i) => (
                   <span key={i} className="py-1 text-center text-xs font-bold uppercase text-warm-500">{d}</span>
                 ))}
               </div>
-              {/* Grid de días del mes */}
+
               <div className="grid grid-cols-7 gap-1">
                 {(() => {
                   const year = calMonth.getFullYear();
@@ -381,7 +363,7 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
                   return cells;
                 })()}
               </div>
-              {/* Confirmación legible del día elegido */}
+
               <p className="mt-3 border-t border-warm-800 pt-2.5 text-center text-sm capitalize text-warm-200">
                 {new Date(date + 'T00:00:00').toLocaleDateString(dl, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
@@ -403,7 +385,6 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
             )}
           </div>
 
-          {/* Selector de zona — preferencia (mesa) u obligatoria + completa (área). */}
           {zones.length > 0 && (
             <div className="block">
               <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300">
@@ -465,7 +446,6 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
         </div>
       )}
 
-      {/* Paso 2 — slots */}
       {step === 2 && (
         <div className="space-y-5">
           <p className="text-sm text-warm-400">
@@ -525,7 +505,6 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
         </div>
       )}
 
-      {/* Paso 3 — contacto */}
       {step === 3 && (
         <div className="space-y-5">
           {mode === 'area' && (
@@ -576,7 +555,6 @@ export default function BookingEngineWarm({ forceMode }: { forceMode?: 'mesa' | 
         </div>
       )}
 
-      {/* estilos locales para los inputs warm/gold */}
       <style>{`
         .warm-inp { width: 100%; border-radius: 0.75rem; border: 1px solid #44403c; background: rgba(41, 37, 36, 0.5); padding: 0.75rem 1rem; color: #ffffff; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
         .warm-inp::placeholder { color: #78716c; }

@@ -1,9 +1,4 @@
-// i18n/request.ts — Configuración por-request de next-intl (modo sin ruteo por URL).
-//
-// 1. Lee la cookie LOCALE y la valida contra la whitelist (seguridad).
-// 2. Carga SOLO el catálogo del idioma activo (chunk async) → costo O(1) en idiomas.
-// 3. Hace deep-merge del catálogo activo SOBRE el español → cualquier clave sin
-//    traducir cae a español. Nunca se muestra una clave cruda ni revienta el render.
+
 import { getRequestConfig } from 'next-intl/server';
 import { cookies } from 'next/headers';
 import { defaultLocale, isLocale, LOCALE_COOKIE, type Locale } from './config';
@@ -15,7 +10,6 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-// Mezcla profunda: base (es) + override (idioma activo). El override gana cuando existe.
 function deepMerge<T>(base: T, override: unknown): T {
   if (!isPlainObject(base) || !isPlainObject(override)) {
     return override === undefined ? base : (override as T);

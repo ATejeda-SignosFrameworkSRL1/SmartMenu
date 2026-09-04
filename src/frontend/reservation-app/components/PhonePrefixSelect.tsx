@@ -7,7 +7,6 @@ import { COUNTRIES, countryByIso, flagEmoji } from '@/lib/countryCodes';
 
 type Variant = 'warm' | 'slate';
 
-// Paletas para que el selector encaje en los dos formularios oscuros de la app.
 const PALETTES: Record<Variant, Record<string, string>> = {
   warm: {
     '--pps-bg': 'rgba(41,37,36,0.5)', '--pps-border': '#44403c', '--pps-accent': '#b8860b',
@@ -23,10 +22,6 @@ const PALETTES: Record<Variant, Record<string, string>> = {
   },
 };
 
-/**
- * Selector de prefijo telefónico internacional (bandera + código de marcación)
- * con buscador. Pensado para ir a la izquierda del input de teléfono.
- */
 export default function PhonePrefixSelect({
   value,
   onChange,
@@ -56,7 +51,6 @@ export default function PhonePrefixSelect({
     );
   }, [query]);
 
-  // Cerrar al hacer clic fuera.
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
@@ -66,7 +60,6 @@ export default function PhonePrefixSelect({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
-  // Reset del buscador + foco al abrir.
   useEffect(() => {
     if (open) {
       setQuery('');

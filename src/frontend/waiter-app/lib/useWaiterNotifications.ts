@@ -15,11 +15,11 @@ export interface WaiterNotification {
   message: string;
   timestamp: Date;
   read: boolean;
-  /** Para notificaciones de claim: ID de la solicitud */
+
   claimRequestId?: number;
-  /** Para notificaciones de claim: nota del admin */
+
   adminNote?: string;
-  /** Para notificaciones de claim: ID de DB de la mesa (distinto de tableNumber) */
+
   tableId?: number;
 }
 
@@ -28,20 +28,12 @@ interface UseWaiterNotificationsOptions {
   token: string | null;
 }
 
-/**
- * URL del hub de SignalR.
- * Usa el proxy de Next.js (/hubs/orders → http://localhost:5041/hubs/orders)
- * para evitar problemas de certificado SSL en el navegador.
- * El transporte es LongPolling (HTTP puro) para máxima compatibilidad con proxies.
- */
 function getHubUrl(): string {
   if (typeof window === 'undefined') return '/hubs/orders';
-  // Ruta relativa → el proxy de Next.js lo enruta a localhost:5041
-  // Esto evita que el browser tenga que aceptar el cert de :5042 por separado
+
   return `${window.location.origin}/hubs/orders`;
 }
 
-// Reemplaza el código largo (ORD-20260611144054-7cfdfa) por su parte corta (7CFDFA) dentro de un texto.
 function withShortOrder(msg: string, orderNumber?: string): string {
   if (!orderNumber) return msg;
   const short = (orderNumber.split('-').pop() ?? '').toUpperCase();
@@ -80,11 +72,10 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
     };
     setNotifications(prev => [newNotif, ...prev].slice(0, 50));
 
-    // Intentar vibrar el dispositivo (mobile)
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate([200, 100, 200]);
     }
-    // Notificación del browser si hay permiso
+
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification('SmartMenu — Mesero', {
         body: notification.message,
@@ -100,10 +91,9 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
     const hubUrl = getHubUrl();
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+
         accessTokenFactory: () => ensureFreshToken(),
-        // Intenta WebSocket primero; si el proxy no soporta upgrade, cae a LongPolling.
-        // Ambos van a través del proxy Next.js (mismo origen → sin problema de cert SSL).
+
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
@@ -206,7 +196,6 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
       }
     };
 
-    // Reintentar la conexión inicial hasta 6 veces con backoff exponencial
     const start = async () => {
       const delays = [0, 2000, 4000, 8000, 15000, 30000];
       for (let attempt = 0; attempt < delays.length; attempt++) {
@@ -219,7 +208,7 @@ export function useWaiterNotifications({ waiterId, token }: UseWaiterNotificatio
           await connection.start();
           setConnected(true);
           await joinGroup();
-          return; // éxito
+          return;
         } catch (err) {
           console.warn(`[SignalR] Intento ${attempt + 1} fallido:`, err);
           setConnected(false);

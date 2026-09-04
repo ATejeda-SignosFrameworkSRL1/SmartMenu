@@ -1,5 +1,5 @@
 'use server';
-// i18n/actions.ts — Server Action para fijar el idioma vía cookie (sin cambiar la URL).
+
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { isLocale, LOCALE_COOKIE } from './config';

@@ -41,9 +41,6 @@ public class OrderHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"waiter_{waiterId}");
     }
 
-    /// <summary>
-    /// El panel de admin se une a este grupo para recibir solicitudes de mesa en tiempo real.
-    /// </summary>
     public async Task JoinAdminGroup()
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, "admin");

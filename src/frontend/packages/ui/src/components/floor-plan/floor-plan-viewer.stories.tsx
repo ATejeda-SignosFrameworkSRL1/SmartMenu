@@ -13,7 +13,6 @@ export default meta;
 
 type Story = StoryObj<typeof FloorPlanViewer>;
 
-/** Solo lectura: mesas coloreadas por estado, NO arrastrables. */
 export const Default: Story = {
   args: { tables: MOCK_TABLES, width: 640, height: 420 },
 };

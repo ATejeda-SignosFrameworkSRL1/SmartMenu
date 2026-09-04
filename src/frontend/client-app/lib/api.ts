@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// En el navegador: mismo host; si la página es HTTPS usamos puerto 5042 (API HTTPS), si no 5041 (API HTTP)
 function getApiBaseUrl(): string {
   return '';
 }
@@ -15,9 +14,8 @@ export const api = axios.create({
   timeout: 10000,
 });
 
-// Interceptors
 api.interceptors.request.use((config) => {
-  // Agregar token si existe
+
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -28,11 +26,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // El customer-app es anónimo — no hay login al cual redirigir. Si llega un
-    // 401 (ej: endpoint que aún requiere auth y no es customer-friendly) lo
-    // dejamos propagar para que React Query maneje el error en la UI; NO
-    // redirigimos al root porque eso provoca un loop infinito vs / → /table
-    // → /api/table 401 → /...
+
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
     }
@@ -40,16 +34,14 @@ api.interceptors.response.use(
   }
 );
 
-// API Methods
 export const apiClient = {
-  // Auth
+
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
 
   register: (data: any) =>
     api.post('/auth/register', data),
 
-  // Table
   getTables: () =>
     api.get('/table'),
 
@@ -62,7 +54,6 @@ export const apiClient = {
   updateTableStatus: (id: number, newStatus: string) =>
     api.put(`/table/${id}/status`, { newStatus }),
 
-  // Menu
   getMenu: () =>
     api.get('/menu'),
 
@@ -78,18 +69,15 @@ export const apiClient = {
   toggleDishAvailability: (dishId: number) =>
     api.patch(`/dish/${dishId}/toggle-availability`),
 
-  // Dish Tags
   getDishTags: () =>
     api.get('/dishtag'),
 
-  // Categories
   getCategories: () =>
     api.get('/category'),
 
   getCategory: (id: number) =>
     api.get(`/category/${id}`),
 
-  // Orders
   createOrder: (data: any) =>
     api.post('/order', data),
 
@@ -111,7 +99,6 @@ export const apiClient = {
   addItemsToOrder: (orderId: number, items: any[]) =>
     api.post(`/order/${orderId}/add-items`, items),
 
-  // Payments
   createPayment: (data: any) =>
     api.post('/payment', data),
 

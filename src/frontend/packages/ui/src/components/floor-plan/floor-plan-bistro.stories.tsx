@@ -62,7 +62,6 @@ function Legend() {
   );
 }
 
-/** Vista host/waiter (solo lectura) del plano "Bistro". */
 export const Vista: Story = {
   render: () => (
     <div style={{ padding: 12 }}>
@@ -74,7 +73,6 @@ export const Vista: Story = {
   ),
 };
 
-/** Mismo plano en modo admin: arrastrá las mesas para reubicarlas. */
 export const Editable: Story = {
   render: () => (
     <div style={{ padding: 12 }}>

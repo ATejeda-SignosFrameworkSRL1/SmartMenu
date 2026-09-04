@@ -1,11 +1,10 @@
-// API Response Types
+
 export interface ApiResponse<T> {
   data: T;
   success: boolean;
   message?: string;
 }
 
-// Table Types
 export interface TableInfo {
   id: number;
   tableNumber: string;
@@ -17,7 +16,6 @@ export interface TableInfo {
   capacity: number;
 }
 
-// Menu Types (Ajustado al backend real)
 export interface Menu {
   id: number;
   name: string;
@@ -65,7 +63,6 @@ export interface Modifier {
   options: string[];
 }
 
-// Order Types (Ajustado al backend real)
 export interface Order {
   id: number;
   orderNumber: string;
@@ -103,7 +100,6 @@ export interface CreateOrderRequest {
   }[];
 }
 
-// Cart Types
 export interface CartItem {
   dishId: number;
   dishName: string;

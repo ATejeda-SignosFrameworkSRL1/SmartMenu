@@ -24,10 +24,6 @@ public class TableClaimController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Extrae el userId del JWT (claim 'sub' o NameIdentifier).
-    /// Devuelve null si no se puede parsear o es 0.
-    /// </summary>
     private int? GetUserIdFromJwt()
     {
         var sub = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
@@ -36,9 +32,6 @@ public class TableClaimController : ControllerBase
         return null;
     }
 
-    /// <summary>
-    /// Mesero solicita quedarse con una mesa. El admin recibirá notificación por SignalR.
-    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> RequestClaim([FromBody] RequestClaimDto dto)
@@ -53,7 +46,6 @@ public class TableClaimController : ControllerBase
             if (table == null)
                 return NotFound(new { error = "Mesa no encontrada" });
 
-            // Cancelar solicitudes pendientes anteriores del mismo mesero para la misma mesa
             var existing = await _context.TableClaimRequests
                 .Where(r => r.WaiterId == dto.WaiterId && r.TableId == dto.TableId && r.Status == ClaimRequestStatus.Pending)
                 .ToListAsync();
@@ -71,7 +63,6 @@ public class TableClaimController : ControllerBase
             _context.TableClaimRequests.Add(request);
             await _context.SaveChangesAsync();
 
-            // Notificar al grupo "admin" en tiempo real
             await _hub.Clients.Group("admin").SendAsync("TableClaimRequested", new
             {
                 requestId = request.Id,
@@ -94,18 +85,13 @@ public class TableClaimController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Admin aprueba la solicitud. Se asigna el mesero a la sesión de mesa y se notifica al mesero.
-    /// Solo Admin/Manager. El AdminId se extrae del JWT (no del body) para evitar spoofing.
-    /// </summary>
     [HttpPut("{id}/approve")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Approve(int id, [FromBody] RespondClaimDto? dto)
     {
         try
         {
-            // CLAIM-FIX.1 — extraer adminId del JWT, NO del body.
-            // El body anterior aceptaba adminId=0 → FK constraint violation → 500.
+
             var adminId = GetUserIdFromJwt();
             if (adminId == null)
                 return Unauthorized(new { error = "No se pudo identificar al admin desde el token" });
@@ -126,7 +112,6 @@ public class TableClaimController : ControllerBase
             request.AdminNote = dto?.Note;
             request.UpdatedAt = DateTime.UtcNow;
 
-            // Asignar el mesero a la sesión activa de la mesa (o crearla si no existe)
             var session = await _context.TableSessions
                 .FirstOrDefaultAsync(s => s.TableId == request.TableId && s.IsActive);
 
@@ -137,7 +122,7 @@ public class TableClaimController : ControllerBase
             }
             else
             {
-                // Crear sesión nueva si la mesa no tiene una activa
+
                 _context.TableSessions.Add(new TableSession
                 {
                     TableId = request.TableId,
@@ -150,7 +135,6 @@ public class TableClaimController : ControllerBase
                 });
             }
 
-            // Actualizar órdenes activas de esa mesa para asignarlas al mesero
             if (request.OrderId.HasValue)
             {
                 var order = await _context.Orders.FindAsync(request.OrderId.Value);
@@ -163,7 +147,6 @@ public class TableClaimController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            // Notificar al mesero
             await _hub.Clients.Group($"waiter_{request.WaiterId}").SendAsync("TableClaimApproved", new
             {
                 requestId = request.Id,
@@ -184,10 +167,6 @@ public class TableClaimController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Admin rechaza la solicitud. El mesero recibe notificación de rechazo.
-    /// Solo Admin/Manager. El AdminId se extrae del JWT (no del body).
-    /// </summary>
     [HttpPut("{id}/reject")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Reject(int id, [FromBody] RespondClaimDto? dto)
@@ -215,7 +194,6 @@ public class TableClaimController : ControllerBase
             request.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            // Notificar al mesero
             await _hub.Clients.Group($"waiter_{request.WaiterId}").SendAsync("TableClaimRejected", new
             {
                 requestId = request.Id,
@@ -236,9 +214,6 @@ public class TableClaimController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Admin lista todas las solicitudes pendientes.
-    /// </summary>
     [HttpGet("pending")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetPending()
@@ -263,9 +238,6 @@ public class TableClaimController : ControllerBase
         return Ok(requests);
     }
 
-    /// <summary>
-    /// Historial de solicitudes (todas, para admin).
-    /// </summary>
     [HttpGet("history")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetHistory([FromQuery] int? waiterId)

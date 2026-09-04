@@ -39,7 +39,7 @@ public class KitchenHub : Hub
 
     public override async Task OnConnectedAsync()
     {
-        // Auto-join kitchen group para KDS
+
         await Groups.AddToGroupAsync(Context.ConnectionId, "kitchen");
         await base.OnConnectedAsync();
     }

@@ -52,7 +52,7 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -63,7 +63,7 @@ export default function MenuPage() {
 
             <div className="flex items-center gap-2">
               <LanguageSwitcher />
-              {/* Cart Button */}
+
               <button
                 onClick={() => window.location.href = '/cart'}
                 className="relative bg-primary-600 text-white p-3 rounded-full shadow-lg hover:bg-primary-700 transition-colors"
@@ -80,7 +80,6 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* Search Bar */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="relative">
@@ -94,7 +93,6 @@ export default function MenuPage() {
             />
           </div>
 
-          {/* Filters */}
           <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
             <button
               onClick={() => setFilters(prev => ({ ...prev, vegetarian: !prev.vegetarian }))}
@@ -132,7 +130,6 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Categories */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3 overflow-x-auto">
           <div className="flex gap-2">
@@ -163,7 +160,6 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Menu Items */}
       <div className="container mx-auto px-4 py-6">
         {categories
           .filter((cat: Category) => !selectedCategory || cat.id === selectedCategory)
@@ -187,7 +183,7 @@ export default function MenuPage() {
                       animate={{ opacity: 1, y: 0 }}
                       className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow"
                     >
-                      {/* Image */}
+
                       {dish.imageUrl && (
                         <div className="h-48 bg-gray-200 overflow-hidden">
                           <img
@@ -202,9 +198,8 @@ export default function MenuPage() {
                         </div>
                       )}
 
-                      {/* Content */}
                       <div className="p-4">
-                        {/* Tags */}
+
                         <div className="flex gap-2 mb-2">
                           {dish.isVegetarian && (
                             <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center gap-1">

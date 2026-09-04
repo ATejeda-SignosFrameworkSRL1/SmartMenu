@@ -4,18 +4,11 @@ using SmartMenu.Application.Exceptions;
 
 namespace SmartMenu.API.Middleware;
 
-/// <summary>
-/// Atrapa toda excepción no manejada en el pipeline y la convierte a un response
-/// JSON consistente: <c>{ error: string, errors?: { field: string[] } }</c>.
-/// Mapea tipos de dominio a códigos HTTP. Loguea el stack completo internamente y
-/// solo expone detalles si el ambiente es Development.
-/// </summary>
 public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
-    // Exponer el stack/detalle en el response SOLO si DetailedErrors=true. Desacoplado del
-    // entorno: QA corre como Development pero NO debe filtrar internals. Default: false.
+
     private readonly bool _detailedErrors;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -91,10 +84,10 @@ public class ExceptionHandlingMiddleware
                 return (StatusCodes.Status409Conflict, new { error = "Otro usuario modificó este registro. Recarga e intenta de nuevo." });
 
             case TaskCanceledException or OperationCanceledException:
-                return (499, new { error = "Petición cancelada." }); // 499 Client Closed Request (nginx convention)
+                return (499, new { error = "Petición cancelada." });
 
             default:
-                // No filtrar detalles internos en respuesta — el logger ya tiene el stack.
+
                 var safeMessage = _detailedErrors ? ex.ToString() : "Error interno del servidor.";
                 return (StatusCodes.Status500InternalServerError, new { error = safeMessage });
         }

@@ -14,7 +14,6 @@ export default meta;
 
 type Story = StoryObj;
 
-/** Host/Waiter: cambiá de zona con las pestañas; el lienzo muestra solo esa zona (read-only). */
 export const Viewer: Story = {
   render: () => (
     <div style={{ padding: 12 }}>
@@ -23,8 +22,6 @@ export const Viewer: Story = {
   ),
 };
 
-/** Admin: editá cada zona por separado. Arrastrá una mesa → se actualizan sus coords
- *  en la zona activa (el panel muestra el estado; los cambios persisten al cambiar de zona). */
 export const Editor: Story = {
   render: () => {
     const Demo = () => {

@@ -1,6 +1,5 @@
 import type { TableData } from "./types";
 
-/** Datos mock para Storybook: 6 mesas con posiciones y estados variados. */
 export const MOCK_TABLES: TableData[] = [
   { id: 1, number: 1, x: 120, y: 110, status: "available", capacity: 4 },
   { id: 2, number: 2, x: 300, y: 110, status: "occupied", capacity: 2 },

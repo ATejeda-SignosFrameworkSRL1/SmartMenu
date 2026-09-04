@@ -1,7 +1,3 @@
-// DELIVERY-TRACKING (PROTOTIPO) — tipos del panel de seguimiento multi-franquicia.
-// Espejo del contrato propuesto para /api/invoices (rama feature/invoice-delivery-tracking):
-// una factura global pagada una sola vez que por dentro se parte en una orden por
-// franquicia. Vive SOLO en el design system + Storybook hasta que se apruebe el rollout.
 
 export type DeliveryStatusKey =
   | "Pending"
@@ -22,14 +18,13 @@ export interface DeliveryOrderItem {
   subtotal: number;
 }
 
-/** Orden por franquicia dentro de la factura global (cada KDS procesa solo la suya). */
 export interface DeliveryFranchiseOrder {
   orderId: number;
   orderNumber: string;
   restaurantId: number;
   restaurantName: string;
   status: string;
-  /** Verdad fiscal POR franquicia (RNC propio): ITBIS/propina se liquidan por orden. */
+
   subtotal: number;
   tax: number;
   tip: number;
@@ -37,7 +32,6 @@ export interface DeliveryFranchiseOrder {
   items: DeliveryOrderItem[];
 }
 
-/** Factura global del checkout online (un pago del cliente; N órdenes por franquicia). */
 export interface DeliveryInvoice {
   id: number;
   customerName: string;
@@ -56,7 +50,6 @@ export interface DeliveryInvoice {
   orders: DeliveryFranchiseOrder[];
 }
 
-/** Transiciones válidas del tracking (mismo mapa que usaría el backend/las apps). */
 export const DELIVERY_NEXT_STATUS: Record<DeliveryStatusKey, DeliveryStatusKey[]> = {
   Pending: ["Confirmed", "Cancelled"],
   Confirmed: ["Preparing", "Cancelled"],

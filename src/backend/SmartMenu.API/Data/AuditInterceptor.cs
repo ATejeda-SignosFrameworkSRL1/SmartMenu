@@ -11,15 +11,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.API.Data;
 
-/// <summary>
-/// S4.1 — SaveChangesInterceptor: detecta cambios a entidades sensibles
-/// (Dish, User, Payment, Order, Restaurant) en ApplicationDbContext y los
-/// registra como AuditLog rows en AuditDbContext (DB separada).
-///
-/// Diseño defensivo: si la escritura a Audit DB falla, NO propaga la excepción
-/// al SaveChanges principal — solo loguea. La auditoría no debe bloquear
-/// operación legítima si el audit DB está caído.
-/// </summary>
 public class AuditInterceptor : SaveChangesInterceptor
 {
     private static readonly HashSet<string> AuditedTypes = new()
@@ -39,9 +30,6 @@ public class AuditInterceptor : SaveChangesInterceptor
         _logger = logger;
     }
 
-    // AsyncLocal: capturamos los cambios en SavingChangesAsync (antes del save, mientras
-    // el ChangeTracker aún tiene los EntityState reales) y los escribimos en SavedChangesAsync
-    // (después del éxito) para no bloquear ni perder integridad si el save principal falla.
     private static readonly AsyncLocal<List<AuditLog>?> _pending = new();
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -85,7 +73,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         }
         catch (Exception ex)
         {
-            // Nunca bloquear el SaveChanges principal por fallo de audit.
+
             _logger.LogError(ex, "Audit log write failed");
         }
         return result;
@@ -117,7 +105,7 @@ public class AuditInterceptor : SaveChangesInterceptor
                 changesJson = JsonSerializer.Serialize(snapshot);
             }
         }
-        catch { /* serialización defensiva */ }
+        catch {  }
 
         var http = _http.HttpContext;
         var userId = int.TryParse(http?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value

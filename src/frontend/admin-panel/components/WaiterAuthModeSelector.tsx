@@ -45,14 +45,6 @@ const MODES = [
   },
 ];
 
-/**
- * Sprint 5.2 — Selector de WaiterAuthMode a nivel restaurante.
- *
- * Carga el restaurante actual del backend (GET /api/restaurant/current),
- * muestra 3 cards (PrivateOnly / PublicPin / Hybrid) con descripción y caso de uso.
- * El cambio se envía vía PUT /api/restaurant/{id}/auth-mode.
- * Audita automáticamente en backend.
- */
 export function WaiterAuthModeSelector() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);

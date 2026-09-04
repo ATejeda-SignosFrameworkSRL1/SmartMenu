@@ -28,7 +28,6 @@ import {
 } from '@/components/ui/select';
 import toast from 'react-hot-toast';
 
-// ── Tipos del contrato de /api/invoices ──────────────────────────────────────
 interface InvoiceOrderItem {
   dishId: number;
   dishName: string;
@@ -68,7 +67,6 @@ interface Invoice {
   orders: InvoiceOrder[];
 }
 
-// Orden lógico del flujo de delivery + colores del Badge por estado.
 const DELIVERY_STATUSES = [
   'Pending',
   'Confirmed',
@@ -90,7 +88,6 @@ const STATUS_CONFIG: Record<string, { badge: string; badgeText: string; dot: str
   Cancelled:      { badge: 'bg-red-100 border-red-300',        badgeText: 'text-red-800',     dot: 'bg-red-400',     accent: 'bg-red-500' },
 };
 
-// Siguiente(s) estado(s) a los que se puede avanzar desde el actual.
 const NEXT_STATUS: Record<string, DeliveryStatus[]> = {
   Pending:        ['Confirmed', 'Cancelled'],
   Confirmed:      ['Preparing', 'Cancelled'],
@@ -109,16 +106,15 @@ export default function DeliveryPage() {
 
   const statusLabel = (key: string) => t(`status.${key}` as any, { defaultValue: key });
 
-  const [enabled, setEnabled] = useState<boolean | null>(null); // null = aún no cargado
+  const [enabled, setEnabled] = useState<boolean | null>(null);
   const [togglingEnabled, setTogglingEnabled] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [disabledByBackend, setDisabledByBackend] = useState(false); // 403 del GET tracking
+  const [disabledByBackend, setDisabledByBackend] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
-  // ── Ajustes de tracking (GET/PUT /api/invoices/tracking-settings) ──────────
   const loadSettings = useCallback(async () => {
     try {
       const res = await api.get('/invoices/tracking-settings');
@@ -132,10 +128,9 @@ export default function DeliveryPage() {
     loadSettings();
   }, [loadSettings]);
 
-  // Mismo patrón que el switch de visibilidad del plano: optimista + PUT.
   const onToggleEnabled = async (next: boolean) => {
     setTogglingEnabled(true);
-    setEnabled(next); // optimista
+    setEnabled(next);
     try {
       const res = await api.put('/invoices/tracking-settings', { enabled: next });
       const confirmed = Boolean(res.data?.deliveryTrackingEnabled);
@@ -143,14 +138,13 @@ export default function DeliveryPage() {
       if (confirmed) setDisabledByBackend(false);
       toast.success(confirmed ? t('toast.enabled') : t('toast.disabled'));
     } catch {
-      setEnabled(!next); // revertir
+      setEnabled(!next);
       toast.error(t('toast.settingsError'));
     } finally {
       setTogglingEnabled(false);
     }
   };
 
-  // ── Facturas en seguimiento (GET /api/invoices/tracking?status=) ───────────
   const loadInvoices = useCallback(async () => {
     if (enabled !== true) return;
     try {
@@ -170,7 +164,6 @@ export default function DeliveryPage() {
     }
   }, [enabled, selectedStatus, t]);
 
-  // Carga + polling de respaldo (~15s), solo cuando el tracking está habilitado.
   useEffect(() => {
     if (enabled !== true) {
       setLoading(false);
@@ -217,14 +210,12 @@ export default function DeliveryPage() {
     );
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   const showList = enabled === true && !disabledByBackend;
 
   return (
     <MainLayout title={t('pageTitle')} subtitle={t('pageSubtitle')}>
       <div className="space-y-6">
 
-        {/* ── Header + switch (siempre visible) ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{t('pageTitle')}</h1>
@@ -241,7 +232,6 @@ export default function DeliveryPage() {
           )}
         </div>
 
-        {/* ── Toggle de habilitación (mismo patrón que el switch del plano) ── */}
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white px-5 py-4 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 flex-shrink-0">
@@ -265,7 +255,6 @@ export default function DeliveryPage() {
           </div>
         </div>
 
-        {/* ── Estados de la vista ── */}
         {enabled === null ? (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -279,7 +268,7 @@ export default function DeliveryPage() {
           </div>
         ) : (
           <>
-            {/* ── Filtro por estado ── */}
+
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium text-gray-600">{t('filterLabel')}</span>
               <div className="w-56">
@@ -299,7 +288,6 @@ export default function DeliveryPage() {
               </div>
             </div>
 
-            {/* ── Lista de facturas ── */}
             {loading ? (
               <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -323,12 +311,12 @@ export default function DeliveryPage() {
                       key={inv.id}
                       className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
                     >
-                      {/* Accent strip */}
+
                       <div className={`h-1 w-full ${cfg.accent}`} />
 
                       <div className="p-4 sm:p-5">
                         <div className="flex items-start justify-between gap-4 flex-wrap">
-                          {/* Info principal */}
+
                           <div className="space-y-2 min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-base font-bold text-gray-900 truncate">
@@ -368,14 +356,12 @@ export default function DeliveryPage() {
                             </div>
                           </div>
 
-                          {/* Estado + total */}
                           <div className="flex flex-col items-end gap-2">
                             <StatusBadge status={inv.deliveryStatus} />
                             <span className="text-xl font-bold text-gray-900">{money(inv.total)}</span>
                           </div>
                         </div>
 
-                        {/* Acciones de avance de estado */}
                         {nextStatuses.length > 0 && (
                           <div className="mt-4 flex items-center gap-2 flex-wrap">
                             {isUpdating ? (
@@ -403,7 +389,6 @@ export default function DeliveryPage() {
                           </div>
                         )}
 
-                        {/* Toggle de órdenes por franquicia */}
                         {inv.orders?.length > 0 && (
                           <button
                             onClick={() => toggleExpand(inv.id)}
@@ -414,7 +399,6 @@ export default function DeliveryPage() {
                           </button>
                         )}
 
-                        {/* Órdenes por franquicia */}
                         {isOpen && inv.orders?.length > 0 && (
                           <div className="mt-3 space-y-2 border-t border-dashed border-gray-100 pt-3">
                             {inv.orders.map((o) => (

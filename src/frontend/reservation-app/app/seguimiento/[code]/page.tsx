@@ -19,7 +19,6 @@ function to12h(iso: string, locale: string): string {
   return `${fecha} · ${h}:${mm} ${ampm}`;
 }
 
-// Estilos/iconos por estado; la etiqueta se traduce en la UI vía tracking.status<Key>.
 const STATUS_UI: Record<string, { key: string; cls: string; icon: 'ok' | 'no' | 'wait' }> = {
   Pending:   { key: 'Pending',   cls: 'bg-amber-100 text-amber-800 border-amber-200', icon: 'wait' },
   Confirmed: { key: 'Confirmed', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: 'ok' },
@@ -44,10 +43,10 @@ export default function TrackPage({ params }: { params: { code: string } }) {
   const fetchTrack = useCallback(async () => {
     try {
       const r = await getTrack(code);
-      // null = 404 real del backend (código inexistente); solo ahí mostramos "no encontrada".
+
       if (r) { setTrack(r); setNotFound(false); } else { setNotFound(true); }
     } catch {
-      // Fallo de red/transitorio: conserva la última vista buena; el polling de 10s reintenta.
+
     } finally {
       setLoading(false);
     }
@@ -55,7 +54,7 @@ export default function TrackPage({ params }: { params: { code: string } }) {
 
   useEffect(() => {
     fetchTrack();
-    const id = setInterval(fetchTrack, 10000); // seguimiento en vivo cada 10s
+    const id = setInterval(fetchTrack, 10000);
     return () => clearInterval(id);
   }, [fetchTrack]);
 

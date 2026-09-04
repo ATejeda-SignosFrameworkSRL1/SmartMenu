@@ -20,7 +20,7 @@ interface Notification {
   description: string;
   time: string;
   read: boolean;
-  // Solo para tipo 'claim'
+
   claimData?: TableClaimNotification;
 }
 
@@ -41,8 +41,7 @@ export function Header({ title, subtitle }: HeaderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showPanel, setShowPanel] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  // Ref sincronizado con readIds para que fetchNotifications siempre use el valor actual
-  // (evita el stale closure del setInterval que crea notificaciones siempre como no leídas)
+
   const readIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => { readIdsRef.current = readIds; }, [readIds]);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -50,7 +49,6 @@ export function Header({ title, subtitle }: HeaderProps) {
   const [adminUser, setAdminUser] = useState<any>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
-  // Cargar token del admin desde localStorage (solo en cliente)
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     const userData = localStorage.getItem('admin_user');
@@ -58,10 +56,8 @@ export function Header({ title, subtitle }: HeaderProps) {
     if (userData) { try { setAdminUser(JSON.parse(userData)); } catch {} }
   }, []);
 
-  // SignalR para solicitudes de mesa en tiempo real
   const { claimRequests, markRead: markClaimRead, removeRequest } = useAdminNotifications(adminToken);
 
-  // Convertir un claim en notificación
   const buildClaimNotif = (cr: TableClaimNotification): Notification => ({
     id: cr.id,
     type: 'claim' as const,
@@ -74,7 +70,6 @@ export function Header({ title, subtitle }: HeaderProps) {
     claimData: cr,
   });
 
-  // Cuando llega una nueva solicitud de claim vía SignalR, agregarla a las notificaciones
   const prevClaimLenRef = useRef(0);
   useEffect(() => {
     if (claimRequests.length > prevClaimLenRef.current) {
@@ -89,7 +84,6 @@ export function Header({ title, subtitle }: HeaderProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claimRequests]);
 
-  // Mantener claims sincronizados con cambios de estado (read, removed)
   useEffect(() => {
     setNotifications(prev => {
       const withoutClaims = prev.filter(n => n.type !== 'claim');
@@ -99,8 +93,6 @@ export function Header({ title, subtitle }: HeaderProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claimRequests.length]);
 
-  // ── Polling de respaldo: cada 10s consulta solicitudes pendientes ──────────
-  // Garantiza que el admin vea claims aunque SignalR no esté conectado.
   useEffect(() => {
     const pollPending = async () => {
       try {
@@ -144,11 +136,11 @@ export function Header({ title, subtitle }: HeaderProps) {
           return [...newNotifs, ...prev.filter(n => n.type !== 'claim' || !newOnes.some(r => `claim-poll-${r.id}` === n.id))];
         });
       } catch {
-        // silencioso — el polling es un respaldo
+
       }
     };
 
-    pollPending(); // ejecutar inmediatamente al montar
+    pollPending();
     const interval = setInterval(pollPending, 10000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,7 +176,6 @@ export function Header({ title, subtitle }: HeaderProps) {
       const notifs: Notification[] = [];
       const status = (o: any) => o?.status ?? o?.Status ?? '';
 
-      // ── PEDIDOS ──
       const orders: any[] = Array.isArray(ordersRes.data) ? ordersRes.data : [];
 
       const pending = orders.filter(o => status(o) === 'Pending');
@@ -233,7 +224,6 @@ export function Header({ title, subtitle }: HeaderProps) {
         });
       }
 
-      // ── MESAS ──
       const tables: any[] = Array.isArray(tablesRes.data) ? tablesRes.data : [];
       const occupiedTables = tables.filter(tbl => (tbl.status ?? tbl.Status) === 'Occupied');
       if (occupiedTables.length > 0) {
@@ -259,7 +249,6 @@ export function Header({ title, subtitle }: HeaderProps) {
         });
       }
 
-      // ── RESERVAS SIN CONFIRMAR ──
       const reservations: any[] = Array.isArray(reservationsRes.data) ? reservationsRes.data : [];
       const todayLocal = new Date().toLocaleDateString('sv-SE');
       const pendingRes = reservations.filter(r => {
@@ -279,13 +268,12 @@ export function Header({ title, subtitle }: HeaderProps) {
         });
       }
 
-      // Mantener los claims al inicio
       setNotifications(prev => {
         const existingClaims = prev.filter(n => n.type === 'claim');
         return [...existingClaims, ...notifs];
       });
     } catch {
-      // silencioso
+
     }
   };
 
@@ -309,7 +297,6 @@ export function Header({ title, subtitle }: HeaderProps) {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
-  // Aprobar solicitud de mesa
   const handleApproveClaim = async (notif: Notification) => {
     if (!notif.claimData) return;
     setRespondingId(notif.id);
@@ -332,7 +319,6 @@ export function Header({ title, subtitle }: HeaderProps) {
     }
   };
 
-  // Rechazar solicitud de mesa
   const handleRejectClaim = async (notif: Notification) => {
     if (!notif.claimData) return;
     setRespondingId(notif.id);
@@ -387,7 +373,6 @@ export function Header({ title, subtitle }: HeaderProps) {
 
       <LanguageSwitcher />
 
-      {/* Bell + Panel */}
       <div className="relative" ref={panelRef}>
         <button
           onClick={() => {
@@ -462,7 +447,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                     )}
                   >
                     {notif.type === 'claim' && notif.claimData ? (
-                      /* ── Solicitud de mesa — con botones de acción ── */
+
                       <div className="px-4 py-3">
                         <div className="flex gap-3 mb-2.5">
                           <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center shrink-0 mt-0.5">
@@ -502,7 +487,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                         </div>
                       </div>
                     ) : (
-                      /* ── Notificación estándar ── */
+
                       <div
                         onClick={() => markOneRead(notif.id)}
                         className={cn(

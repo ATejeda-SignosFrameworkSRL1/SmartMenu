@@ -10,11 +10,6 @@ export const api = axios.create({
   timeout: 15000,
 });
 
-// S3.2 — JWT refresh transparente:
-// Si una request da 401, intentar refresh con el refreshToken guardado. Si OK,
-// reintentar la request original con el nuevo accessToken. Si el refresh también
-// falla, limpiar credenciales y mandar al /login. Lock para evitar refresh paralelo
-// si llegan múltiples 401s simultáneos.
 let refreshPromise: Promise<string | null> | null = null;
 
 async function tryRefresh(): Promise<string | null> {
@@ -49,11 +44,6 @@ function tokenExpiringSoon(token: string, withinMs = 60_000): boolean {
   }
 }
 
-/**
- * Token válido para el accessTokenFactory de SignalR: refresca (vía el MISMO `tryRefresh`
- * + lock que el interceptor REST) si está vencido o por vencer. Evita los 401 de
- * reconexión del hub al expirar el token con la pestaña abierta.
- */
 export async function ensureFreshToken(): Promise<string> {
   if (typeof window === 'undefined') return '';
   const token = localStorage.getItem('admin_token');
@@ -82,7 +72,7 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newToken}`;
         return api.request(original);
       }
-      // Refresh falló o no había refresh token: limpiar y redirigir
+
       localStorage.removeItem('admin_token');
       localStorage.removeItem('admin_refresh');
       localStorage.removeItem('admin_user');

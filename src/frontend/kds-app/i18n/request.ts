@@ -1,5 +1,4 @@
-// i18n/request.ts — Configuración por-request de next-intl (modo sin ruteo por URL).
-// Cookie LOCALE → whitelist → carga sólo el idioma activo → deep-merge sobre es (fallback).
+
 import { getRequestConfig } from 'next-intl/server';
 import { cookies } from 'next/headers';
 import { defaultLocale, isLocale, LOCALE_COOKIE, type Locale } from './config';

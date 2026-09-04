@@ -1,7 +1,5 @@
 namespace SmartMenu.Application.DTOs;
 
-/// <summary>Carrito mixto que envía el frontend del agregador online. El servidor DERIVA la
-/// franquicia (RestaurantId) y el precio de cada plato — nunca se confían del cliente.</summary>
 public class CreateInvoiceDto
 {
     public string CustomerName { get; set; } = string.Empty;
@@ -9,13 +7,11 @@ public class CreateInvoiceDto
     public string? CustomerEmail { get; set; }
     public int? CustomerId { get; set; }
 
-    /// <summary>"Delivery" | "Pickup". Default Delivery.</summary>
     public string FulfillmentType { get; set; } = "Delivery";
-    /// <summary>Obligatoria cuando FulfillmentType = Delivery.</summary>
+
     public string? DeliveryAddress { get; set; }
     public string? Notes { get; set; }
 
-    // Fiscal opcional — se propaga a CADA Order de franquicia (RNC propio por franquicia).
     public bool RequiresFiscalReceipt { get; set; } = false;
     public string? RNC { get; set; }
     public string? BusinessName { get; set; }
@@ -34,19 +30,16 @@ public class CreateInvoiceItemDto
 
 public class UpdateDeliveryStatusDto
 {
-    /// <summary>Nombre del DeliveryStatus: Pending|Confirmed|Preparing|ReadyForPickup|OutForDelivery|Delivered|Cancelled.</summary>
+
     public string Status { get; set; } = string.Empty;
 }
 
-/// <summary>El repartidor reporta su posición GPS actual (tracking en vivo del delivery).
-/// Nullables a propósito: un body {} NO debe bindear a (0,0) "Null Island" y pasar el rango.</summary>
 public class DriverLocationDto
 {
     public double? Lat { get; set; }
     public double? Lng { get; set; }
 }
 
-// ── Respuesta ──
 public class InvoiceDto
 {
     public int Id { get; set; }
@@ -63,16 +56,14 @@ public class InvoiceDto
     public string PaymentStatus { get; set; } = "Pending";
     public string DeliveryStatus { get; set; } = "Pending";
     public DateTime CreatedAt { get; set; }
-    // ─── Geo para el mapa (Google Maps): A = restaurante, B = dirección del cliente (se
-    // geocodifica en el front), Driver = posición en vivo del repartidor. ───
-    /// <summary>Punto A: ubicación del restaurante (null si no está configurada).</summary>
+
     public double? RestaurantLat { get; set; }
     public double? RestaurantLng { get; set; }
-    /// <summary>Posición en vivo del repartidor (null hasta que reporte GPS).</summary>
+
     public double? DriverLat { get; set; }
     public double? DriverLng { get; set; }
     public DateTime? DriverLocationAt { get; set; }
-    /// <summary>Una Order por franquicia (así el KDS de cada una ve solo lo suyo).</summary>
+
     public List<InvoiceOrderDto> Orders { get; set; } = new();
 }
 
@@ -85,7 +76,7 @@ public class InvoiceOrderDto
     public string Status { get; set; } = "Pending";
     public bool KitchenReady { get; set; }
     public bool BarReady { get; set; }
-    // Verdad fiscal por franquicia.
+
     public decimal Subtotal { get; set; }
     public decimal Tax { get; set; }
     public decimal Tip { get; set; }

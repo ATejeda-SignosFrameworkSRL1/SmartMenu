@@ -8,40 +8,38 @@ import { StructureShape } from "./structure-shape";
 import type { TableData, StructureData } from "./types";
 import { resolveStatusColors, type StatusPaletteOverride } from "./status-colors";
 
-/** Separación de la grilla de fondo (px). */
 const GRID = 40;
-/** Margen extra alrededor de cada mesa (sillas + badge) al calcular el encuadre. */
+
 const TABLE_PAD = 26;
 
 export interface FloorPlanCanvasProps {
   tables: TableData[];
-  /** Elementos fijos (paredes, barra, columnas, entradas). Se dibujan DEBAJO de las mesas. */
+
   structures?: StructureData[];
   width?: number;
   height?: number;
-  /** Marca de agua centrada (ej. nombre de la zona). */
+
   zoneName?: string;
-  /** Grilla sutil de fondo (blueprint). Default true. */
+
   showGrid?: boolean;
-  /** Si true, el lienzo ocupa el 100% de su contenedor (mide con ResizeObserver). */
+
   fill?: boolean;
-  /** Si true, escala/centra el plano para llenar el área disponible (zoom-to-fit). */
+
   fitToContent?: boolean;
-  /** Si true, las mesas se pueden arrastrar. */
+
   draggable?: boolean;
   onTableDragEnd?: (id: string | number, x: number, y: number) => void;
-  /** Si true, las estructuras se pueden arrastrar (modo editor). */
+
   structureDraggable?: boolean;
   onStructureDragEnd?: (id: string, x: number, y: number) => void;
-  /** Mesa resaltada (glow). */
+
   selectedTableId?: string | number;
-  /** Click sobre una mesa (para seleccionarla). */
+
   onTableClick?: (id: string | number) => void;
-  /** Override de la paleta de estados (fills por estado). */
+
   palette?: StatusPaletteOverride;
 }
 
-/** Semi-extensión (mitad de ancho/alto) de una mesa según su forma. */
 function tableHalfExtent(t: TableData): { hw: number; hh: number } {
   const r = t.radius ?? 30;
   switch (t.shape) {
@@ -56,13 +54,6 @@ function tableHalfExtent(t: TableData): { hw: number; hh: number } {
   }
 }
 
-/**
- * Lienzo Konva presentacional. Orden de pintado: fondo → grilla → marca de agua →
- * [grupo con encuadre] estructuras (debajo) → mesas (encima). Base de Viewer/Editor.
- *
- * Con `fill` mide su contenedor y ocupa todo el espacio; con `fitToContent` escala
- * y centra el plano para llenar el área (sin franjas blancas muertas).
- */
 export function FloorPlanCanvas({
   tables,
   structures,
@@ -98,7 +89,6 @@ export function FloorPlanCanvas({
   const w = fill ? measured.w : width ?? 800;
   const h = fill ? measured.h : height ?? 520;
 
-  // Encuadre (zoom-to-fit): bbox del contenido → escala + centrado.
   const fitGroup = useMemo(() => {
     if (!fitToContent || w <= 0 || h <= 0) return null;
     let minX = Infinity;
@@ -144,7 +134,7 @@ export function FloorPlanCanvas({
 
   const content = (
     <>
-      {/* Estructuras DEBAJO de las mesas para que no las tapen. */}
+
       {(structures ?? []).map((s) => (
         <StructureShape key={s.id} {...s} isDraggable={structureDraggable} onDragEnd={onStructureDragEnd} />
       ))}

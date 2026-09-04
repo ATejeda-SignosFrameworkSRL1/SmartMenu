@@ -15,23 +15,23 @@ import{r as u}from"./index-Bc2G9s8g.js";var W=0,E=null;function Ue(){u.useEffect
     margin-right: `).concat(c,"px ").concat(n,`;
     `),r==="padding"&&"padding-right: ".concat(c,"px ").concat(n,";")].filter(Boolean).join(""),`
   }
-  
+
   .`).concat(D,` {
     right: `).concat(c,"px ").concat(n,`;
   }
-  
+
   .`).concat(j,` {
     margin-right: `).concat(c,"px ").concat(n,`;
   }
-  
+
   .`).concat(D," .").concat(D,` {
     right: 0 `).concat(n,`;
   }
-  
+
   .`).concat(j," .").concat(j,` {
     margin-right: 0 `).concat(n,`;
   }
-  
+
   body[`).concat(N,`] {
     `).concat(fe,": ").concat(c,`px;
   }

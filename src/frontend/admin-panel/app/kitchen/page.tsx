@@ -15,19 +15,16 @@ const api = axios.create({
   baseURL: '',
 });
 
-// KDS Cocina: solo mostrar ítems de comida (no bebidas); las bebidas van al KDS Bar
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  // Match por PALABRA completa (con plurales), no substring: 'agua' no debe matchear
-  // 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con KDS/waiter/client y backend.
+
   const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
   return DRINK_KEYWORDS.some(k =>
     k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
   );
 }
-// FASE 2 RUTEO — el flag isDrink del backend (zona del plato) MANDA; el matcher
-// por nombre queda solo como fallback para payloads sin el campo.
+
 function itemIsDrink(item: any): boolean {
   const flag = item?.isDrink ?? item?.IsDrink;
   return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
@@ -41,7 +38,6 @@ function getFoodItems(order: any): any[] {
   return items.filter((i: any) => !itemIsDrink(i));
 }
 
-// Filtro por curso (igual que KDS app)
 type CourseFilter = 'all' | 'Entrada' | 'PlatoFuerte' | 'Postre';
 
 const COURSE_META: Record<string, { labelKey: string; icon: string; colorClass: string; badgeClass: string }> = {
@@ -152,9 +148,7 @@ export default function KitchenPage() {
   };
 
   const getOrderStatus = (o: any) => o?.status ?? o?.Status ?? '';
-  // Solo pedidos que tienen al menos un ítem de comida (las bebidas van al Bar).
-  // Excluir órdenes donde la cocina ya sirvió su parte (KitchenServed=true)
-  // para evitar que reaparezcan cuando el cliente agrega bebidas a una orden ya servida.
+
   const activeOrders = orders.filter(o => {
     const kitchenServed = (o as any)?.kitchenServed ?? (o as any)?.KitchenServed ?? false;
     return ['Pending', 'Confirmed', 'Preparing', 'Ready'].includes(getOrderStatus(o))
@@ -173,7 +167,6 @@ export default function KitchenPage() {
     );
   }
 
-  // Tabs de curso: contar ítems según filtro
   const courseTabs = [
     { key: 'all' as CourseFilter,         label: t('courseAll'),        icon: '📋' },
     { key: 'Entrada' as CourseFilter,     label: t('courseEntrada'),    icon: '🥗' },
@@ -190,7 +183,7 @@ export default function KitchenPage() {
   return (
     <MainLayout title={t('title')} subtitle={t('subtitle')}>
       <div className="space-y-4">
-        {/* Header */}
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <ChefHat className="h-8 w-8 text-primary" />
@@ -217,7 +210,6 @@ export default function KitchenPage() {
           </Button>
         </div>
 
-        {/* Filtro por curso */}
         <div className="flex gap-2 flex-wrap border-b pb-4">
           {courseTabs.map(tab => {
             const count = getCourseCount(tab.key);
@@ -261,7 +253,7 @@ export default function KitchenPage() {
               const isUrgent = elapsed > 25;
               const isWarning = elapsed > 15;
               const allFoodItems = getFoodItems(order);
-              // Aplicar filtro de curso
+
               const items = courseFilter === 'all'
                 ? allFoodItems
                 : allFoodItems.filter((i: any) => resolveItemCourse(i) === courseFilter);

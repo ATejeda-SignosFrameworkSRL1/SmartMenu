@@ -5,26 +5,13 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <inheritdoc />
-    /// <summary>
-    /// Capacidad dinámica por intervalo: nuevas columnas de ciclo de vida en TableReservations
-    /// (Status, EndDateTime, DurationMinutes, ServicePeriodId, RowVersion, holds, timestamps,
-    /// ConfirmationCode, TableSessionId, depósito stub) + tablas ServicePeriods y ReservationTables.
-    ///
-    /// NOTA DE DRIFT: el diff de EF también incluyó objetos que ya existen en la BD (creados por
-    /// Ensure*Async / migraciones previas no reflejadas en el snapshot anterior). Esos se manejan así:
-    ///   - PayerTableId, columnas PIN, WaiterAuthMode y la tabla AuditEvents → ya los crean sus
-    ///     respectivos Ensure*Async (siguen cableados en Program.cs); NO se re-crean aquí.
-    ///   - OccasionType, RequestedZoneId (+ índice y FK) → se aplican idempotentes (IF NOT EXISTS)
-    ///     para no fallar en la BD actual y seguir creándolos en una BD fresca.
-    /// Solo los objetos genuinamente nuevos usan las llamadas EF directas.
-    /// </summary>
+
     public partial class AddDynamicReservationCapacity : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // (1) Objetos pre-existentes incluidos por el diff — idempotentes para no chocar.
+
             migrationBuilder.Sql(@"
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'OccasionType' AND Object_ID = Object_ID(N'TableReservations'))
     ALTER TABLE [TableReservations] ADD [OccasionType] int NOT NULL DEFAULT 0;
@@ -38,7 +25,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_TableReservations_Req
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_TableReservations_Zones_RequestedZoneId' AND parent_object_id = OBJECT_ID(N'TableReservations'))
     ALTER TABLE [TableReservations] ADD CONSTRAINT [FK_TableReservations_Zones_RequestedZoneId] FOREIGN KEY ([RequestedZoneId]) REFERENCES [Zones]([Id]);");
 
-            // (2) TableId pasa a nullable (portal sin mesa). Ya lo es en la BD actual; no-op seguro.
             migrationBuilder.AlterColumn<int>(
                 name: "TableId",
                 table: "TableReservations",
@@ -47,7 +33,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_TableReservation
                 oldClrType: typeof(int),
                 oldType: "int");
 
-            // (3) Columnas nuevas de capacidad dinámica por intervalo.
             migrationBuilder.AddColumn<string>(name: "CancelReason", table: "TableReservations", type: "nvarchar(max)", nullable: true);
             migrationBuilder.AddColumn<DateTime>(name: "CancelledAt", table: "TableReservations", type: "datetime2", nullable: true);
             migrationBuilder.AddColumn<DateTime>(name: "CompletedAt", table: "TableReservations", type: "datetime2", nullable: true);
@@ -65,7 +50,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_TableReservation
             migrationBuilder.AddColumn<int>(name: "Status", table: "TableReservations", type: "int", nullable: false, defaultValue: 0);
             migrationBuilder.AddColumn<int>(name: "TableSessionId", table: "TableReservations", type: "int", nullable: true);
 
-            // (4) Tablas nuevas.
             migrationBuilder.CreateTable(
                 name: "ServicePeriods",
                 columns: table => new
@@ -125,7 +109,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_TableReservation
                         onDelete: ReferentialAction.Restrict);
                 });
 
-            // (5) Índices nuevos.
             migrationBuilder.CreateIndex(
                 name: "IX_TableReservations_ConfirmationCode",
                 table: "TableReservations",
@@ -151,7 +134,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_TableReservation
                 table: "ServicePeriods",
                 columns: new[] { "RestaurantId", "IsActive" });
 
-            // (6) FKs nuevas.
             migrationBuilder.AddForeignKey(
                 name: "FK_TableReservations_ServicePeriods_ServicePeriodId",
                 table: "TableReservations",
@@ -166,7 +148,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_TableReservation
                 principalColumn: "Id",
                 onDelete: ReferentialAction.SetNull);
 
-            // (7) Backfill de filas legacy: Status desde los bool, duración/ventana por defecto.
             migrationBuilder.Sql(@"
 UPDATE [TableReservations] SET [DurationMinutes] = 90 WHERE [DurationMinutes] = 0;
 UPDATE [TableReservations] SET [EndDateTime] = DATEADD(MINUTE, [DurationMinutes] + 10, [ReservationDateTime]) WHERE [EndDateTime] < '2000-01-01';
@@ -174,12 +155,9 @@ UPDATE [TableReservations] SET [Status] = CASE WHEN [IsCancelled] = 1 THEN 5 WHE
 UPDATE [TableReservations] SET [DepositStatus] = 'None' WHERE [DepositStatus] IS NULL;");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Revierte solo los objetos genuinamente nuevos. Deja intactos los pre-existentes
-            // (OccasionType, RequestedZoneId, PayerTableId, PIN, WaiterAuthMode, AuditEvents) que
-            // son gestionados por sus Ensure*Async / existían antes de esta migración.
+
             migrationBuilder.DropForeignKey(name: "FK_TableReservations_ServicePeriods_ServicePeriodId", table: "TableReservations");
             migrationBuilder.DropForeignKey(name: "FK_TableReservations_TableSessions_TableSessionId", table: "TableReservations");
             migrationBuilder.DropTable(name: "ReservationTables");

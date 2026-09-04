@@ -7,7 +7,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[AllowAnonymous] // Solo expone GETs read-only del catálogo público (necesario para customer-app sin login).
+[AllowAnonymous]
 public class CategoryController : ControllerBase
 {
     private readonly ApplicationDbContext _context;

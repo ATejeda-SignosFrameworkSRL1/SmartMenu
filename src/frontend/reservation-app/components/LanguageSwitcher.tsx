@@ -1,6 +1,5 @@
 'use client';
-// LanguageSwitcher — selector de idioma (cookie LOCALE, sin cambiar la URL).
-// Estilo acorde al tema "warm" del portal de reservas.
+
 import { useLocale } from 'next-intl';
 import { useTransition } from 'react';
 import { Globe } from 'lucide-react';

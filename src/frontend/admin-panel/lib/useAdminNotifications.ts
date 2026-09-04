@@ -19,8 +19,7 @@ export interface TableClaimNotification {
 
 function getHubUrl(): string {
   if (typeof window === 'undefined') return '/hubs/orders';
-  // Ruta relativa al mismo origen → el proxy Next.js la enruta a localhost:5041
-  // Evita que el browser tenga que aceptar el cert SSL del puerto 5042 por separado
+
   return `${window.location.origin}/hubs/orders`;
 }
 
@@ -49,7 +48,7 @@ export function useAdminNotifications(token: string | null) {
     const hubUrl = getHubUrl();
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+
         accessTokenFactory: () => ensureFreshToken(),
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
@@ -74,7 +73,7 @@ export function useAdminNotifications(token: string | null) {
         read: false,
       };
       setClaimRequests(prev => [notif, ...prev].slice(0, 50));
-      // Notificación del browser
+
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification('SmartMenu — Admin', { body: notif.message, icon: '/favicon.ico' });
       }

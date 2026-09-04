@@ -20,9 +20,6 @@ public class ReportsController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Reporte de meseros: ventas, propinas, transacciones por mesero en un rango de fechas.
-    /// </summary>
     [HttpGet("waiters")]
     public async Task<IActionResult> GetWaiterReport([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -63,9 +60,6 @@ public class ReportsController : ControllerBase
         return Ok(new { From = fromDate, To = toDate.AddDays(-1), Waiters = list });
     }
 
-    /// <summary>
-    /// Tiempo promedio de preparación por plato (desde creación de la orden hasta servida).
-    /// </summary>
     [HttpGet("dish-avg-time")]
     public async Task<IActionResult> GetDishAvgTime([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -94,9 +88,6 @@ public class ReportsController : ControllerBase
         return Ok(data);
     }
 
-    /// <summary>
-    /// Detalle de mesero: % que le toca de los 10% de propina legal y total de propina para pagarle.
-    /// </summary>
     [HttpGet("waiter-detail/{waiterId}")]
     public async Task<IActionResult> GetWaiterDetail(int waiterId, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -139,19 +130,12 @@ public class ReportsController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Ventas del día: total cobrado vía Payments Completed con ProcessedAt en el día actual (UTC).
-    /// Bug-Fix.3: el dashboard admin antes sumaba /api/order/active que filtra Completed
-    /// → Ventas siempre 0. Ahora consulta Payments directamente.
-    /// </summary>
     [HttpGet("sales-today")]
     public async Task<IActionResult> GetSalesToday()
     {
         var today = DateTime.UtcNow.Date;
         var tomorrow = today.AddDays(1);
 
-        // En SmartMenu, el "ProcessedAt" del JSON mapea a Payment.CompletedAt (DateTime?)
-        // que se setea cuando el pago se procesa (ver PaymentController línea ~95).
         var paymentsToday = await _context.Payments
             .AsNoTracking()
             .Where(p => p.Status == PaymentStatus.Completed

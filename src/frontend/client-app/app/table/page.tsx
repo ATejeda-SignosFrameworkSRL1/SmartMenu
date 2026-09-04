@@ -6,16 +6,6 @@ import { apiClient } from '@/lib/api';
 import { QRCodeSVG } from 'qrcode.react';
 import { Loader2, Grid3X3 } from 'lucide-react';
 
-/**
- * URL base usada al codificar los QR físicos.
- * Debe ser alcanzable desde el CELULAR del cliente — NUNCA localhost.
- * Prioridad:
- *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://client.192-168-1-26.nip.io:8443)
- *   2. Fallback runtime: derivar del hostname actual
- *      - Si hostname=localhost → usar hardcoded LAN nip.io
- *      - Si hostname=client.X.nip.io → mismo origin (ya es accesible)
- *      - Si IP directa → mismo origin
- */
 function deriveQrBaseUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_CLIENT_URL;
   if (envUrl) return envUrl;
@@ -23,12 +13,10 @@ function deriveQrBaseUrl(): string {
 
   const { hostname, origin } = window.location;
 
-  // Localhost: el QR sería inalcanzable desde celular → usar nip.io hardcoded
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'https://client.192-168-1-26.nip.io:8443';
   }
 
-  // Cualquier otro host (nip.io, IP LAN, dominio real) → mismo origin
   return origin;
 }
 
@@ -63,14 +51,12 @@ export default function TableListPage() {
     );
   }
 
-  // baseUrl para los QRs físicos — debe ser alcanzable desde el celular del cliente.
-  // Si estamos en localhost, usa nip.io; si no, mismo origin.
   const baseUrl = deriveQrBaseUrl();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
+
         <div className="flex items-center gap-3 mb-6">
           <Grid3X3 className="w-7 h-7 sm:w-8 sm:h-8 text-primary-600" />
           <div className="flex-1">
@@ -79,7 +65,6 @@ export default function TableListPage() {
           </div>
         </div>
 
-        {/* Grid de mesas */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
           {tables.map((table: { id: number; tableNumber: number; capacity?: number; zoneName?: string; status?: string; qrCode?: string }) => {
             const tableIdentifier = table.qrCode || `table-${table.id}`;

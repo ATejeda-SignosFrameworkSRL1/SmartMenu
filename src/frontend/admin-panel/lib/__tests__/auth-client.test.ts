@@ -1,15 +1,4 @@
-/**
- * S1.D5 — auth-client unit tests.
- *
- * Cubre los contratos clave del factory:
- *  - prefijo por app (admin_token vs waiter_token vs ...) — DRY que evita
- *    colisiones cuando 2 apps corren en el mismo browser tab.
- *  - setSession / getUser / getToken / clear — round-trip localStorage.
- *  - logout = clear + redirect.
- *  - request interceptor: agrega Authorization sólo si hay token.
- *  - response interceptor: 401 → refresh + retry; si refresh falla → /login.
- *  - singleton lock: N requests 401-simultáneos disparan UN solo refresh.
- */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAuthApi } from '../auth-client';
 import axios from 'axios';
@@ -21,8 +10,6 @@ const mockedAxios = axios as unknown as {
   post: ReturnType<typeof vi.fn>;
 };
 
-// Fake axios instance que cualquier .create() devolverá. Capturamos los interceptores
-// para poder dispararlos manualmente y testear el comportamiento del 401.
 function makeFakeAxios() {
   const requestUse = vi.fn();
   const responseUse = vi.fn();
@@ -108,7 +95,7 @@ describe('setSession / getUser / getToken / clear', () => {
   });
 
   it('logout() llama a clear + redirige a /login (configurable)', () => {
-    // Stub window.location.href con un getter/setter mock
+
     const originalLocation = window.location;
     const setterSpy = vi.fn();
     Object.defineProperty(window, 'location', {
@@ -164,7 +151,6 @@ describe('Response interceptor: 401 → refresh + retry', () => {
     const auth = createAuthApi('admin');
     auth.setSession('expired-tok', 'valid-refresh', { id: 1, email: 'a@x.com', role: 'Admin' });
 
-    // axios.post (top-level) usado para refresh
     (mockedAxios.post as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: { accessToken: 'new-tok', refreshToken: 'new-refresh', user: { id: 1, email: 'a@x.com', role: 'Admin' } },
     });
@@ -175,12 +161,11 @@ describe('Response interceptor: 401 → refresh + retry', () => {
 
     await errInterceptor(err);
 
-    // Refresh fue llamado
     expect(mockedAxios.post).toHaveBeenCalledWith('/api/auth/refresh', { refreshToken: 'valid-refresh' });
-    // Original fue reintentado con el nuevo Bearer
+
     expect(fakeAxios.request).toHaveBeenCalledTimes(1);
     expect(original.headers.Authorization).toBe('Bearer new-tok');
-    // localStorage actualizado
+
     expect(localStorage.getItem('admin_token')).toBe('new-tok');
     expect(localStorage.getItem('admin_refresh')).toBe('new-refresh');
   });
@@ -220,7 +205,6 @@ describe('Response interceptor: 401 → refresh + retry', () => {
     const original = { headers: {} as Record<string, string>, _refreshAttempted: true };
     const err = { response: { status: 401 }, config: original };
 
-    // Como _refreshAttempted ya está marcado, debe rechazar sin reintentar.
     await expect(errInterceptor(err)).rejects.toBe(err);
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });

@@ -7,8 +7,7 @@ import { Providers } from "./providers";
 import { dirFor } from "@/i18n/config";
 
 import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
-// Inter como variable CSS (no className directo): el font-stack de Tailwind antepone
-// Inter y cae a fuentes CJK del sistema para zh/ja/ko.
+
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {

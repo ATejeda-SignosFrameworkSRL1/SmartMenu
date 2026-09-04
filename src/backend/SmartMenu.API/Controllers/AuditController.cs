@@ -5,13 +5,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.API.Controllers;
 
-/// <summary>
-/// Sprint 4.2 — Consulta del audit log para Admin/Manager.
-///
-/// Endpoint read-only. La tabla AuditEvents es append-only por diseño.
-/// Filtros: por user, por action, por fecha. Paginación obligatoria
-/// para no saturar memoria con tablas grandes (puede crecer indefinidamente).
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin,Manager")]
@@ -24,10 +17,6 @@ public class AuditController : ControllerBase
         _context = context;
     }
 
-    /// <summary>
-    /// Devuelve eventos de auditoría recientes con filtros opcionales.
-    /// Paginación por offset (page/pageSize) — más simple que cursor para audit.
-    /// </summary>
     [HttpGet("recent")]
     public async Task<IActionResult> GetRecent(
         [FromQuery] int? userId = null,
@@ -84,10 +73,6 @@ public class AuditController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Resumen por waiter / acción / método auth en una ventana de tiempo.
-    /// Útil para el cierre de turno: "¿qué hicieron mis meseros hoy?"
-    /// </summary>
     [HttpGet("summary")]
     public async Task<IActionResult> GetSummary(
         [FromQuery] DateTime? fromUtc = null,

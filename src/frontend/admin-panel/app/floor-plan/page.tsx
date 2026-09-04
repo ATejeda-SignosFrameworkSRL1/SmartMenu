@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { MainLayout } from "@/components/layout/MainLayout";
 
-// react-konva necesita el DOM → cargar la composición solo en cliente.
 const GestionSalonView = dynamic(() => import("./gestion-salon-view"), {
   ssr: false,
   loading: () => <FloorPlanLoading />,

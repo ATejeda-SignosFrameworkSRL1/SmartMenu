@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Tema "delivery": teal como acento primario.
+
         primary: {
           50: '#f0fdfa',
           100: '#ccfbf1',
@@ -24,7 +24,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Inter (vía variable de next/font) + fallbacks CJK del sistema (zh/ja/ko).
+
         sans: [
           'var(--font-inter)',
           'system-ui',

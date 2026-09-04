@@ -1,9 +1,5 @@
 'use client';
 
-// Next.js 14 file-based Error Boundary. Captura runtime errors dentro del
-// segmento. Reemplaza el "blank screen on throw" por una UI accionable y
-// logea el error vía Sentry (no-op si NEXT_PUBLIC_SENTRY_DSN no está set).
-
 import { useEffect } from 'react';
 import { captureException } from '@/lib/sentry';
 

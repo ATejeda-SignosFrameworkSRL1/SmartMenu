@@ -1,15 +1,5 @@
 "use client";
 
-// FRANCHISE-DIRECTORY (PROTOTIPO) — maquetacion navegable estilo marketplace de
-// delivery (PedidosYa-like), aprobada por producto SIN barra de envio gratis ni
-// descuentos. Flujo: Registro (pagina de reservation) → HOME (tiles de negocio con
-// "Restaurantes" + logos de franquicias) → LISTADO (categorias "Comidas" + "Ver
-// todas" + todos los restaurantes) → CATALOGO del restaurante (chips de categorias,
-// "Mas vendido", sidebar "Mi pedido") → PEDIDO mixto agrupado por franquicia.
-// El carrito hace VISIBLE la regla del modelo: cada grupo = una Order independiente
-// con su Orders.RestaurantId (FK) y su verdad fiscal propia; la factura global suma.
-// PRESENTACIONAL: estado local + mocks; sin APIs ni BD.
-
 import { useMemo, useState } from "react";
 import {
   ArrowLeft, ChevronDown, Clock, MapPin, Minus, Package, Plus, Receipt, Search,
@@ -23,14 +13,12 @@ import { Input } from "../input";
 import { MOCK_DIRECTORY_DISHES, MOCK_FOOD_CATEGORIES, MOCK_FRANCHISES } from "./mock-directory";
 import type { CartLine, DirectoryDish, FranchiseCartGroup, FranchiseSummary } from "./types";
 
-// En la implementacion real estas tasas vienen de BillingSettings (nunca hardcodeadas).
 const TAX_RATE = 0.18;
 const TIP_RATE = 0.10;
 
 const money = (n: number) =>
   `RD$ ${Number(n ?? 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}`;
 
-/** Tiles del home; solo "Restaurantes" esta activo en el prototipo. */
 const BUSINESS_TILES = [
   { key: "restaurantes", name: "Restaurantes", emoji: "🍔", active: true },
   { key: "market",       name: "Market",       emoji: "🛒", active: false },
@@ -49,11 +37,11 @@ type View =
   | { kind: "cart" };
 
 export interface FranchiseDirectoryProps {
-  /** Vista inicial de la story. */
+
   initialView?: "register" | "home" | "restaurants" | "menu" | "cart";
-  /** Franquicia inicial cuando initialView = 'menu'. */
+
   initialRestaurantId?: number;
-  /** Carrito precargado (para la story del split multi-franquicia). */
+
   initialCart?: CartLine[];
   franchises?: FranchiseSummary[];
   dishes?: DirectoryDish[];
@@ -85,7 +73,6 @@ export function FranchiseDirectory({
   const cartCount = cart.reduce((s, l) => s + l.quantity, 0);
   const displayName = customerName.trim() || "Invitado";
 
-  // ── Carrito agrupado por franquicia = las futuras Orders independientes ──
   const groups: FranchiseCartGroup[] = useMemo(() => {
     const byRestaurant = new Map<number, CartLine[]>();
     for (const line of cart) {
@@ -140,7 +127,6 @@ export function FranchiseDirectory({
     </div>
   );
 
-  // ═════ Vista: REGISTRO (pagina de reservation) ═════
   if (view.kind === "register") {
     return (
       <div className={cn("mx-auto max-w-md space-y-6 py-10", className)}>
@@ -177,11 +163,10 @@ export function FranchiseDirectory({
     );
   }
 
-  // ═════ Vista: HOME (tiles + logos de franquicias) ═════
   if (view.kind === "home") {
     return (
       <div className={cn("space-y-8", className)}>
-        {/* Header estilo marketplace */}
+
         <div className="flex flex-wrap items-center gap-4 border-b pb-4">
           <div className="flex items-center gap-2 font-extrabold text-primary">
             <Store className="h-6 w-6" />
@@ -217,7 +202,6 @@ export function FranchiseDirectory({
           </div>
         </div>
 
-        {/* Tiles de tipo de negocio — Restaurantes es la protagonista */}
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {BUSINESS_TILES.map((tile) => (
             <button
@@ -238,7 +222,6 @@ export function FranchiseDirectory({
           ))}
         </div>
 
-        {/* Logos circulares de las franquicias (acceso directo a su catalogo) */}
         <div className="flex flex-wrap items-center gap-4">
           {franchises.map((f) => (
             <button
@@ -257,7 +240,6 @@ export function FranchiseDirectory({
           ))}
         </div>
 
-        {/* Banners informativos (sin descuentos, por decision de producto) */}
         <div className="grid gap-4 sm:grid-cols-2">
           <button onClick={() => setView({ kind: "restaurants" })}
                   className="rounded-2xl bg-amber-100 p-6 text-left transition hover:shadow-md dark:bg-amber-900/30">
@@ -274,7 +256,6 @@ export function FranchiseDirectory({
           </div>
         </div>
 
-        {/* Descubre estas opciones (sin badges de descuento) */}
         <div className="space-y-3">
           <h2 className="text-lg font-bold">Descubre estas opciones</h2>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -300,7 +281,6 @@ export function FranchiseDirectory({
     );
   }
 
-  // ═════ Vista: LISTADO DE RESTAURANTES (categorias + todos los locales) ═════
   if (view.kind === "restaurants") {
     const q = search.trim().toLowerCase();
     const list = franchises.filter((f) => {
@@ -311,7 +291,7 @@ export function FranchiseDirectory({
     const carousel = MOCK_FOOD_CATEGORIES.slice(0, 10);
     return (
       <div className={cn("space-y-6", className)}>
-        {/* Header: back + ubicacion + usuario */}
+
         <div className="flex items-center justify-between gap-3">
           <Button size="sm" variant="ghost" aria-label="Volver" onClick={() => setView({ kind: "home" })}>
             <ArrowLeft className="h-4 w-4" />
@@ -334,7 +314,6 @@ export function FranchiseDirectory({
           </div>
         </div>
 
-        {/* Buscador + Filtros */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input className="rounded-full pl-9" placeholder="Buscar…" value={search}
@@ -344,7 +323,6 @@ export function FranchiseDirectory({
           Filtros <SlidersHorizontal className="ml-2 h-3.5 w-3.5" />
         </Button>
 
-        {/* Carrusel "Comidas" + Ver todas */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold">Comidas</h2>
@@ -367,7 +345,6 @@ export function FranchiseDirectory({
           </div>
         </div>
 
-        {/* Lista de restaurantes (sin envio gratis, por decision de producto) */}
         <h2 className="text-lg font-bold">
           {list.length} {list.length === 1 ? "restaurante" : "restaurantes"}
         </h2>
@@ -400,7 +377,6 @@ export function FranchiseDirectory({
           )}
         </div>
 
-        {/* Modal "Comidas" (Ver todas) */}
         {showAllCategories && (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-10"
                onClick={() => setShowAllCategories(false)}>
@@ -436,7 +412,6 @@ export function FranchiseDirectory({
     );
   }
 
-  // ═════ Vista: CATALOGO DEL RESTAURANTE ═════
   if (view.kind === "menu") {
     const franchise = franchises.find((f) => f.restaurantId === view.restaurantId)!;
     const menu = dishes.filter((d) => d.restaurantId === view.restaurantId);
@@ -458,7 +433,6 @@ export function FranchiseDirectory({
           </div>
         </div>
 
-        {/* Header del local */}
         <div className="flex items-center gap-4">
           <span className="flex h-24 w-24 items-center justify-center rounded-2xl border bg-muted/40 text-5xl shadow-sm" aria-hidden>
             {franchise.emoji}
@@ -474,14 +448,12 @@ export function FranchiseDirectory({
           </div>
         </div>
 
-        {/* Buscador de productos */}
         <div className="relative max-w-lg">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input className="rounded-full pl-9" placeholder="Buscar productos…" value={dishSearch}
                  onChange={(e) => setDishSearch(e.target.value)} />
         </div>
 
-        {/* Chips de categorias del menu */}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant={menuChip === null ? "default" : "outline"} className="rounded-full"
                   onClick={() => setMenuChip(null)}>
@@ -495,7 +467,6 @@ export function FranchiseDirectory({
           ))}
         </div>
 
-        {/* Platos + sidebar Mi pedido */}
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="grid content-start gap-3 sm:grid-cols-2">
             {visibleMenu.map((d) => {
@@ -533,7 +504,6 @@ export function FranchiseDirectory({
             )}
           </div>
 
-          {/* Sidebar Mi pedido — agrupado por franquicia (regla del modelo visible) */}
           <aside className="h-fit rounded-2xl border bg-card p-5 shadow-sm">
             <h3 className="font-bold">Mi pedido</h3>
             {groups.length === 0 ? (
@@ -575,7 +545,6 @@ export function FranchiseDirectory({
     );
   }
 
-  // ═════ Vista: PEDIDO (carrito mixto agrupado por franquicia) ═════
   return (
     <div className={cn("space-y-6", className)}>
       <div className="flex items-center gap-2">
@@ -613,7 +582,7 @@ export function FranchiseDirectory({
                       Orden {idx + 1} de {groups.length}
                     </Badge>
                   </div>
-                  {/* La FK que exige el modelo: cada Order pertenece a UN Restaurant */}
+
                   <Badge variant="outline" className="font-mono text-[10px]">
                     Orders.RestaurantId = {g.franchise.restaurantId}
                   </Badge>
@@ -628,7 +597,7 @@ export function FranchiseDirectory({
                       <span className="font-medium">{money(l.dish.price * l.quantity)}</span>
                     </div>
                   ))}
-                  {/* Verdad fiscal POR franquicia (RNC propio): ITBIS/propina por orden */}
+
                   <div className="mt-2 flex flex-wrap justify-end gap-x-4 border-t pt-2 text-[11px] text-muted-foreground">
                     <span>Subtotal {money(g.subtotal)}</span>
                     <span>ITBIS 18% {money(g.tax)}</span>
@@ -640,7 +609,6 @@ export function FranchiseDirectory({
             ))}
           </div>
 
-          {/* Factura global = suma de las ordenes (envoltorio de cobro) */}
           <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">

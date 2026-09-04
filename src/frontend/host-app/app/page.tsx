@@ -12,10 +12,8 @@ import { useTranslations, useLocale } from 'next-intl';
 import { dateLocale } from '@/i18n/config';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-// F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('host');
 
-// Plano de salón (react-konva) en SOLO LECTURA — ssr:false porque Konva necesita el DOM.
 const MultiZoneFloorPlanViewer = dynamic(
   () => import('@smartmenu/ui').then((m) => ({ default: m.MultiZoneFloorPlanViewer })),
   { ssr: false, loading: () => <p className="p-6 text-sm text-gray-500 animate-pulse">Cargando plano…</p> }
@@ -63,24 +61,21 @@ interface Reservation {
   reservationDateTime: string;
   isConfirmed: boolean;
   isCancelled?: boolean;
-  status?: string; // Pending | Confirmed | Seated | Completed | Cancelled | Expired | NoShow
+  status?: string;
   assignedTableIds?: number[];
   tableNumber: number | null;
   tableId: number | null;
   zoneName: string | null;
   requestedZoneId?: number | null;
   requestedZoneName?: string | null;
-  isZoneExclusive?: boolean;  // reserva de ZONA completa (uso exclusivo)
+  isZoneExclusive?: boolean;
   specialRequests?: string;
-  occasionType?: number; // 0=Casual, 1=Birthday, 2=Anniversary, 3=Business, 4=Romantic, 5=FamilyCelebration, 99=Other
+  occasionType?: number;
   source?: string;
   advanceBlockMinutes?: number;
   preOrder?: PreOrder | null;
 }
 
-// Estados TERMINALES de una reserva: no se gestionan en las vistas operativas
-// (ni lista ni calendario). Quedan en la BD para historial/reportes, pero no
-// deben aparecer como reservas "vivas". Fuente unica usada por la lista y por CalendarView.
 const TERMINAL_RESERVATION_STATUS = new Set(['Cancelled', 'Completed', 'NoShow', 'Expired']);
 
 const OCCASION_LABELS: Record<number, { label: string; icon: string; color: string }> = {
@@ -107,7 +102,7 @@ interface TableAvailability {
   tableNumber: number;
   zoneName: string;
   capacity: number;
-  freeSlots: string[];     // ["12:00","12:30","19:00"]
+  freeSlots: string[];
 }
 interface TablesAvailabilityResponse {
   date: string;
@@ -123,78 +118,68 @@ export default function HostApp() {
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
-  // Guard de hidratación: el dashboard es auth-gated (SSR no tiene token → render vacío).
-  // Renderizamos el loader hasta montar en el cliente, evitando el mismatch SSR/cliente
-  // (#418) que dejaba la página en blanco al recargar.
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const [showAssignModal, setShowAssignModal] = useState(false);
-  // HOST-MESAS-RESERVAS.2 — mini-modal para "+N más" reservas de una mesa
+
   const [tableReservasModal, setTableReservasModal] = useState<{ table: Table } | null>(null);
-  const [occTableDate, setOccTableDate] = useState<string>('');               // ocupación por mesa: día seleccionado (YYYY-MM-DD)
-  const [occTableMonth, setOccTableMonth] = useState<Date>(() => new Date()); // mes navegable del calendario del modal de ocupación por mesa
+  const [occTableDate, setOccTableDate] = useState<string>('');
+  const [occTableMonth, setOccTableMonth] = useState<Date>(() => new Date());
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
 
-  // View tabs: 'tables' or 'reservations'
   const [activeView, setActiveView] = useState<'tables' | 'reservations' | 'calendar'>('tables');
   const { data: floorPlanData, palette: floorPlanPalette, enabled: floorPlanEnabled } = useHostFloorPlan();
   const [showPlan, setShowPlan] = useState(false);
   const [planoSel, setPlanoSel] = useState<string | number | null>(null);
   const [planoTable, setPlanoTable] = useState<Table | null>(null);
 
-  // Reservations state
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationFilter, setReservationFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
-  // ASSIGN-DATE-FILTER: filtro DESDE→HASTA en tab Reservas (combinable con tab status)
+
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  // UX: búsqueda por nombre/teléfono/email de cliente
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pendingAlert, setPendingAlert] = useState(0);
   const [expandedReservationId, setExpandedReservationId] = useState<number | null>(null);
-  // RESCHEDULE: Modal mover reserva a otra fecha/hora
+
   const [rescheduleModalForReservation, setRescheduleModalForReservation] = useState<Reservation | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
   const [rescheduleTime, setRescheduleTime] = useState<string>('');
   const [rescheduling, setRescheduling] = useState(false);
-  // Día seleccionado en calendario (para abrir modal CalendarDay)
+
   const [calendarDaySelected, setCalendarDaySelected] = useState<string | null>(null);
-  // Filtro de ocasión dentro del modal CalendarDay ('all' o el occasionType numérico)
+
   const [dayModalOccasionFilter, setDayModalOccasionFilter] = useState<number | 'all'>('all');
-  // Reset filtro cuando se cambia de día o se cierra el modal
+
   useEffect(() => { setDayModalOccasionFilter('all'); }, [calendarDaySelected]);
 
-  // ASSIGN.4: Modal de asignación de mesa a reserva
   const [assignModalForReservation, setAssignModalForReservation] = useState<Reservation | null>(null);
   const [contactReservation, setContactReservation] = useState<Reservation | null>(null);
   const [assignableTables, setAssignableTables] = useState<AssignableTable[]>([]);
   const [loadingAssignable, setLoadingAssignable] = useState(false);
   const [assigningTableId, setAssigningTableId] = useState<number | null>(null);
-  // Zona actualmente filtrada en el modal (default: la pedida por el cliente)
+
   const [assignableZoneId, setAssignableZoneId] = useState<number | null>(null);
   const [allZonesForAssign, setAllZonesForAssign] = useState<Zone[]>([]);
 
-  // Filters
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCapacity, setFilterCapacity] = useState<string>('all');
-  // HOST-MESAS-FILTRO.1 — Filtro temporal de reservas en tab Mesas
-  // 'any' = sin filtro | 'today' | 'tomorrow' | 'week' (próximos 7 días) | 'custom' (rango DESDE→HASTA)
+
   const [filterTime, setFilterTime] = useState<'any' | 'today' | 'tomorrow' | 'week' | 'custom'>('any');
   const [filterTimeFrom, setFilterTimeFrom] = useState<string>('');
   const [filterTimeTo, setFilterTimeTo] = useState<string>('');
 
-  // CAL-FE FEATURE 2 — Slots libres por mesa (mapa tableId -> freeSlots[])
   const [tableSlots, setTableSlots] = useState<Record<number, string[]>>({});
   const [tableSlotsLoading, setTableSlotsLoading] = useState(false);
-  // Dropdown de "Horarios libres" abierto por tarjeta (tableId) — null = ninguno
+
   const [openSlotsTableId, setOpenSlotsTableId] = useState<number | null>(null);
 
-  // Assign form
   const [numberOfGuests, setNumberOfGuests] = useState('');
   const [specialNotes, setSpecialNotes] = useState('');
 
-  // Menú para el wizard de reserva (lazy-load en openReservationModal → prop de HostReservationWizard)
   const [menuDishes, setMenuDishes] = useState<any[]>([]);
 
   const n = (obj: any, key: string) => obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
@@ -211,7 +196,6 @@ export default function HostApp() {
         api.get('/api/table')
       ]);
 
-      // Normalizar zonas (camelCase/PascalCase → camelCase uniforme)
       const allZones: Zone[] = (zonesRes.data ?? []).map((z: any) => ({
         id: n(z, 'id'),
         name: n(z, 'name') ?? '',
@@ -227,7 +211,6 @@ export default function HostApp() {
 
       const diningZoneNames = new Set(diningZones.map(z => z.name));
 
-      // Normalizar mesas
       const tablesData = (tablesRes.data ?? [])
         .map((t: any) => ({
           id: n(t, 'id'),
@@ -262,12 +245,8 @@ export default function HostApp() {
     }
   }, []);
 
-
-  // Guard de secuencia: si el host cambia de zona rápido en el modal, respuestas
-  // fuera de orden no deben pisar la lista — solo la última petición aplica su resultado.
   const assignableReqSeqRef = useRef(0);
 
-  // Cargar tablas disponibles para una reserva, opcionalmente filtrando por zona específica
   const loadAssignableTables = async (reservationId: number, zoneId: number | null) => {
     const seq = ++assignableReqSeqRef.current;
     setLoadingAssignable(true);
@@ -276,10 +255,10 @@ export default function HostApp() {
         ? `/api/tablereservation/${reservationId}/available-tables?zoneId=${zoneId}`
         : `/api/tablereservation/${reservationId}/available-tables`;
       const res = await api.get(url);
-      if (seq !== assignableReqSeqRef.current) return; // respuesta obsoleta
+      if (seq !== assignableReqSeqRef.current) return;
       setAssignableTables(Array.isArray(res.data) ? res.data : []);
     } catch {
-      if (seq !== assignableReqSeqRef.current) return; // respuesta obsoleta
+      if (seq !== assignableReqSeqRef.current) return;
       toast.error(t('toast.availableTablesError'));
       setAssignableTables([]);
     } finally {
@@ -287,14 +266,13 @@ export default function HostApp() {
     }
   };
 
-  // ASSIGN.4: Abrir modal para asignar/reasignar mesa a una reserva
   const openReservationAssignModal = async (r: Reservation) => {
     setAssignModalForReservation(r);
     setAssignableTables([]);
-    // Default: la zona que pidió el cliente
+
     const initialZone = r.requestedZoneId ?? null;
     setAssignableZoneId(initialZone);
-    // Cargar lista de zonas (para el selector) si todavía no la tenemos
+
     if (allZonesForAssign.length === 0) {
       try {
         const res = await api.get('/api/zone');
@@ -309,12 +287,11 @@ export default function HostApp() {
           }))
           .filter((z: any) => !z.type || (z.type.toLowerCase() !== 'kitchen' && z.type.toLowerCase() !== 'bar'));
         setAllZonesForAssign(dining);
-      } catch { /* ignore */ }
+      } catch {  }
     }
     await loadAssignableTables(r.id, initialZone);
   };
 
-  // Cambiar la zona dentro del modal — refresca la lista de mesas
   const changeAssignableZone = async (zoneId: number) => {
     if (!assignModalForReservation) return;
     setAssignableZoneId(zoneId);
@@ -333,9 +310,9 @@ export default function HostApp() {
     const reservation = assignModalForReservation;
     setAssigningTableId(tableId);
     try {
-      // 1. Asignar mesa
+
       await api.put(`/api/tablereservation/${reservation.id}/assign-table`, { tableId });
-      // 2. Si la reserva era pendiente, también confirmarla (flujo unificado "Aceptar")
+
       if (!reservation.isConfirmed) {
         await api.put(`/api/tablereservation/${reservation.id}/confirm`);
         toast.success(t('toast.reservationAccepted'));
@@ -353,7 +330,6 @@ export default function HostApp() {
     }
   };
 
-  // RESCHEDULE: abrir modal con la fecha/hora actual de la reserva pre-llenadas
   const openRescheduleModal = (r: Reservation) => {
     const dt = new Date(r.reservationDateTime);
     const y = dt.getFullYear();
@@ -372,8 +348,6 @@ export default function HostApp() {
     setRescheduleTime('');
   };
 
-  // Mover reserva a la fecha/hora seleccionadas. Si targetDate viene, se usa
-  // (caso: click en día del calendario para mover una reserva).
   const submitReschedule = async (reservationOverride?: Reservation, targetDateTime?: string) => {
     const r = reservationOverride ?? rescheduleModalForReservation;
     if (!r) return;
@@ -403,10 +377,9 @@ export default function HostApp() {
     }
   };
 
-  // Modal de confirmación al cancelar/rechazar una reserva
   const [cancelConfirmReservation, setCancelConfirmReservation] = useState<Reservation | null>(null);
   const [cancellingReservation, setCancellingReservation] = useState(false);
-  // ZONA-EXCL — decisión del host sobre reservas de zona completa (aceptar bloquea la zona / rechazar)
+
   const [zoneDecisionModal, setZoneDecisionModal] = useState<{ r: Reservation; accept: boolean } | null>(null);
   const [zoneDecisionMsg, setZoneDecisionMsg] = useState('');
   const [zoneDeciding, setZoneDeciding] = useState(false);
@@ -431,7 +404,6 @@ export default function HostApp() {
     }
   };
 
-  // ZONA-EXCL — abrir el modal de decisión (aceptar/rechazar) para una reserva de zona completa
   const openZoneDecision = (r: Reservation, accept: boolean) => {
     setZoneDecisionMsg(accept ? t('zoneDecision.defaultAcceptMsg') : '');
     setZoneDecisionModal({ r, accept });
@@ -459,24 +431,18 @@ export default function HostApp() {
     }
   };
 
-  // SignalR for real-time reservation notifications
   useEffect(() => {
     const token = localStorage.getItem('host_token');
     if (!token) return;
 
-    // Usar URL relativa para que el rewrite de Next.js haga proxy al backend (evita problemas de certificado autofirmado)
     const hubUrl = '/hubs/reservations';
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        // Leer el token FRESCO en cada negotiate/reconnect (no capturar el valor de montaje):
-        // tras un relogin/refresh, la próxima reconexión usa el token nuevo sin recargar la página.
+
         accessTokenFactory: () => ensureFreshToken('host'),
         skipNegotiation: false,
-        // El proxy same-origin de Next (/hubs/* → backend) no actualiza WebSockets,
-        // por lo que el intento de WS fallaba siempre y ensuciaba la consola con
-        // "WebSocket failed to connect". LongPolling es el transporte fiable a través
-        // del rewrite; el polling de respaldo (5-30s) cubre cualquier caída de RT.
+
         transport: signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -515,8 +481,7 @@ export default function HostApp() {
 
     connection.on('ReservationConfirmed', () => loadReservations());
     connection.on('ReservationCancelled', () => loadReservations());
-    // El servidor emite AvailabilityChanged al crear/cancelar/no-show (cambia la disponibilidad).
-    // Registrar el handler evita el warning "No client method ... 'availabilitychanged'" y refresca.
+
     connection.on('AvailabilityChanged', () => loadReservations());
 
     connection.start().then(() => {
@@ -531,7 +496,7 @@ export default function HostApp() {
   }, [loadReservations]);
 
   useEffect(() => {
-    // Auth check
+
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get('token');
     const userFromUrl = urlParams.get('user');
@@ -562,7 +527,6 @@ export default function HostApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // CAL-FE FEATURE 2 — día efectivo para slots de mesa: deriva del filtro temporal activo (o "hoy")
   const slotsDay = useMemo<string>(() => {
     const now = new Date();
     const fmt = (d: Date) => d.toLocaleDateString('sv-SE');
@@ -572,11 +536,10 @@ export default function HostApp() {
     if (filterTime === 'custom' && filterTimeFrom) {
       return filterTimeFrom;
     }
-    // 'any' | 'today' | 'week' → hoy por defecto
+
     return fmt(now);
   }, [filterTime, filterTimeFrom]);
 
-  // CAL-FE FEATURE 2 — cargar slots libres por mesa para el día efectivo (recarga al cambiar el día)
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -592,7 +555,7 @@ export default function HostApp() {
         }
         if (!cancelled) setTableSlots(map);
       } catch {
-        // Degradar con elegancia: sin slots no rompe el render de las tarjetas
+
         if (!cancelled) setTableSlots({});
       } finally {
         if (!cancelled) setTableSlotsLoading(false);
@@ -638,8 +601,7 @@ export default function HostApp() {
   const openReservationModal = (table: Table) => {
     setSelectedTable(table);
     setShowReservationModal(true);
-    // El wizard (HostReservationWizard) maneja su propio estado; aquí solo
-    // precargamos el menú para el paso de pre-orden.
+
     if (menuDishes.length === 0) {
       api.get('/api/dish')
         .then(res => setMenuDishes(Array.isArray(res.data) ? res.data : []))
@@ -686,7 +648,6 @@ export default function HostApp() {
     window.location.href = '/login';
   };
 
-  // HOST-MESAS-FILTRO.1 — Resolver el rango [from, to] del filtro temporal en runtime
   const timeRange = useMemo<{ from: Date; to: Date } | null>(() => {
     if (filterTime === 'any') return null;
     const now = new Date();
@@ -702,7 +663,7 @@ export default function HostApp() {
       return { from, to };
     }
     if (filterTime === 'week') {
-      // Próximos 7 días desde HOY (inclusive)
+
       const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
       const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 23, 59, 59);
       return { from, to };
@@ -713,7 +674,6 @@ export default function HostApp() {
     return null;
   }, [filterTime, filterTimeFrom, filterTimeTo]);
 
-  // Mapa tableId → array de reservas en el rango actual (calc 1 vez por tick)
   const reservationsByTableInRange = useMemo<Map<number, Reservation[]>>(() => {
     const map = new Map<number, Reservation[]>();
     if (!timeRange) return map;
@@ -740,13 +700,12 @@ export default function HostApp() {
         (filterCapacity === '2' && t.capacity <= 2) ||
         (filterCapacity === '4' && t.capacity >= 3 && t.capacity <= 4) ||
         (filterCapacity === '6+' && t.capacity >= 5);
-      // HOST-MESAS-FILTRO.1 — si hay filtro temporal activo, solo mesas con reserva en ese rango
+
       const timeMatch = !timeRange || (reservationsByTableInRange.get(t.id)?.length ?? 0) > 0;
       return zoneMatch && statusMatch && capacityMatch && timeMatch;
     });
   }, [tables, selectedZone, zones, filterStatus, filterCapacity, timeRange, reservationsByTableInRange]);
 
-  // Conteo de reservas por zona en el rango actual (para mostrar en chips)
   const reservationCountByZone = useMemo<Map<string, number>>(() => {
     const map = new Map<string, number>();
     if (!timeRange) return map;
@@ -771,9 +730,6 @@ export default function HostApp() {
 
   const availableSeats = tables.filter(t => t.status === 'Available').reduce((sum, t) => sum + t.capacity, 0);
 
-  // Panel operativo: ocultar reservas TERMINALES (cancelada/completada/no-show/expirada);
-  // solo se gestionan las activas. Así al cancelar una reserva desaparece de la lista.
-  // (TERMINAL_RESERVATION_STATUS es ahora de modulo — compartido con CalendarView.)
   const activeReservations = reservations.filter(
     (r) => !r.isCancelled && !TERMINAL_RESERVATION_STATUS.has(r.status || '')
   );
@@ -787,14 +743,12 @@ export default function HostApp() {
   const pendingReservations = todayReservations.filter(r => !r.isConfirmed);
   const confirmedReservations = todayReservations.filter(r => r.isConfirmed);
 
-  // All reservations filtered by status (for the grouped-by-date view)
   const statusFiltered = reservationFilter === 'pending'
     ? activeReservations.filter(r => !r.isConfirmed)
     : reservationFilter === 'confirmed'
     ? activeReservations.filter(r => r.isConfirmed)
     : activeReservations;
 
-  // Filtro DESDE→HASTA (YYYY-MM-DD) combinable con el status
   const dateFiltered = (!dateFrom && !dateTo)
     ? statusFiltered
     : statusFiltered.filter(r => {
@@ -804,7 +758,6 @@ export default function HostApp() {
         return true;
       });
 
-  // Filtro de búsqueda (nombre / teléfono / email) — combinable con todo
   const q = searchQuery.trim().toLowerCase();
   const allFiltered = !q
     ? dateFiltered
@@ -815,7 +768,6 @@ export default function HostApp() {
 
   const hasActiveReservationFilters = !!dateFrom || !!dateTo || !!q || reservationFilter !== 'all';
 
-  // Contador de ocasiones especiales en el rango filtrado (cumple/aniversario/etc)
   const birthdayCount = allFiltered.filter(r => r.occasionType === 1).length;
   const specialOccasionsCount = allFiltered.filter(r => r.occasionType && r.occasionType !== 0).length;
 
@@ -826,8 +778,6 @@ export default function HostApp() {
     return acc;
   }, {});
 
-  // HOST-RESERVAS-ORDER.1 — ordenar reservas dentro de cada fecha: Pendientes > Confirmadas > Canceladas.
-  // Las FECHAS se ordenan más abajo: HOY siempre primero, luego futuras (cronológico), luego pasadas.
   Object.keys(groupedByDate).forEach(key => {
     groupedByDate[key].sort((a, b) => {
       const sa = a.isCancelled ? 2 : (a.isConfirmed ? 1 : 0);
@@ -837,10 +787,9 @@ export default function HostApp() {
     });
   });
   const sortedDateKeys = Object.keys(groupedByDate).sort((a, b) => {
-    // Vista "Pendientes": orden 100% ASCENDENTE por fecha (y por hora dentro de cada fecha),
-    // así las pendientes —vencidas y próximas— fluyen cronológicamente, la más antigua arriba.
+
     if (reservationFilter === 'pending') return a.localeCompare(b);
-    // Otras vistas: HOY (rank 0) primero; futuras (rank 1) cronológico; pasadas (rank 2) más reciente arriba.
+
     const ra = a === today ? 0 : (a > today ? 1 : 2);
     const rb = b === today ? 0 : (b > today ? 1 : 2);
     if (ra !== rb) return ra - rb;
@@ -849,7 +798,6 @@ export default function HostApp() {
 
   const totalPending = activeReservations.filter(r => !r.isConfirmed).length;
 
-  // Ocupación por mesa: reservas confirmadas/sentadas que ocupan la mesa en un día (YYYY-MM-DD).
   const occupancyForTableOnDate = (table: Table, ymd: string) =>
     reservations
       .filter(r => {
@@ -903,7 +851,7 @@ export default function HostApp() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
+
       <div className="bg-slate-900 shadow-xl">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -914,7 +862,7 @@ export default function HostApp() {
                   {t('header.welcome', { name: user?.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() : (user?.name ?? user?.email ?? '') })}
                 </p>
               </div>
-              {/* View Tabs */}
+
               <div className="flex rounded-xl bg-white/5 border border-white/10 overflow-hidden">
                 <button
                   onClick={() => setActiveView('tables')}
@@ -960,7 +908,7 @@ export default function HostApp() {
                 </button>
               </div>
             </div>
-            {/* Salir — esquina superior derecha (fila 1) */}
+
             <div className="flex items-center gap-2">
               <LanguageSwitcher />
               <button
@@ -972,7 +920,7 @@ export default function HostApp() {
               </button>
             </div>
           </div>
-          {/* Fila 2: indicadores de estado, centrados */}
+
           <div className="hidden md:flex flex-wrap items-center justify-center gap-2 mt-4">
                 <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-center min-w-[80px]">
                   <p className="text-2xl font-black text-white leading-none">{tables.filter(tb => tb.status === 'Available').length}</p>
@@ -998,7 +946,6 @@ export default function HostApp() {
         </div>
       </div>
 
-      {/* ════════ CALENDAR VIEW ════════ */}
       {activeView === 'calendar' && (
         <CalendarView
           reservations={reservations}
@@ -1006,10 +953,9 @@ export default function HostApp() {
         />
       )}
 
-      {/* ════════ RESERVATIONS VIEW ════════ */}
       {activeView === 'reservations' && (
         <div className="max-w-5xl mx-auto px-6 pt-5 pb-10">
-          {/* Stats row — del DÍA actual (no sistema). Usa las variables day-scoped pre-computadas. */}
+
           <div className="grid grid-cols-3 gap-4 mb-5">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center border-l-4 border-l-slate-400">
               <p className="text-3xl font-black text-slate-700">{todayReservations.length}</p>
@@ -1025,7 +971,6 @@ export default function HostApp() {
             </div>
           </div>
 
-          {/* Filter tabs + filtro de fecha inline (ASSIGN-DATE-FILTER) */}
           <div className="flex flex-wrap items-center gap-2 mb-5">
             {([
               { key: 'all', label: t('reservations.filterAll') },
@@ -1045,9 +990,8 @@ export default function HostApp() {
               </button>
             ))}
 
-            {/* Búsqueda + Filtro DESDE→HASTA + contador cumpleaños — alineados a la derecha */}
             <div className="ml-auto flex items-center gap-2 flex-wrap">
-              {/* Buscar por cliente */}
+
               <div className={`relative flex items-center transition-all ${
                 searchQuery ? 'ring-2 ring-blue-200 rounded-xl' : ''
               }`}>
@@ -1077,7 +1021,6 @@ export default function HostApp() {
                 )}
               </div>
 
-              {/* Filtro DESDE→HASTA */}
               <div className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 border transition-all ${
                 (dateFrom || dateTo) ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-white border-gray-200'
               }`}>
@@ -1111,7 +1054,6 @@ export default function HostApp() {
                 )}
               </div>
 
-              {/* Badge cumpleaños del rango filtrado — estilo sobrio */}
               {birthdayCount > 0 && (
                 <div
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm"
@@ -1138,7 +1080,6 @@ export default function HostApp() {
             </div>
           </div>
 
-          {/* Reservations grouped by date */}
           {sortedDateKeys.length === 0 ? (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
               {hasActiveReservationFilters ? (
@@ -1175,7 +1116,7 @@ export default function HostApp() {
             <div className="space-y-6">
               {sortedDateKeys.map(dateKey => (
                 <div key={dateKey}>
-                  {/* Date header */}
+
                   <div className={`flex items-center gap-3 mb-3 px-1 ${isPastDate(dateKey) ? 'opacity-60' : ''}`}>
                     <CalendarCheck className={`w-4 h-4 ${dateKey === today ? 'text-blue-500' : 'text-slate-400'}`} />
                     <span className={`text-sm font-bold capitalize ${dateKey === today ? 'text-blue-600' : 'text-slate-600'}`}>
@@ -1236,7 +1177,7 @@ export default function HostApp() {
                                       🏛 {t('reservations.zoneExclusive', { zonePart: r.requestedZoneName ? `: ${r.requestedZoneName}` : '' })}
                                     </span>
                                   )}
-                                  {/* Badge de tipo de ocasión (si != Casual) */}
+
                                   {r.occasionType !== undefined && r.occasionType !== 0 && OCCASION_LABELS[r.occasionType] ? (
                                     <span
                                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${OCCASION_LABELS[r.occasionType].color}`}
@@ -1247,9 +1188,6 @@ export default function HostApp() {
                                   ) : null}
                                 </div>
 
-                                {/* Contacto del cliente: el botón "Contactar" se movió a la columna de acciones (debajo de "Mover") */}
-
-                                {/* 2️⃣ Datos de la reserva */}
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{t('reservations.reservationLabel')}</p>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                                   <div className="flex items-center gap-1.5 text-slate-600">
@@ -1290,10 +1228,9 @@ export default function HostApp() {
                                 )}
                               </div>
 
-                              {/* Acciones — todos del mismo tamaño (w-full en columna de ancho fijo) */}
                               <div className="flex flex-col gap-2 flex-shrink-0 ml-auto w-[210px]">
                                 {isPending ? (
-                                  // Pendiente: Aceptar y Rechazar JUNTOS en la misma línea
+
                                   <div className="flex gap-2">
                                     <button
                                       onClick={() => r.isZoneExclusive ? openZoneDecision(r, true) : openReservationAssignModal(r)}
@@ -1319,7 +1256,7 @@ export default function HostApp() {
                                     {t('reservations.cancel')}
                                   </button>
                                 )}
-                                {/* Solo confirmadas: botón Reasignar (las pendientes asignan vía Aceptar) */}
+
                                 {!isPending && (
                                   <button
                                     onClick={() => openReservationAssignModal(r)}
@@ -1329,7 +1266,7 @@ export default function HostApp() {
                                     {t('reservations.reassignTable')}
                                   </button>
                                 )}
-                                {/* Mover y Contactar JUNTOS en la misma línea */}
+
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => openRescheduleModal(r)}
@@ -1353,7 +1290,6 @@ export default function HostApp() {
                               </div>
                             </div>
 
-                            {/* Pre-order expandible */}
                             {isExpanded && preOrder && preOrder.items.length > 0 && (
                               <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('reservations.preOrderTitle')}</p>
@@ -1398,13 +1334,11 @@ export default function HostApp() {
         </div>
       )}
 
-      {/* ════════ TABLES VIEW ════════ */}
       {activeView === 'tables' && <>
-      {/* Filters Panel */}
+
       <div className="max-w-7xl mx-auto px-6 pt-5 pb-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
 
-          {/* Zone tabs */}
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t('filters.zone')}</p>
@@ -1450,7 +1384,7 @@ export default function HostApp() {
                   >
                     {zone.name}
                     {timeRange ? (
-                      // HOST-MESAS-FILTRO.1: mostrar conteo de reservas en el rango
+
                       <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
                         selectedZone === zone.id ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
                       }`}>
@@ -1471,7 +1405,6 @@ export default function HostApp() {
 
           <div className="border-t border-gray-100" />
 
-          {/* HOST-MESAS-FILTRO.1 — Filtro temporal de reservas */}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Calendar className="w-3 h-3" />
@@ -1497,7 +1430,7 @@ export default function HostApp() {
                   {opt.label}
                 </button>
               ))}
-              {/* Date pickers — visibles solo en modo 'custom' */}
+
               {filterTime === 'custom' && (
                 <>
                   <input
@@ -1515,7 +1448,7 @@ export default function HostApp() {
                   />
                 </>
               )}
-              {/* Resumen del rango activo */}
+
               {timeRange && (
                 <span className="ml-2 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded">
                   {timeRange.from.toLocaleDateString(dl, { day: 'numeric', month: 'short' })}
@@ -1530,10 +1463,8 @@ export default function HostApp() {
 
           <div className="border-t border-gray-100" />
 
-          {/* Status + Capacity row */}
           <div className="flex flex-wrap items-end gap-6">
 
-            {/* Estado */}
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filters.status')}</p>
               <div className="flex gap-2">
@@ -1562,7 +1493,6 @@ export default function HostApp() {
               </div>
             </div>
 
-            {/* Capacidad */}
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filters.capacity')}</p>
               <div className="flex gap-2">
@@ -1588,7 +1518,6 @@ export default function HostApp() {
               </div>
             </div>
 
-            {/* Results + clear */}
             <div className="ml-auto flex items-center gap-3">
               {(hasActiveFilters || selectedZone !== null) && (
                 <button
@@ -1608,7 +1537,6 @@ export default function HostApp() {
         </div>
       </div>
 
-      {/* Tables Grid / Plano del salón */}
       {showPlan && floorPlanEnabled ? (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
@@ -1640,13 +1568,13 @@ export default function HostApp() {
               key={table.id}
               className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col"
             >
-              {/* Color strip */}
+
               <div className={`h-1.5 w-full ${getStatusStrip(table.status)}`} />
 
               <div className="p-4 flex flex-col flex-1">
-                {/* Encabezado (no clickable) — "Ver reservas" se abre solo con el botón de abajo */}
+
                 <div className="mb-2">
-                  {/* Number + badge */}
+
                   <div className="flex items-start justify-between mb-3">
                     <span className="text-4xl font-black text-slate-900 leading-none">
                       {table.tableNumber}
@@ -1656,7 +1584,6 @@ export default function HostApp() {
                     </span>
                   </div>
 
-                  {/* Zone + Capacity */}
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest truncate">{table.zoneName}</p>
                   <div className="flex items-center gap-1 mt-1 text-slate-500">
                     <Users className="w-3 h-3" />
@@ -1664,7 +1591,6 @@ export default function HostApp() {
                   </div>
                 </div>
 
-                {/* Ver reservas — botón explícito siempre visible (táctil/tablet: el hover no aplica) */}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); openTableOccupancy(table); }}
@@ -1673,10 +1599,9 @@ export default function HostApp() {
                   <CalendarCheck className="w-4 h-4" /> {t('tables.viewReservations')}
                 </button>
 
-                {/* CAL-FE FEATURE 2 — Horarios libres de la mesa para el día efectivo (badges + "+N más") */}
                 {(() => {
                   const slots = tableSlots[table.id];
-                  // Aún cargando y sin datos previos → placeholder sutil (no bloquea el render)
+
                   if (slots === undefined) {
                     return tableSlotsLoading ? (
                       <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
@@ -1735,7 +1660,6 @@ export default function HostApp() {
                   );
                 })()}
 
-                {/* HOST-MESAS-FILTRO.1 — badge de reservas en el rango */}
                 {timeRange && (() => {
                   const rsv = reservationsByTableInRange.get(table.id) ?? [];
                   if (rsv.length === 0) return null;
@@ -1760,7 +1684,6 @@ export default function HostApp() {
                   );
                 })()}
 
-                {/* HOST-MESAS-UX.1 — Sección reserva + walk-in actions, diseño táctil tablet/cell */}
                 {(() => {
                   const tableReservas = reservations
                     .filter(r => r.tableId === table.id && !r.isCancelled)
@@ -1779,7 +1702,6 @@ export default function HostApp() {
                   const hasReserva = tableReservas.length > 0;
                   const isPhysicallyBusy = table.status === 'Occupied' || table.status === 'Billing' || table.status === 'Cleaning';
 
-                  // Caso 1: mesa físicamente ocupada → solo estado (no actionable)
                   if (isPhysicallyBusy) {
                     return (
                       <div className="mt-auto pt-3">
@@ -1800,7 +1722,6 @@ export default function HostApp() {
                     );
                   }
 
-                  // Caso 2: mesa con reserva próxima → gestión de reserva como acción principal
                   if (hasReserva) {
                     const r = tableReservas[0];
                     const isPending = !r.isConfirmed;
@@ -1811,12 +1732,12 @@ export default function HostApp() {
                     const dayLabel = dt.toLocaleDateString(dl, { day: 'numeric', month: 'short' });
                     const timeLabel = dt.toLocaleTimeString(dl, { hour: '2-digit', minute: '2-digit' });
                     const dayLong = dt.toLocaleDateString(dl, { weekday: 'short' }).replace('.', '');
-                    // Si la reserva es lejana (>2h), permite walk-in. Si ya está cerca, mejor no.
+
                     const allowWalkIn = hoursUntil > 2;
 
                     return (
                       <div className="mt-3 flex flex-col flex-1">
-                        {/* Bloque de reserva — más claro y respirado */}
+
                         <div className={`rounded-xl p-2.5 ${
                           isPending ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'
                         }`}>
@@ -1837,7 +1758,6 @@ export default function HostApp() {
                           </p>
                         </div>
 
-                        {/* Acción primaria — full width, alta para tap */}
                         <button
                           onClick={(e) => { e.stopPropagation(); openReservationAssignModal(r); }}
                           className={`mt-2 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm transition-colors ${
@@ -1851,7 +1771,6 @@ export default function HostApp() {
                           )}
                         </button>
 
-                        {/* Acciones secundarias — 50/50 con icon + texto chico */}
                         <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                           <button
                             onClick={(e) => { e.stopPropagation(); requestCancelReservation(r); }}
@@ -1869,7 +1788,6 @@ export default function HostApp() {
                           </button>
                         </div>
 
-                        {/* +N más reservas */}
                         {extra > 0 && (
                           <button
                             onClick={(e) => { e.stopPropagation(); openTableOccupancy(table); }}
@@ -1880,7 +1798,6 @@ export default function HostApp() {
                           </button>
                         )}
 
-                        {/* Walk-in — separador sutil + texto, solo si la reserva está lejos */}
                         {allowWalkIn && (
                           <>
                             <div className="mt-2 pt-2 border-t border-dashed border-gray-200">
@@ -1900,7 +1817,6 @@ export default function HostApp() {
                     );
                   }
 
-                  // Caso 3: mesa libre sin reservas → flujo simple
                   return (
                     <div className="mt-auto pt-3 space-y-2">
                       <button
@@ -1925,7 +1841,6 @@ export default function HostApp() {
       </div>
       )}
 
-      {/* Hoja de acciones del host al tocar una mesa en el plano */}
       {planoTable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(15,23,42,0.55)' }} onClick={() => setPlanoTable(null)}>
           <div style={{ width: '100%', maxWidth: 380 }} onClick={(e) => e.stopPropagation()} className="overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -1964,8 +1879,6 @@ export default function HostApp() {
 
       </>}
 
-
-      {/* HOST-MESAS-RESERVAS.2 — Mini-modal: TODAS las reservas de una mesa con sus acciones */}
       {tableReservasModal && (() => {
         const tbl = tableReservasModal.table;
         const dayRes = occTableDate ? occupancyForTableOnDate(tbl, occTableDate) : [];
@@ -1981,7 +1894,7 @@ export default function HostApp() {
             className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
+
             <div className="bg-indigo-600 text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-base font-bold flex items-center gap-2">
@@ -1998,7 +1911,7 @@ export default function HostApp() {
             </div>
 
             <div className="overflow-y-auto flex-1">
-              {/* Calendario — día seleccionable (reservas confirmadas/sentadas de la mesa) */}
+
               <div className="px-4 pt-3">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 flex items-center justify-between">
@@ -2048,7 +1961,6 @@ export default function HostApp() {
                 </div>
               </div>
 
-              {/* Reservas confirmadas / sentadas del día seleccionado */}
               <div className="px-4 py-3">
                 <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400 capitalize">{dateLabel}</p>
                 {dayRes.length === 0 ? (
@@ -2115,7 +2027,6 @@ export default function HostApp() {
         );
       })()}
 
-      {/* Assign Modal */}
       {showAssignModal && selectedTable && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -2168,7 +2079,6 @@ export default function HostApp() {
         </div>
       )}
 
-      {/* Reservation Modal */}
       {showReservationModal && selectedTable && (
         <HostReservationWizard
           table={selectedTable}
@@ -2180,8 +2090,6 @@ export default function HostApp() {
         />
       )}
 
-      {/* Modal de confirmación al cancelar/rechazar reserva */}
-      {/* ZONA-EXCL — Modal de decisión del host (aceptar bloquea la zona / rechazar) con mensaje al cliente */}
       {zoneDecisionModal && (() => {
         const r = zoneDecisionModal.r;
         const accept = zoneDecisionModal.accept;
@@ -2323,8 +2231,6 @@ export default function HostApp() {
         </div>
       )}
 
-      {/* RESCHEDULE: Modal mover reserva a otra fecha/hora */}
-      {/* Modal: datos de contacto del cliente (teléfono + correo) */}
       {contactReservation && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setContactReservation(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -2477,9 +2383,8 @@ export default function HostApp() {
         </div>
       )}
 
-      {/* RESCHEDULE: Modal CalendarDay — al hacer click en día del calendario */}
       {calendarDaySelected && (() => {
-        // Mismo filtro terminal que el grid del calendario y la lista operativa.
+
         const dayReservas = reservations.filter(r => {
           if (r.isCancelled || TERMINAL_RESERVATION_STATUS.has(r.status || '')) return false;
           const k = new Date(r.reservationDateTime).toLocaleDateString('sv-SE');
@@ -2517,12 +2422,12 @@ export default function HostApp() {
               </div>
 
               <div className="px-6 py-4 overflow-y-auto flex-1 space-y-5">
-                {/* Sección 1: Reservas del día */}
+
                 <div>
                   <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">
                     {t('calendarDay.dayReservations')}
                   </p>
-                  {/* Tabs por ocasión — solo si hay >1 tipo distinto */}
+
                   {(() => {
                     const groups = new Map<number, number>();
                     dayReservas.forEach(r => {
@@ -2671,7 +2576,6 @@ export default function HostApp() {
                   })()}
                 </div>
 
-                {/* Sección 2: Mover otras reservas a este día */}
                 <div className="pt-4 border-t border-slate-200">
                   <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">
                     {t('calendarDay.moveSection')}
@@ -2723,7 +2627,6 @@ export default function HostApp() {
         );
       })()}
 
-      {/* ASSIGN.4: Modal de asignación / reasignación de mesa */}
       {assignModalForReservation && (
         <div
           className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
@@ -2752,7 +2655,7 @@ export default function HostApp() {
             </div>
 
             <div className="px-6 py-5 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {/* Selector de zona */}
+
               {allZonesForAssign.length > 0 && (
                 <div className="mb-4">
                   <p className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">
@@ -2876,9 +2779,6 @@ export default function HostApp() {
   );
 }
 
-/* ════════════════════════════════════════════════════════════════
-   CALENDAR VIEW — Vista mensual con cuenta de reservas por día
-   ════════════════════════════════════════════════════════════════ */
 function CalendarView({
   reservations,
   onDayClick,
@@ -2892,10 +2792,6 @@ function CalendarView({
   const todayKey = today.toLocaleDateString('sv-SE');
   const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
 
-  // Agrupar reservas por día YYYY-MM-DD.
-  // Ocultar las TERMINALES (cancelada/completada/no-show/expirada) igual que la lista
-  // operativa: una reserva marcada NoShow/Cancelled ya no debe aparecer en el calendario
-  // (antes se colaban y ademas se contaban como "pendiente" por !isConfirmed).
   const byDate = reservations
     .filter((r) => !r.isCancelled && !TERMINAL_RESERVATION_STATUS.has(r.status || ''))
     .reduce<Record<string, Reservation[]>>((acc, r) => {
@@ -2905,18 +2801,16 @@ function CalendarView({
       return acc;
     }, {});
 
-  // Construir grid del mes: empieza el primer día calendario de la semana
   const firstDay = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
-  const dayOfWeekStart = firstDay.getDay(); // 0 = domingo
+  const dayOfWeekStart = firstDay.getDay();
   const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate();
 
-  // Pad para que la primera fila empiece en domingo
   const cells: (Date | null)[] = [];
   for (let i = 0; i < dayOfWeekStart; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     cells.push(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d));
   }
-  // Pad final para completar la última fila
+
   while (cells.length % 7 !== 0) cells.push(null);
 
   const monthName = viewMonth.toLocaleDateString(dl, { month: 'long', year: 'numeric' });
@@ -2924,11 +2818,11 @@ function CalendarView({
   const nextMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1));
   const goToday = () => setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
 
-  const weekDayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']; // day-of-week abbreviations remain locale-invariant (calendar header)
+  const weekDayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   return (
     <div className="max-w-6xl mx-auto px-6 pt-5 pb-10">
-      {/* Header con navegación */}
+
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <button
@@ -2957,9 +2851,8 @@ function CalendarView({
         </button>
       </div>
 
-      {/* Grid de calendario */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        {/* Encabezado días semana */}
+
         <div className="grid grid-cols-7 bg-slate-50 border-b border-gray-100">
           {weekDayLabels.map((d, i) => (
             <div
@@ -2973,7 +2866,6 @@ function CalendarView({
           ))}
         </div>
 
-        {/* Celdas */}
         <div className="grid grid-cols-7">
           {cells.map((date, idx) => {
             if (!date) {
@@ -3048,7 +2940,6 @@ function CalendarView({
         </div>
       </div>
 
-      {/* Leyenda */}
       <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-slate-500">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>

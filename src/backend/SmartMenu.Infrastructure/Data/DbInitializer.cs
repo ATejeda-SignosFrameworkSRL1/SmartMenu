@@ -9,7 +9,7 @@ public static class DbInitializer
 {
     public static async Task SeedAsync(ApplicationDbContext context)
     {
-        // Si ya hay datos, salir
+
         if (context.Users.Any())
         {
             Console.WriteLine("⚠️  Database already seeded. Skipping...");
@@ -18,7 +18,6 @@ public static class DbInitializer
 
         Console.WriteLine("🌱 Starting database seed...");
 
-        // 1. Crear Restaurant
         var restaurant = new Restaurant
         {
             Name = "Restaurante Demo SmartMenu",
@@ -32,7 +31,6 @@ public static class DbInitializer
         await context.SaveChangesAsync();
         Console.WriteLine("✅ Restaurant created");
 
-        // 2. Crear Usuarios
         var users = new List<User>
         {
             new User
@@ -74,8 +72,7 @@ public static class DbInitializer
                 FirstName = "Carlos",
                 LastName = "Martínez",
                 Phone = "809-555-0103",
-                // El KDS expone una vista separada del bar (filtrada por categoría Bebidas).
-                // Para entrar a esa vista se requiere Role=Bartender, no Waiter.
+
                 Role = UserRole.Bartender,
                 IsActive = true,
                 RestaurantId = restaurant.Id
@@ -118,7 +115,6 @@ public static class DbInitializer
         await context.SaveChangesAsync();
         Console.WriteLine($"✅ {users.Count} users created");
 
-        // 3. Crear Zonas
         var zones = new List<Zone>
         {
             new Zone { Name = "Terraza", RestaurantId = restaurant.Id, IsActive = true },
@@ -129,7 +125,6 @@ public static class DbInitializer
         await context.SaveChangesAsync();
         Console.WriteLine($"✅ {zones.Count} zones created");
 
-        // 4. Crear Mesas
         var tables = new List<Table>();
         var tableNumber = 1;
         foreach (var zone in zones)
@@ -151,7 +146,6 @@ public static class DbInitializer
         await context.SaveChangesAsync();
         Console.WriteLine($"✅ {tables.Count} tables created");
 
-        // 5. Crear Menú
         var menu = new Menu
         {
             Name = "Menú Principal",
@@ -163,7 +157,6 @@ public static class DbInitializer
         await context.SaveChangesAsync();
         Console.WriteLine("✅ Menu created");
 
-        // 6. Crear Categorías
         var categories = new List<Category>
         {
             new Category { Name = "Entradas", Description = "Para comenzar", MenuId = menu.Id, SortOrder = 1, IsActive = true },
@@ -176,7 +169,6 @@ public static class DbInitializer
         await context.SaveChangesAsync();
         Console.WriteLine($"✅ {categories.Count} categories created");
 
-        // 6b. Crear Tags para platos (picante, etc.)
         var dishTags = new List<DishTag>
         {
             new DishTag { Code = "muy_picante", Label = "Muy picante", Icon = "🌶️🌶️🌶️", SortOrder = 1, IsActive = true },
@@ -190,10 +182,9 @@ public static class DbInitializer
         await context.SaveChangesAsync();
         Console.WriteLine($"✅ {dishTags.Count} dish tags created");
 
-        // 7. Crear Platos
         var dishes = new List<Dish>
         {
-            // Entradas
+
             new Dish
             {
                 Name = "Bruschetta Italiana",
@@ -226,8 +217,7 @@ public static class DbInitializer
                 IsVegetarian = true,
                 PreparationTimeMinutes = 8
             },
-            
-            // Platos Fuertes
+
             new Dish
             {
                 Name = "Ribeye Premium 12oz",
@@ -258,8 +248,7 @@ public static class DbInitializer
                 IsAvailable = true,
                 PreparationTimeMinutes = 22
             },
-            
-            // Pastas
+
             new Dish
             {
                 Name = "Fettuccine Alfredo",
@@ -293,8 +282,7 @@ public static class DbInitializer
                 IsVegan = true,
                 PreparationTimeMinutes = 16
             },
-            
-            // Bebidas
+
             new Dish
             {
                 Name = "Mojito Clásico",
@@ -325,8 +313,7 @@ public static class DbInitializer
                 IsAvailable = true,
                 PreparationTimeMinutes = 5
             },
-            
-            // Postres
+
             new Dish
             {
                 Name = "Tiramisú",
@@ -371,9 +358,6 @@ public static class DbInitializer
         Console.WriteLine("");
     }
 
-    /// <summary>
-    /// Añade el segundo mesero (waiter2) si no existe. Útil cuando la BD ya estaba creada y el seed no se ejecutó.
-    /// </summary>
     public static async Task EnsureExtraWaiterAsync(ApplicationDbContext context)
     {
         if (await context.Users.AnyAsync(u => u.Email == "waiter2@smartmenu.com"))
@@ -399,9 +383,6 @@ public static class DbInitializer
         Console.WriteLine("✅ Segundo mesero creado: waiter2@smartmenu.com");
     }
 
-    /// <summary>
-    /// Añade el usuario Cashier si no existe.
-    /// </summary>
     public static async Task EnsureCashierAsync(ApplicationDbContext context)
     {
         if (await context.Users.AnyAsync(u => u.Email == "cashier@smartmenu.com"))
@@ -427,7 +408,6 @@ public static class DbInitializer
         Console.WriteLine("✅ Cajero creado: cashier@smartmenu.com");
     }
 
-    /// <summary>Repartidor para la delivery-app (recoge y entrega pedidos del portal). Idempotente.</summary>
     public static async Task EnsureDeliveryUserAsync(ApplicationDbContext context)
     {
         if (await context.Users.AnyAsync(u => u.Email == "delivery@smartmenu.com"))
@@ -453,10 +433,6 @@ public static class DbInitializer
         Console.WriteLine("✅ Repartidor creado: delivery@smartmenu.com");
     }
 
-    /// <summary>
-    /// Crea tablas y columnas de la migración AddVirtualTableTransferDishTags si no existen (para no depender de dotnet ef database update).
-    /// </summary>
-    /// <summary>VT-PAY — columna PayerTableId en VirtualTables (cobro unificado de mesa virtual). Idempotente.</summary>
     public static async Task EnsureVirtualTablePayerColumnAsync(ApplicationDbContext context)
     {
         try
@@ -479,19 +455,18 @@ public static class DbInitializer
         }
         catch
         {
-            // ignore
+
         }
 
         try
         {
-        // Columnas en Payments
+
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Payments') AND name = 'BillSplitType')
                 ALTER TABLE Payments ADD BillSplitType nvarchar(64) NULL;
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Payments') AND name = 'SplitPartIndex')
                 ALTER TABLE Payments ADD SplitPartIndex int NULL;");
 
-        // Columnas en TableReservations
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'ReservedUntil')
                 ALTER TABLE TableReservations ADD ReservedUntil datetime2 NULL;
@@ -500,17 +475,14 @@ public static class DbInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'ConfirmationLink')
                 ALTER TABLE TableReservations ADD ConfirmationLink nvarchar(500) NULL;");
 
-        // Columna CustomerName en Orders (nombre del comensal al escanear QR)
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'CustomerName')
                 ALTER TABLE Orders ADD CustomerName nvarchar(256) NULL;");
 
-        // Columna PreferenceText en OrderItems (preferencia en texto, ej. término de carne)
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PreferenceText')
                 ALTER TABLE OrderItems ADD PreferenceText nvarchar(256) NULL;");
 
-        // Tabla DishTags
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DishTags')
             CREATE TABLE DishTags (
@@ -524,7 +496,6 @@ public static class DbInitializer
                 UpdatedAt datetime2 NOT NULL
             );");
 
-        // Tabla VirtualTables
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'VirtualTables')
             CREATE TABLE VirtualTables (
@@ -540,7 +511,6 @@ public static class DbInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_VirtualTables_CreatedByWaiterId' AND object_id = OBJECT_ID('VirtualTables'))
                 CREATE INDEX IX_VirtualTables_CreatedByWaiterId ON VirtualTables(CreatedByWaiterId);");
 
-        // Tabla VirtualTableTables
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'VirtualTableTables')
             CREATE TABLE VirtualTableTables (
@@ -553,7 +523,6 @@ public static class DbInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_VirtualTableTables_TableId' AND object_id = OBJECT_ID('VirtualTableTables'))
                 CREATE INDEX IX_VirtualTableTables_TableId ON VirtualTableTables(TableId);");
 
-        // Tabla TableTransferRequests
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'TableTransferRequests')
             CREATE TABLE TableTransferRequests (
@@ -574,7 +543,6 @@ public static class DbInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TableTransferRequests_ToWaiterId' AND object_id = OBJECT_ID('TableTransferRequests'))
                 CREATE INDEX IX_TableTransferRequests_ToWaiterId ON TableTransferRequests(ToWaiterId);");
 
-        // Tabla DishDishTags (depende de DishTags)
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DishDishTags')
             CREATE TABLE DishDishTags (
@@ -587,7 +555,6 @@ public static class DbInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DishDishTags_DishTagId' AND object_id = OBJECT_ID('DishDishTags'))
                 CREATE INDEX IX_DishDishTags_DishTagId ON DishDishTags(DishTagId);");
 
-        // Registrar migración en historial para que EF no intente aplicarla de nuevo
         await context.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (SELECT 1 FROM [__EFMigrationsHistory] WHERE [MigrationId] = N'20260210000000_AddVirtualTableTransferDishTags')
             INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion]) VALUES (N'20260210000000_AddVirtualTableTransferDishTags', N'9.0.0');");
@@ -600,9 +567,6 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>
-    /// Inserta los tags de plato por defecto si la tabla DishTags está vacía (p. ej. cuando la migración se aplicó después del seed).
-    /// </summary>
     public static async Task EnsureDishTagsSeedAsync(ApplicationDbContext context)
     {
         if (await context.DishTags.AnyAsync())
@@ -621,9 +585,6 @@ public static class DbInitializer
         Console.WriteLine($"✅ {dishTags.Count} dish tags creados.");
     }
 
-    /// <summary>
-    /// Agrega columnas Type y Description a Zones si no existen.
-    /// </summary>
     public static async Task EnsureOrderServedColumnsAsync(ApplicationDbContext context)
     {
         try
@@ -641,14 +602,11 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>
-    /// Adds AssignedZoneId to Users and KitchenZoneId to Dishes, creates "Cocina Principal" zone, and assigns existing Chef to it.
-    /// </summary>
     public static async Task EnsureKitchenZoneColumnsAsync(ApplicationDbContext context)
     {
         try
         {
-            // Add columns
+
             await context.Database.ExecuteSqlRawAsync(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'AssignedZoneId')
                     ALTER TABLE Users ADD AssignedZoneId int NULL;
@@ -659,7 +617,6 @@ public static class DbInitializer
                 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Dishes_Zones_KitchenZoneId')
                     ALTER TABLE Dishes ADD CONSTRAINT FK_Dishes_Zones_KitchenZoneId FOREIGN KEY (KitchenZoneId) REFERENCES Zones(Id);");
 
-            // Ensure "Cocina Principal" zone exists
             var restaurantId = await context.Restaurants.OrderBy(r => r.Id).Select(r => r.Id).FirstOrDefaultAsync();
             if (restaurantId > 0)
             {
@@ -679,7 +636,6 @@ public static class DbInitializer
                     Console.WriteLine("✅ Zona 'Cocina Principal' creada.");
                 }
 
-                // Assign existing chef(s) without zone to Cocina Principal
                 var chefsWithoutZone = await context.Users
                     .Where(u => u.Role == UserRole.Chef && u.AssignedZoneId == null)
                     .ToListAsync();
@@ -693,8 +649,6 @@ public static class DbInitializer
                     Console.WriteLine($"✅ {chefsWithoutZone.Count} chef(s) asignados a 'Cocina Principal'.");
                 }
 
-                // Assign existing dishes without KitchenZoneId to Cocina Principal (except drinks)
-                // ExecuteSqlAsync parametriza FormattableString → evita SQL injection (warning EF1002)
                 await context.Database.ExecuteSqlAsync(
                     $"UPDATE Dishes SET KitchenZoneId = {mainKitchen.Id} WHERE KitchenZoneId IS NULL");
                 Console.WriteLine("✅ Platos sin zona asignados a 'Cocina Principal'.");
@@ -732,17 +686,11 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>
-    /// Ensures bartender@smartmenu.com has Role=Bartender (corrective for DBs sembradas
-    /// con el bug previo Role=Waiter) y elimina el duplicado legacy bar@smartmenu.com
-    /// si existe — antes había dos usuarios para el bar y eso confundía al quick-login
-    /// del KDS. Idempotente: si todo está correcto, no hace nada.
-    /// </summary>
     public static async Task EnsureBartenderRoleAsync(ApplicationDbContext context)
     {
         try
         {
-            // 1. Corregir rol de bartender@smartmenu.com si está mal sembrado.
+
             var bartender = context.Users.FirstOrDefault(u => u.Email == "bartender@smartmenu.com");
             if (bartender != null && bartender.Role != UserRole.Bartender)
             {
@@ -751,12 +699,10 @@ public static class DbInitializer
                 Console.WriteLine("✅ Rol de bartender@smartmenu.com corregido a Bartender.");
             }
 
-            // 2. Limpiar el duplicado legacy bar@smartmenu.com si quedó de migraciones previas.
             var legacy = context.Users.FirstOrDefault(u => u.Email == "bar@smartmenu.com");
             if (legacy != null)
             {
-                // Sólo borrar si no tiene shifts ni FKs activas (defensa pasiva: si EF
-                // arroja constraint, simplemente lo logueamos y seguimos).
+
                 context.Users.Remove(legacy);
                 try
                 {
@@ -766,7 +712,7 @@ public static class DbInitializer
                 catch (Exception fkEx)
                 {
                     Console.WriteLine("ℹ️ No se pudo eliminar bar@smartmenu.com (probable FK activa): " + fkEx.Message);
-                    // Deshacer el Remove en memoria para no contaminar el ChangeTracker.
+
                     context.Entry(legacy).State = EntityState.Unchanged;
                 }
             }
@@ -777,9 +723,6 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>
-    /// Adds DefaultCourse to Dishes (default 1=PlatoFuerte) and CourseTiming to OrderItems (nullable).
-    /// </summary>
     public static async Task EnsureCourseTimingColumnsAsync(ApplicationDbContext context)
     {
         try
@@ -794,7 +737,6 @@ public static class DbInitializer
                 IF NOT EXISTS (SELECT 1 FROM [__EFMigrationsHistory] WHERE [MigrationId] = N'20260303000000_AddCourseTiming')
                 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion]) VALUES (N'20260303000000_AddCourseTiming', N'9.0.0');");
 
-            // Fix DefaultCourse based on category name
             await context.Database.ExecuteSqlRawAsync(@"
                 UPDATE d SET d.DefaultCourse = 0
                 FROM Dishes d INNER JOIN Categories c ON d.CategoryId = c.Id
@@ -841,7 +783,6 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>ZONA-EXCL: columnas IsZoneExclusive + HostResponseMessage en TableReservations (idempotente).</summary>
     public static async Task EnsureZoneExclusiveColumnsAsync(ApplicationDbContext context)
     {
         try
@@ -860,7 +801,6 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>SHARED-TABLE-ORDER: columna CustomerName en OrderItems (quién pidió cada ítem, varios comensales por mesa) — idempotente.</summary>
     public static async Task EnsureOrderItemCustomerNameColumnAsync(ApplicationDbContext context)
     {
         try
@@ -1098,10 +1038,6 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>
-    /// Siembra turnos por defecto (Almuerzo, Cena) si no existe ninguno. Idempotente (data-only).
-    /// Definen la rejilla de slots, duraciones, colchón y topes de pacing del motor de disponibilidad.
-    /// </summary>
     public static async Task EnsureDefaultServicePeriodsAsync(ApplicationDbContext context)
     {
         try
@@ -1156,26 +1092,6 @@ public static class DbInitializer
         }
     }
 
-    // Los métodos EnsureTanda5DbObjectsAsync y EnsureConcurrencyAndSoftDeleteColumnsAsync
-    // que vivían aquí fueron migrados a la migration formal
-    // 20260519160736_BackfillBlockBTanda5.cs (idempotente).
-    //
-    // Los otros Ensure*Async schema que aún existen en este archivo
-    // (EnsureMigrationAddVirtualTableTransferDishTagsAsync, EnsureOrderServedColumnsAsync,
-    // EnsureKitchenZoneColumnsAsync, EnsureZoneTypeColumnsAsync, EnsureCourseTimingColumnsAsync,
-    // EnsureAdvanceBlockAndSourceColumnsAsync, EnsureFiscalReceiptColumnsAsync,
-    // EnsureDishImagesTableAsync, EnsureWaiterShiftsTableAsync, EnsureReservationPreOrderTablesAsync)
-    // ya no son invocados desde Program.cs — están cubiertos por las migrations EF formales
-    // del mismo nombre en Data/Migrations/. Se dejan como dead code (DEPRECATED) hasta
-    // un próximo cleanup; eliminarlos no afecta el sistema (no hay callers).
-
-    /// <summary>
-    /// Sprint 2 — Columnas para el modo PIN del waiter en tabla Users:
-    ///   PinHash, PinSetAt, PinFailedAttempts, PinLockedUntil
-    /// Y para la tabla Restaurants:
-    ///   WaiterAuthMode (int, 0=PrivateOnly, 1=PublicPin, 2=Hybrid).
-    /// Idempotente — usa IF NOT EXISTS para que correr múltiples veces sea seguro.
-    /// </summary>
     public static async Task EnsureWaiterPinColumnsAsync(ApplicationDbContext context)
     {
         try
@@ -1199,10 +1115,6 @@ public static class DbInitializer
         }
     }
 
-    /// <summary>
-    /// Sprint 4.2 — Tabla AuditEvents para registro inmutable de acciones sensibles (DGII).
-    /// Idempotente. Una vez generada formalmente vía migration EF se puede deprecar.
-    /// </summary>
     public static async Task EnsureAuditEventsTableAsync(ApplicationDbContext context)
     {
         try

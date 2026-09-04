@@ -10,12 +10,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.Infrastructure.Services;
 
-/// <summary>
-/// Checkout multi-franquicia del agregador online: crea UNA Invoice global y la parte en una
-/// Order independiente por franquicia (cada KDS ve solo lo suyo), todo dentro de una transacción.
-/// Lo fiscal (ITBIS/propina) se calcula POR Order desde <see cref="BillingSettings"/>; la Invoice
-/// solo suma para el cobro único del cliente.
-/// </summary>
 public class InvoiceService : IInvoiceService
 {
     private readonly ApplicationDbContext _context;
@@ -33,8 +27,7 @@ public class InvoiceService : IInvoiceService
     {
         if (dto.Items == null || dto.Items.Count == 0)
             throw new ArgumentException("El carrito está vacío.");
-        // Topes anti-abuso (endpoint anónimo): sin esto un carrito absurdo genera comandas
-        // gigantes reales en cocina/impresora.
+
         if (dto.Items.Count > 50)
             throw new ArgumentException("El carrito no puede tener más de 50 líneas.");
         if (dto.Items.Any(i => i.Quantity > 50))
@@ -45,8 +38,6 @@ public class InvoiceService : IInvoiceService
         if (fulfillment == FulfillmentType.Delivery && string.IsNullOrWhiteSpace(dto.DeliveryAddress))
             throw new ArgumentException("La dirección de entrega es obligatoria para delivery.");
 
-        // Cargar los platos con la cadena Dish → Category → Menu para DERIVAR la franquicia
-        // (Menu.RestaurantId) y el precio SERVER-SIDE. Nunca se confía en el cliente (anti over-posting).
         var dishIds = dto.Items.Select(i => i.DishId).Distinct().ToList();
         var dishes = await _context.Dishes
             .Include(d => d.Category).ThenInclude(c => c!.Menu)
@@ -58,20 +49,17 @@ public class InvoiceService : IInvoiceService
         if (missing.Count > 0)
             throw new ArgumentException($"Platos no encontrados: {string.Join(", ", missing)}");
 
-        // Agrupar los ítems del carrito por franquicia (RestaurantId derivado del menú del plato).
         var groups = dto.Items
             .GroupBy(i => dishMap[i.DishId].Category?.Menu?.RestaurantId)
             .ToList();
 
-        // Toda orden DEBE quedar scopeada a una franquicia (es el propósito de la feature: cada
-        // KDS ve solo lo suyo). Un plato cuyo menú no tiene restaurante rompería ese ruteo → rechazar.
         if (groups.Any(g => g.Key == null))
             throw new ArgumentException("Hay platos sin franquicia (menú) asignada; no se puede rutear la orden.");
 
         await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
-            // 1. Invoice global en estado Pendiente (los totales se llenan al final).
+
             var invoice = new Invoice
             {
                 CustomerName = dto.CustomerName?.Trim() ?? string.Empty,
@@ -85,14 +73,13 @@ public class InvoiceService : IInvoiceService
                 DeliveryStatus = DeliveryStatus.Pending,
             };
             _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync(); // materializa invoice.Id
+            await _context.SaveChangesAsync();
 
             decimal invSub = 0, invTax = 0, invTip = 0, invTotal = 0;
 
-            // 2. Una Order independiente por franquicia.
             foreach (var group in groups)
             {
-                var restaurantId = group.Key; // garantizado no-null por el guard de arriba
+                var restaurantId = group.Key;
 
                 var items = group.Select(i =>
                 {
@@ -103,7 +90,7 @@ public class InvoiceService : IInvoiceService
                     {
                         DishId = dish.Id,
                         Quantity = i.Quantity,
-                        UnitPrice = dish.Price,                 // precio del catálogo, no del cliente
+                        UnitPrice = dish.Price,
                         Subtotal = dish.Price * i.Quantity,
                         Notes = i.Notes,
                         Customizations = i.Customizations,
@@ -111,7 +98,7 @@ public class InvoiceService : IInvoiceService
                         CustomerName = dto.CustomerName,
                         IsReady = false,
                         CourseTiming = dish.DefaultCourse,
-                        // Ruteo Cocina/Bar reusando el matcher unificado (zona del plato manda).
+
                         Destination = OrderService.IsDrinkItem(dish.KitchenZone?.Type, dish.Name) ? "Bar" : "Kitchen",
                     };
                 }).ToList();
@@ -127,7 +114,7 @@ public class InvoiceService : IInvoiceService
                     InvoiceId = invoice.Id,
                     RestaurantId = restaurantId,
                     TableId = null,
-                    IsPickup = true,          // online: sin mesa física
+                    IsPickup = true,
                     SessionId = string.Empty,
                     CustomerName = dto.CustomerName,
                     CustomerId = dto.CustomerId,
@@ -135,14 +122,11 @@ public class InvoiceService : IInvoiceService
                     Tax = tax,
                     Tip = tip,
                     Total = total,
-                    // Portal (Pickup/Delivery): NO hay mesero que confirme, así que la orden va
-                    // DIRECTO a cocina (Confirmed) y aparece en la pantalla del KDS de inmediato
-                    // (el KDS solo muestra Confirmed/Preparing/Ready). El POST /api/invoices ya
-                    // emite NewKitchenOrder; sin esto solo se imprimía la comanda, sin verse en pantalla.
+
                     Status = OrderStatus.Confirmed,
                     SpecialInstructions = dto.Notes,
                     EstimatedTimeMinutes = items.Count * 10,
-                    // Fiscal por franquicia (RNC propio): se propaga la solicitud del cliente a cada Order.
+
                     ClientRequiresFiscalReceipt = dto.RequiresFiscalReceipt,
                     ClientRNC = dto.RequiresFiscalReceipt ? dto.RNC : null,
                     ClientBusinessName = dto.RequiresFiscalReceipt ? dto.BusinessName : null,
@@ -153,7 +137,6 @@ public class InvoiceService : IInvoiceService
                 invSub += subtotal; invTax += tax; invTip += tip; invTotal += total;
             }
 
-            // 3. Totales de la Invoice = suma de las órdenes (envoltorio de cobro).
             invoice.SubTotal = invSub;
             invoice.TaxITBIS = invTax;
             invoice.LegalTip = invTip;
@@ -215,9 +198,6 @@ public class InvoiceService : IInvoiceService
         var invoice = await _context.Invoices.FirstOrDefaultAsync(inv => inv.Id == id)
                       ?? throw new ArgumentException($"Invoice {id} no encontrada.");
 
-        // Guard de transicion AUTORITATIVO sobre la entidad trackeada (cierra el TOCTOU:
-        // un pre-check en el controller podia quedar stale si el admin cancelaba entre el
-        // check y el update — el repartidor habria "entregado" una factura Cancelled).
         if (allowedCurrent != null
             && !allowedCurrent.Contains(invoice.DeliveryStatus.ToString(), StringComparer.OrdinalIgnoreCase))
             throw new ArgumentException(
@@ -236,10 +216,6 @@ public class InvoiceService : IInvoiceService
         var invoice = await _context.Invoices.FirstOrDefaultAsync(inv => inv.Id == id)
                       ?? throw new ArgumentException($"Invoice {id} no encontrada.");
 
-        // Guard de estado sobre la entidad trackeada: el GPS solo tiene sentido con el pedido
-        // EN CAMINO. Evita sobrescribir la posición de una invoice Delivered/Cancelled (p.ej.
-        // un tick de GPS rezagado justo después de marcar "Entregado") — importa para
-        // auditoría y para la vista del cliente de la fase 2.
         if (invoice.DeliveryStatus != DeliveryStatus.OutForDelivery)
             throw new ArgumentException(
                 $"Solo se reporta ubicación con el pedido en camino (estado actual: {invoice.DeliveryStatus}).");
@@ -269,8 +245,7 @@ public class InvoiceService : IInvoiceService
         PaymentStatus = inv.PaymentStatus.ToString(),
         DeliveryStatus = inv.DeliveryStatus.ToString(),
         CreatedAt = inv.CreatedAt,
-        // Geo para el mapa: A = restaurante (de la Order de la franquicia), Driver = posición en
-        // vivo. UN solo restaurante con AMBAS coords (no mezclar lat de uno con lng de otro).
+
         RestaurantLat = inv.Orders.Select(o => o.Restaurant)
             .FirstOrDefault(r => r is { Latitude: not null, Longitude: not null })?.Latitude,
         RestaurantLng = inv.Orders.Select(o => o.Restaurant)

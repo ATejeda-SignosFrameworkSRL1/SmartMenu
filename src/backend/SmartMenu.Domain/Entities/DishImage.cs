@@ -6,7 +6,6 @@ public class DishImage : BaseEntity
     public string ImageUrl { get; set; } = string.Empty;
     public int DisplayOrder { get; set; } = 0;
     public bool IsMain { get; set; } = false;
-    
-    // Navigation
+
     public Dish Dish { get; set; } = null!;
 }

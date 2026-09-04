@@ -2,19 +2,19 @@ import type { Config } from "tailwindcss";
 import preset from "@smartmenu/ui/preset";
 
 const config: Config = {
-  // Estructura de tokens/animaciones del design system (aditivo; no rompe el theme actual).
+
   presets: [preset],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    // Escanear los componentes compartidos (@smartmenu/ui) que renderiza el waiter.
+
     "../packages/ui/src/**/*.{ts,tsx}",
   ],
   theme: {
     extend: {
       fontFamily: {
-        // Inter (vía variable de next/font) + fallbacks CJK del sistema (zh/ja/ko).
+
         sans: [
           'var(--font-inter)', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto',
           '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', '"Noto Sans CJK SC"',

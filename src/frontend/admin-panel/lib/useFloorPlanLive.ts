@@ -13,12 +13,10 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Estado backend (PascalCase) → estado del plano (@smartmenu/ui, minúscula). */
 function toFloorStatus(s: string | null | undefined): TableStatus {
   return String(s ?? 'available').toLowerCase() as TableStatus;
 }
 
-/** Mesas sin posición guardada (layout aún no diseñado) → grilla automática por zona. */
 function withAutoLayout(data: FloorPlanData): FloorPlanData {
   return {
     zones: data.zones.map((z) => {
@@ -37,7 +35,6 @@ function withAutoLayout(data: FloorPlanData): FloorPlanData {
   };
 }
 
-/** Normaliza la respuesta de /api/floorplan: status en minúscula + null→undefined en opcionales. */
 function normalizeFloorPlan(raw: FloorPlanData): FloorPlanData {
   return withAutoLayout({
     zones: (raw.zones ?? []).map((z) => ({
@@ -70,7 +67,7 @@ function mapReservations(raw: any[], zoneNameToId: Map<string, string>): Reserva
   const out: Reservation[] = [];
   for (const r of raw) {
     const status = RES_STATUS_MAP[String(r.status ?? r.Status ?? '')];
-    if (!status) continue; // ignorar Completed / NoShow / Cancelled / Expired
+    if (!status) continue;
     const dt = r.reservationDateTime ?? r.ReservationDateTime;
     const time = dt
       ? new Date(dt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
@@ -92,13 +89,6 @@ function mapReservations(raw: any[], zoneNameToId: Map<string, string>): Reserva
   return out;
 }
 
-/**
- * Conecta el plano de Gestión de Salón a datos reales:
- * - Layout: GET /api/floorplan (posiciones/formas/estructuras diseñadas; auto-grid si faltan).
- * - Estado en vivo: /hubs/tables (TableStatusChanged, instantáneo) + polling /api/table (~10s, reconcilia).
- * - Reservas de hoy: GET /api/tablereservation por zona, en vivo vía /hubs/reservations + poll (~20s).
- * - Guardado del editor: PUT /api/floorplan (debounced) desde onLayoutChange.
- */
 export function useFloorPlanLive() {
   const [data, setData] = useState<FloorPlanData>({ zones: [] });
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -120,22 +110,21 @@ export function useFloorPlanLive() {
       setHostEnabled(cfg?.hostEnabled ?? true);
       setWaiterEnabled(cfg?.waiterEnabled ?? true);
     } catch {
-      /* silencioso */
+
     }
   }, []);
 
   const loadReservations = useCallback(async () => {
     try {
-      const today = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD local
+      const today = new Date().toLocaleDateString('sv-SE');
       const res = await api.get(`/api/tablereservation?date=${today}`, { headers: authHeader() });
       const raw = Array.isArray(res.data) ? res.data : [];
       setReservations(mapReservations(raw, zoneNameToId.current));
     } catch {
-      /* silencioso */
+
     }
   }, []);
 
-  /** Polling de respaldo: reconciliar status desde /api/table (cubre el "Reserved" dinámico y eventos perdidos). */
   const reconcileStatuses = useCallback(async () => {
     try {
       const res = await api.get('/api/table', { headers: authHeader() });
@@ -152,7 +141,7 @@ export function useFloorPlanLive() {
         })),
       }));
     } catch {
-      /* silencioso */
+
     }
   }, []);
 
@@ -165,7 +154,6 @@ export function useFloorPlanLive() {
     }));
   }, []);
 
-  /** Overlay del MESERO a cargo (badge). null/undefined limpia el badge. */
   const applyTableWaiter = useCallback((tableId: number, waiter?: string | null, waiterName?: string | null) => {
     setData((prev) => ({
       zones: prev.zones.map((z) => ({
@@ -177,15 +165,13 @@ export function useFloorPlanLive() {
     }));
   }, []);
 
-  // Carga inicial + polling
   useEffect(() => {
     let alive = true;
     (async () => {
       await loadFloorPlan();
       if (alive) await loadReservations();
     })();
-    // Polling de RESPALDO (60s). La vía principal es SignalR: TableStatusChanged (parche local)
-    // para estado de mesa, y los eventos de reserva para refrescar el panel de reservas.
+
     const t1 = setInterval(reconcileStatuses, 60000);
     const t2 = setInterval(loadReservations, 60000);
     return () => {
@@ -195,7 +181,6 @@ export function useFloorPlanLive() {
     };
   }, [loadFloorPlan, loadReservations, reconcileStatuses]);
 
-  // Tiempo real: mesas + reservas (mismo patrón que useAdminNotifications)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const token = localStorage.getItem('admin_token');
@@ -229,8 +214,7 @@ export function useFloorPlanLive() {
     tablesConn.start().catch((e) => console.error('[admin] SignalR /hubs/tables connect failed', e));
 
     const resConn = mkConn('/hubs/reservations');
-    // Solo refresca el PANEL de reservas (y el badge, que sale de `reservations`). El estado/color
-    // de mesa NO se recarga aquí: llega por TableStatusChanged (/hubs/tables) → parche local.
+
     const refetch = () => loadReservations();
     resConn.on('NewReservation', refetch);
     resConn.on('ReservationConfirmed', refetch);
@@ -245,28 +229,24 @@ export function useFloorPlanLive() {
     };
   }, [applyTableStatus, applyTableWaiter, loadReservations, loadFloorPlan]);
 
-  // Guardado del editor (debounced) → PUT /api/floorplan
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onLayoutChange = useCallback((next: FloorPlanData) => {
-    setData(next); // optimista
+    setData(next);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       api.put('/api/floorplan', next, { headers: authHeader() }).catch(() => {});
     }, 800);
   }, []);
 
-  // Guardado de la paleta (debounced) → PUT /api/floorplan/palette
   const paletteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPaletteChange = useCallback((next: StatusPaletteOverride) => {
-    setPalette(next); // optimista
+    setPalette(next);
     if (paletteTimer.current) clearTimeout(paletteTimer.current);
     paletteTimer.current = setTimeout(() => {
       api.put('/api/floorplan/palette', { statusColors: next }, { headers: authHeader() }).catch(() => {});
     }, 500);
   }, []);
 
-  // Limpieza al desmontar: cancela los PUT debounced pendientes (editor y paleta)
-  // para que no se disparen después del unmount.
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -274,8 +254,6 @@ export function useFloorPlanLive() {
     };
   }, []);
 
-  // Switch de visibilidad del plano por app (Host/Mesero) → PUT /api/floorplan/visibility.
-  // El backend difunde FloorPlanVisibilityChanged para que host/waiter reaccionen en vivo.
   const onToggleVisibility = useCallback((target: 'host' | 'waiter', enabled: boolean) => {
     if (target === 'host') setHostEnabled(enabled);
     else setWaiterEnabled(enabled);

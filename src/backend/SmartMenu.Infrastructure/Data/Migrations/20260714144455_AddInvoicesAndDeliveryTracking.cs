@@ -5,14 +5,13 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <inheritdoc />
+
     public partial class AddInvoicesAndDeliveryTracking : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Default TRUE: el tracking viene habilitado y el admin lo apaga con el switch
-            // (mismo criterio que FloorPlanHostEnabled/WaiterEnabled). Backfilea el restaurante existente.
+
             migrationBuilder.AddColumn<bool>(
                 name: "DeliveryTrackingEnabled",
                 table: "Restaurants",
@@ -106,7 +105,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 principalColumn: "Id");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(

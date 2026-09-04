@@ -11,7 +11,6 @@ public class ApplicationDbContext : DbContext
     {
     }
 
-    // DbSets
     public DbSet<User> Users => Set<User>();
     public DbSet<Restaurant> Restaurants => Set<Restaurant>();
     public DbSet<Table> Tables => Set<Table>();
@@ -46,7 +45,6 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Configuración global de precisión decimal
         foreach (var property in modelBuilder.Model.GetEntityTypes()
             .SelectMany(t => t.GetProperties())
             .Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?)))
@@ -54,7 +52,6 @@ public class ApplicationDbContext : DbContext
             property.SetColumnType("decimal(18,2)");
         }
 
-        // Índices únicos
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
@@ -67,7 +64,6 @@ public class ApplicationDbContext : DbContext
             .HasIndex(o => o.OrderNumber)
             .IsUnique();
 
-        // Relaciones
         modelBuilder.Entity<Table>()
             .HasOne(t => t.Zone)
             .WithMany(z => z.Tables)
@@ -98,15 +94,12 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(o => o.AssignedWaiterId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        // ─── Factura global multi-franquicia (agregador delivery/pickup online) ───
-        // Restrict: una Invoice/Order histórica-fiscal nunca se borra en cascada.
         modelBuilder.Entity<Order>()
             .HasOne(o => o.Invoice)
             .WithMany(inv => inv.Orders)
             .HasForeignKey(o => o.InvoiceId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Franquicia dueña de la orden. NoAction: sin cascada (evita ciclos/borrados masivos).
         modelBuilder.Entity<Order>()
             .HasOne(o => o.Restaurant)
             .WithMany()
@@ -119,9 +112,6 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(inv => inv.CustomerId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // Restrict en lugar de Cascade: una Order nunca debería ser borrada en SQL
-        // (los datos fiscales/históricos deben sobrevivir). Si alguien intenta DELETE en
-        // una Order con items, la DB lo rechaza en vez de borrar silenciosamente todo.
         modelBuilder.Entity<OrderItem>()
             .HasOne(oi => oi.Order)
             .WithMany(o => o.Items)
@@ -170,7 +160,6 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(tr => tr.CreatedByHostId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        // ─── Reservas: capacidad dinámica por intervalo ───
         modelBuilder.Entity<TableReservation>()
             .HasOne(tr => tr.TableSession)
             .WithMany()
@@ -181,7 +170,7 @@ public class ApplicationDbContext : DbContext
             .WithMany()
             .HasForeignKey(tr => tr.ServicePeriodId)
             .OnDelete(DeleteBehavior.NoAction);
-        // Solape de ventana (sargable sobre EndDateTime persistido) + pacing + lookup por código.
+
         modelBuilder.Entity<TableReservation>()
             .HasIndex(tr => new { tr.Status, tr.ReservationDateTime, tr.EndDateTime });
         modelBuilder.Entity<TableReservation>()
@@ -259,11 +248,8 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(p => p.ProcessedByWaiterId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        // Soft delete global filter: queries de Dish excluyen los marcados como IsDeleted.
-        // Para incluirlos (ej. reportes históricos / admin "ver eliminados") usar `.IgnoreQueryFilters()`.
         modelBuilder.Entity<Dish>().HasQueryFilter(d => !d.IsDeleted);
 
-        // Índices para mejorar queries comunes (active orders, reports, dashboards)
         modelBuilder.Entity<Order>().HasIndex(o => o.Status);
         modelBuilder.Entity<Order>().HasIndex(o => o.CreatedAt);
         modelBuilder.Entity<Order>().HasIndex(o => o.AssignedWaiterId);
@@ -278,7 +264,6 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Dish>().HasIndex(d => d.IsDeleted);
         modelBuilder.Entity<TableSession>().HasIndex(ts => new { ts.TableId, ts.IsActive });
 
-        // Refresh tokens — TokenHash indexado para lookup rápido, User cascade
         modelBuilder.Entity<RefreshToken>(b =>
         {
             b.Property(rt => rt.TokenHash).HasMaxLength(128).IsRequired();
@@ -292,8 +277,6 @@ public class ApplicationDbContext : DbContext
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // S4.3 — LoginAttempt para account lockout. Email + AttemptedAt indexados para
-        // contar fallos en ventana de 15 min eficientemente.
         modelBuilder.Entity<LoginAttempt>(b =>
         {
             b.Property(la => la.Email).HasMaxLength(256).IsRequired();
@@ -304,9 +287,9 @@ public class ApplicationDbContext : DbContext
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // Actualizar UpdatedAt automáticamente
+
         var entries = ChangeTracker.Entries()
-            .Where(e => e.Entity is BaseEntity && 
+            .Where(e => e.Entity is BaseEntity &&
                         (e.State == EntityState.Added || e.State == EntityState.Modified));
 
         foreach (var entry in entries)

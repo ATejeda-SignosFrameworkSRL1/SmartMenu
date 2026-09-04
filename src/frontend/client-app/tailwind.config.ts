@@ -47,8 +47,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Inter (vía variable de next/font) + fallbacks CJK del sistema para zh/ja/ko.
-        // Aplica al preflight de Tailwind (html) y a cualquier utilidad `font-sans`.
+
         sans: [
           'var(--font-inter)',
           'system-ui',

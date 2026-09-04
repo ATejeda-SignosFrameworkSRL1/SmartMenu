@@ -1,6 +1,4 @@
-// Mock del contrato /api/invoices para las stories — 3 franquicias de un mismo dueño.
-// Los montos siguen la regla real: ITBIS 18% + propina legal 10% POR ORDEN (RNC propio
-// por franquicia); la factura global solo SUMA (envoltorio de cobro).
+
 import type { DeliveryInvoice } from "./types";
 
 export const MOCK_DELIVERY_INVOICES: DeliveryInvoice[] = [

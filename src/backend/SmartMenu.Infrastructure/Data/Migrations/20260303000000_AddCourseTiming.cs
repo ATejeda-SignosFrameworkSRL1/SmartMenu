@@ -11,7 +11,7 @@ namespace SmartMenu.Infrastructure.Data.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // DefaultCourse en Dishes (int, default 1 = PlatoFuerte)
+
             migrationBuilder.AddColumn<int>(
                 name: "DefaultCourse",
                 table: "Dishes",
@@ -19,7 +19,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 nullable: false,
                 defaultValue: 1);
 
-            // CourseTiming en OrderItems (int, nullable — null solo si el registro es anterior a esta migración)
             migrationBuilder.AddColumn<int>(
                 name: "CourseTiming",
                 table: "OrderItems",

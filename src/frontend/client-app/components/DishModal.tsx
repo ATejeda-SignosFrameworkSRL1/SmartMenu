@@ -22,14 +22,12 @@ function detectHasMeat(name: string): boolean {
   return MEAT_KEYWORDS.some((k) => lower.includes(k));
 }
 
-// value/icon estables; el texto visible se traduce vía dishModal.course.*
 const COURSE_OPTIONS = [
   { value: 0, key: 'starter', icon: '🥗' },
   { value: 1, key: 'main',    icon: '🍖' },
   { value: 2, key: 'dessert', icon: '🍰' },
 ];
 
-// El `value` se envía al backend (no se traduce); el texto sale de dishModal.mixer.*
 const LIGA_OPTIONS = [
   { value: '',                key: 'none' },
   { value: 'Soda',            key: 'soda' },
@@ -60,14 +58,12 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
   const [notes, setNotes] = useState('');
   const [activeImageIdx, setActiveImageIdx] = useState(0);
 
-  // Preferencias comida
   const [meatCooking, setMeatCooking] = useState<string>('');
   const [sideDish, setSideDish] = useState<string>('');
   const [customizations, setCustomizations] = useState<string>('');
   const [allergies, setAllergies] = useState<string>('');
-  const [courseTiming, setCourseTiming] = useState<number>(1); // default PlatoFuerte
+  const [courseTiming, setCourseTiming] = useState<number>(1);
 
-  // Preferencias bebida
   const [drinkTiming, setDrinkTiming] = useState<string>('');
   const [withAlcohol, setWithAlcohol] = useState<boolean | null>(null);
   const [liga, setLiga] = useState<string>('');
@@ -104,7 +100,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
       if (drinkTiming) preferences.drinkTiming = drinkTiming;
       if (withAlcohol !== null) preferences.withAlcohol = withAlcohol;
       if (isAlcoholic && liga) preferences.liga = liga;
-      // Las bebidas usan DrinkTiming como courseTiming (Before→0, During→1, After→2)
+
       const dtMap: Record<string, number> = { Before: 0, During: 1, After: 2 };
       if (drinkTiming && dtMap[drinkTiming] !== undefined) {
         preferences.courseTiming = dtMap[drinkTiming];
@@ -127,7 +123,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
     });
     toast.success(tt('addedToCart', { quantity, name: dish.name }));
     onClose();
-    // Reset
+
     setQuantity(1);
     setNotes('');
     setDrinkTiming('');
@@ -207,7 +203,7 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                   })()}
 
                   <div className="p-4 sm:p-6">
-                    {/* Header */}
+
                     <div className="mb-4">
                       <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{dish.name}</h2>
                       <div className="flex items-center gap-3 flex-wrap">
@@ -236,7 +232,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       <p className="text-3xl sm:text-4xl font-bold text-primary-600">RD$ {dish.price.toFixed(2)}</p>
                     </div>
 
-                    {/* Cantidad */}
                     <div className="mb-6">
                       <label className="block text-sm font-medium text-gray-700 mb-2">{t('quantity')}</label>
                       <div className="flex items-center gap-4">
@@ -258,10 +253,9 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       </div>
                     </div>
 
-                    {/* ─── SECCIÓN BEBIDAS ─── */}
                     {isDrink && (
                       <>
-                        {/* ¿Con o sin alcohol? */}
+
                         <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('withOrWithoutAlcohol')}</label>
                           <div className="grid grid-cols-2 gap-2">
@@ -280,7 +274,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           </div>
                         </div>
 
-                        {/* Liga (solo si con alcohol) */}
                         {isAlcoholic && (
                           <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-2">{t('whichMixer')}</label>
@@ -298,7 +291,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           </div>
                         )}
 
-                        {/* ¿Cuándo quieres tu bebida? */}
                         <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('whenDrink')}</label>
                           <div className="grid grid-cols-3 gap-2 text-gray-700">
@@ -318,7 +310,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           </div>
                         </div>
 
-                        {/* Notas para bebida */}
                         <div className="mb-6">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('notesOptional')}</label>
                           <textarea
@@ -332,10 +323,9 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       </>
                     )}
 
-                    {/* ─── SECCIÓN COMIDA ─── */}
                     {!isDrink && (
                       <>
-                        {/* ¿Cuándo quieres este plato? */}
+
                         <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('whenServe')}</label>
                           <div className="grid grid-cols-3 gap-2">
@@ -353,7 +343,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           </div>
                         </div>
 
-                        {/* Nivel de cocción (si tiene carne) */}
                         {hasMeat && (
                           <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-2">{t('cookingLevel')}</label>
@@ -375,7 +364,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           </div>
                         )}
 
-                        {/* Guarnición — no aplica para postres */}
                         {!isDessert && <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('sideDish')}</label>
                           <select
@@ -392,7 +380,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           </select>
                         </div>}
 
-                        {/* Personalizaciones */}
                         <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('customizationsOptional')}</label>
                           <input
@@ -404,7 +391,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           />
                         </div>
 
-                        {/* Alergias */}
                         <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('allergiesLabel')}</label>
                           <input
@@ -416,7 +402,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                           />
                         </div>
 
-                        {/* Notas adicionales */}
                         <div className="mb-6">
                           <label className="block text-sm font-medium text-gray-700 mb-2">{t('additionalNotesOptional')}</label>
                           <textarea
@@ -430,7 +415,6 @@ export function DishModal({ dish, isOpen, onClose, categoryName }: DishModalProp
                       </>
                     )}
 
-                    {/* Botones */}
                     <div className="flex gap-3">
                       <button
                         onClick={onClose}

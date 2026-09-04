@@ -8,7 +8,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Default: cualquier staff autenticado. Mutaciones se restringen per-método.
+[Authorize]
 public class ZoneController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -20,10 +20,6 @@ public class ZoneController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Endpoint público: lista zonas activas (Dining) para el portal de reservas.
-    /// Sólo expone id + name — no incluye info sensible como restaurantId.
-    /// </summary>
     [HttpGet("public")]
     [AllowAnonymous]
     public async Task<IActionResult> GetPublicZones()

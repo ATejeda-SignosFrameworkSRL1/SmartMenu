@@ -19,7 +19,7 @@ export default function Page() {
           { email: 'cashier@smartmenu.com', password: 'Cash123!',   label: 'Cajero',         emoji: '💰' },
         ]}
       />
-      {/* SPRINT 3: link a login por PIN — modo device compartido */}
+
       <div className="fixed bottom-6 left-0 right-0 flex justify-center pointer-events-none">
         <Link
           href="/login/pin"

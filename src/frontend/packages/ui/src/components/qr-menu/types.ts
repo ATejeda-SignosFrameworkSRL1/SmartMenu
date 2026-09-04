@@ -1,10 +1,3 @@
-// QR-MENU (PROTOTIPO) — recreacion del menu digital del cliente (client-app al
-// escanear el QR de la mesa) con la nueva senal "PARA LLEVAR" por plato mientras
-// arma el pedido. SOLO STORYBOOK: no toca BD ni APIs.
-//
-// Mapeo futuro del flag (cuando se apruebe): un campo por item, p. ej.
-// OrderItem.IsTakeaway (bit) — distinto de Order.IsPickup, que hoy marca la ORDEN
-// completa de mostrador; aqui el cliente esta EN la mesa y aparta platos sueltos.
 
 export type MenuTag = "muyPicante" | "picante" | "vegetariano" | "vegano" | "sinGluten" | "popular";
 
@@ -19,17 +12,16 @@ export interface QrMenuDish {
   prepMinutes: number;
   emoji: string;
   tags: MenuTag[];
-  /** Guarniciones disponibles en el modal (select "Guarnición"). */
+
   garnishes?: string[];
 }
 
-/** Momento de servicio (chips "¿Cuándo lo quieres servir?" del modal). */
 export type CourseTiming = "Entrada" | "PlatoFuerte" | "Postre";
 
 export interface QrMenuCartLine {
   dish: QrMenuDish;
   quantity: number;
-  /** LA SENAL NUEVA: true = el cliente aparta este plato para llevar. */
+
   takeaway: boolean;
   courseTiming?: CourseTiming;
   garnish?: string;

@@ -13,10 +13,6 @@ export interface FloorPlanEditorProps {
   onChange?: (tables: TableData[]) => void;
 }
 
-/**
- * Editor interactivo de UNA zona (admin). Al soltar una mesa se actualizan sus
- * coordenadas en el estado local. Para varias zonas, usar MultiZoneFloorPlanEditor.
- */
 export function FloorPlanEditor({ initialTables, width, height, zoneName, onChange }: FloorPlanEditorProps) {
   const [tables, setTables] = useState<TableData[]>(initialTables);
 

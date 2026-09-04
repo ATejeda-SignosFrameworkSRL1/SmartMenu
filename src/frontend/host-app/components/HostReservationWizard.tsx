@@ -9,7 +9,6 @@ import {
 import { useTranslations, useLocale } from 'next-intl';
 import { dateLocale } from '@/i18n/config';
 
-// ── Tipos locales (espejo del backend de disponibilidad) ──
 type SlotStatus = 'available' | 'limited' | 'full';
 interface Slot { time: string; status: SlotStatus; remaining: number; isPast: boolean; }
 interface ServiceWindow { label: string; start: string; end: string; }
@@ -29,13 +28,6 @@ function tomorrowStr(): string {
 
 type Step = 1 | 2 | 3;
 
-/**
- * Asistente de reserva del host — mismo flujo de 3 pasos del portal público
- * (BookingEngineWarm), pero la reserva queda asociada a la mesa pulsada y se crea
- * vía el endpoint de staff (confirmada, atribuida al host). Conserva los extras del
- * host: "Bloquear mesa (min antes)" y "Pre-ordenar platos".
- */
-// Hora dominicana 12h (ej. "18:00" → "6:00 PM"). Para horas en string "HH:mm".
 function to12h(t?: string | null): string {
   if (!t) return '';
   const [hs, m = '00'] = String(t).split(':');
@@ -67,13 +59,13 @@ export default function HostReservationWizard({
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  // Contacto
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [occasion, setOccasion] = useState(0);
   const [notes, setNotes] = useState('');
-  // Extras del host
+
   const [advanceBlockMinutes, setAdvanceBlockMinutes] = useState('60');
   const [showPreOrder, setShowPreOrder] = useState(false);
   const [preOrderItems, setPreOrderItems] = useState<PreOrderItem[]>([]);
@@ -93,7 +85,6 @@ export default function HostReservationWizard({
     }
   }, [date, guests, table.zoneId, api, t]);
 
-  // Al entrar al paso 2, (re)carga la disponibilidad.
   useEffect(() => {
     if (step !== 2) return;
     const timer = setTimeout(fetchSlots, 200);
@@ -144,11 +135,7 @@ export default function HostReservationWizard({
         hostId: hostId ?? undefined,
         advanceBlockMinutes: parseInt(advanceBlockMinutes) || 60,
       });
-      // Pre-orden opcional — adjuntar a la reserva RECIEN CREADA usando el id de la
-      // respuesta del POST (ReservationActionResult.reservationId). Antes se hacia
-      // GET de la lista completa y se tomaba slice(-1): como el endpoint ordena por
-      // fecha de reserva, la pre-orden caia en la reserva con fecha mas tardia del
-      // sistema (la de OTRO cliente) siempre que existiera una posterior.
+
       const newId = res.data?.reservationId ?? res.data?.ReservationId;
       if (preOrderItems.length > 0 && newId) {
         try {
@@ -157,7 +144,7 @@ export default function HostReservationWizard({
             items: preOrderItems.map((i) => ({ dishId: i.dishId, quantity: i.quantity })),
           });
         } catch {
-          // La reserva SI se creo; solo fallo adjuntar la pre-orden.
+
           toast.error(t('wizard.preorderError'));
         }
       }
@@ -173,7 +160,7 @@ export default function HostReservationWizard({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
       <div className="my-8 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-warm-800 bg-warm-950 shadow-2xl">
-        {/* Header */}
+
         <div className="flex flex-shrink-0 items-center justify-between bg-warm-900 px-6 py-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-gold-light">{t('wizard.reserveLabel')}</p>
@@ -185,7 +172,6 @@ export default function HostReservationWizard({
           </button>
         </div>
 
-        {/* Encabezado de paso + barra de progreso */}
         <div className="flex-shrink-0 px-6 pt-5">
           <div className="flex items-center gap-3">
             {step > 1 && (
@@ -207,9 +193,8 @@ export default function HostReservationWizard({
           </div>
         </div>
 
-        {/* Cuerpo */}
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-          {/* ── Paso 1: fecha (calendario abierto) + comensales + zona fija ── */}
+
           {step === 1 && (
             <div className="space-y-5">
               <div>
@@ -297,7 +282,6 @@ export default function HostReservationWizard({
             </div>
           )}
 
-          {/* ── Paso 2: rejilla de horarios ── */}
           {step === 2 && (
             <div className="space-y-5">
               <p className="text-sm capitalize text-warm-400">{t('wizard.step2Subtitle', { date: dateLabel, count: guests })}</p>
@@ -350,7 +334,6 @@ export default function HostReservationWizard({
             </div>
           )}
 
-          {/* ── Paso 3: contacto + ocasión + notas + extras del host ── */}
           {step === 3 && (
             <div className="space-y-4">
               {selectedTime && (
@@ -384,7 +367,6 @@ export default function HostReservationWizard({
                 <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('wizard.notesPlaceholder')} className="w-full resize-none rounded-xl border border-warm-700 bg-warm-800/50 px-4 py-3 text-white outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold" />
               </label>
 
-              {/* Extra host — bloquear mesa */}
               <div>
                 <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-warm-300"><Clock className="h-4 w-4 text-gold-light" /> {t('wizard.blockLabel')}</span>
                 <div className="flex gap-2">
@@ -401,7 +383,6 @@ export default function HostReservationWizard({
                 <p className="mt-1 text-[10px] text-warm-500">{t('wizard.blockHint')}</p>
               </div>
 
-              {/* Extra host — pre-ordenar platos */}
               <div className="overflow-hidden rounded-xl border border-warm-700">
                 <button type="button" onClick={() => setShowPreOrder((s) => !s)} className="flex w-full items-center justify-between bg-warm-800/50 px-4 py-3 transition-colors hover:bg-warm-800">
                   <span className="flex items-center gap-2 text-sm font-semibold text-warm-200"><UtensilsCrossed className="h-4 w-4 text-gold-light" /> {t('wizard.preOrderLabel')} <span className="font-normal text-warm-500">{t('wizard.preOrderOptional')}</span></span>

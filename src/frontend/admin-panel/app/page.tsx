@@ -34,18 +34,14 @@ function AdminDashboardInner() {
   }, []);
 
   useEffect(() => {
-    // Leer token desde URL si viene del login
+
     const urlToken = searchParams.get('token');
     const urlUser = searchParams.get('user');
     if (urlToken) {
       localStorage.setItem('admin_token', urlToken);
-      // useSearchParams().get() ya devuelve el valor decodificado (doble decode
-      // puede lanzar URIError) y los lectores usan la clave 'admin_user'
-      // (Header/AppSidebar/lib-api), no 'user'.
+
       if (urlUser) localStorage.setItem('admin_user', urlUser);
-      // Limpiar la URL sin recargar y CONTINUAR (sin return): hay que fijar el
-      // header Authorization y llamar loadData() con el token recien guardado.
-      // El return temprano dejaba el dashboard en loading=true hasta un F5.
+
       router.replace('/');
     }
 
@@ -69,7 +65,7 @@ function AdminDashboardInner() {
         api.get('/api/order/active'),
         api.get('/api/dish'),
         api.get('/api/reports/dish-avg-time').catch(() => ({ data: [] })),
-        // Bug-Fix.3: Ventas del Día viene de Payments del día, no de órdenes activas.
+
         api.get('/api/reports/sales-today').catch(() => ({ data: { totalSales: 0, transactionCount: 0, averageTicket: 0 } }))
       ]);
 
@@ -87,12 +83,11 @@ function AdminDashboardInner() {
 
   const activeTables = tables.filter((t: any) => (t.status || t.Status) === 'Occupied');
   const availableTables = tables.filter((t: any) => (t.status || t.Status) === 'Available');
-  // Bug-Fix.3: totalRevenue del día viene de Payments completados, no de órdenes activas
-  // (las completadas salen del query /api/order/active y por eso quedaba en $0).
+
   const totalRevenue = salesToday.totalSales ?? 0;
   const transactionCount = salesToday.transactionCount ?? 0;
   const preparingOrders = orders.filter((o: any) => (o.status || o.Status) === 'Preparing');
-  
+
   const stats = [
     {
       label: t('stats.availableTables'),
@@ -182,8 +177,7 @@ function AdminDashboardInner() {
   };
 
   const getElapsedMinutes = (createdAt: string) => {
-    // El backend manda DateTime.UtcNow SIN sufijo 'Z': sin normalizar, en RD (UTC-4)
-    // los minutos se inflan +240 y todo se pinta en rojo. Igual que bar/kitchen/Header.
+
     const utcStr = createdAt && !createdAt.endsWith('Z') ? createdAt + 'Z' : createdAt;
     const now = new Date().getTime();
     const created = new Date(utcStr).getTime();
@@ -200,7 +194,7 @@ function AdminDashboardInner() {
     <MainLayout title="Dashboard">
 
       <div className="space-y-6">
-        {/* Top Stats */}
+
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat, i) => {
             const Icon = stat.icon;
@@ -223,7 +217,6 @@ function AdminDashboardInner() {
           })}
         </div>
 
-        {/* Bottom Stats */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {bottomStats.map((stat, i) => {
             const Icon = stat.icon;
@@ -246,7 +239,6 @@ function AdminDashboardInner() {
           })}
         </div>
 
-        {/* Tiempo Promedio por Plato */}
         {dishAvgTimes.length > 0 && (
           <Card>
             <CardHeader>
@@ -287,7 +279,6 @@ function AdminDashboardInner() {
           </Card>
         )}
 
-        {/* Active Orders */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -319,7 +310,7 @@ function AdminDashboardInner() {
                   const elapsed = createdAt ? getElapsedMinutes(createdAt) : 0;
                   const total = order.total ?? order.Total ?? 0;
                   return (
-                    <div 
+                    <div
                       key={order.id ?? order.Id}
                       className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
                     >
@@ -332,7 +323,7 @@ function AdminDashboardInner() {
                           <p className="text-xs text-muted-foreground">{((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Delivery' ? '🛵 Delivery' : ((order as any).fulfillmentType ?? (order as any).FulfillmentType) === 'Pickup' ? '🛍️ Pickup' : `${t('activeOrders.tableLabel')} ${order.tableNumber ?? order.TableNumber ?? order.tableId ?? order.TableId}`}</p>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center space-x-4">
                         <div className="text-right">
                           <Badge variant="outline" className="text-xs">
@@ -356,7 +347,6 @@ function AdminDashboardInner() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
         <Card>
           <CardHeader>
             <CardTitle>{t('quickActions.title')}</CardTitle>

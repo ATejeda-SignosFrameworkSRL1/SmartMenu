@@ -37,7 +37,6 @@ interface Order {
   }>;
 }
 
-
 const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; dot: string; badge: string; badgeText: string }> = {
   Pending:   { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200', dot: 'bg-amber-400',  badge: 'bg-amber-100 border-amber-300',  badgeText: 'text-amber-800' },
   Confirmed: { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',  dot: 'bg-blue-400',   badge: 'bg-blue-100 border-blue-300',    badgeText: 'text-blue-800' },
@@ -157,7 +156,6 @@ export default function OrdersPage() {
     <MainLayout title={t('pageTitle')}>
       <div className="space-y-6">
 
-        {/* ── Header ── */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
@@ -189,9 +187,8 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* ── Status tabs ── */}
         <div className="flex gap-2 flex-wrap">
-          {/* All */}
+
           <button
             onClick={() => setSelectedStatus('all')}
             className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all shadow-sm
@@ -228,7 +225,6 @@ export default function OrdersPage() {
           })}
         </div>
 
-        {/* ── Orders ── */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -260,26 +256,25 @@ export default function OrdersPage() {
                   key={order.id}
                   className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
                 >
-                  {/* Accent strip */}
+
                   <div className={`h-1 w-full ${accent}`} />
 
-                  {/* Card header */}
                   <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3">
                     <div className="space-y-1">
-                      {/* Order number */}
+
                       <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
                         <Hash className="w-3 h-3" />
                         <span className="font-semibold text-gray-700">{shortCode}</span>
                       </div>
-                      {/* Table */}
+
                       <div className="flex items-center gap-1.5">
                         <TableProperties className="w-4 h-4 text-gray-400" />
-                        {/* Pedidos del portal (sin mesa): mostrar la modalidad, no "Mostrador" */}
+
                         <span className="text-sm font-semibold text-gray-800">
                           {ft === 'Delivery' ? '🛵 Delivery' : ft === 'Pickup' ? '🛍️ Pickup' : t('table', { number: tableNum })}
                         </span>
                       </div>
-                      {/* Time */}
+
                       {createdAt && (
                         <div className="flex items-center gap-1.5 text-xs text-gray-400">
                           <Clock className="w-3 h-3" />
@@ -288,7 +283,6 @@ export default function OrdersPage() {
                       )}
                     </div>
 
-                    {/* Status badge + total */}
                     <div className="flex flex-col items-end gap-2">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${cfg.badge} ${cfg.badgeText}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -300,10 +294,8 @@ export default function OrdersPage() {
                     </div>
                   </div>
 
-                  {/* Divider */}
                   <div className="mx-5 border-t border-dashed border-gray-100" />
 
-                  {/* Items */}
                   <div className="px-5 py-3 space-y-1.5 flex-1">
                     {items.length === 0 ? (
                       <p className="text-xs text-gray-400 italic">{t('noItems')}</p>
@@ -326,12 +318,10 @@ export default function OrdersPage() {
                     )}
                   </div>
 
-                  {/* Divider */}
                   {nextStatuses.length > 0 && (
                     <div className="mx-5 border-t border-gray-100" />
                   )}
 
-                  {/* Action buttons */}
                   {nextStatuses.length > 0 && (
                     <div className="px-5 py-3 flex gap-2 flex-wrap">
                       {isUpdating ? (

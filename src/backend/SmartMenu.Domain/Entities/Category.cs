@@ -7,8 +7,7 @@ public class Category : BaseEntity
     public int MenuId { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
-    
-    // Navigation properties
+
     public Menu Menu { get; set; } = null!;
     public ICollection<Dish> Dishes { get; set; } = new List<Dish>();
 }

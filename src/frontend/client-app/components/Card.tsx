@@ -10,13 +10,13 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, variant = 'default', padding = 'md', children, ...props }, ref) => {
     const baseStyles = 'bg-white rounded-xl overflow-hidden';
-    
+
     const variants = {
       default: 'shadow-md',
       bordered: 'border border-gray-200',
       elevated: 'shadow-xl',
     };
-    
+
     const paddings = {
       none: '',
       sm: 'p-3',

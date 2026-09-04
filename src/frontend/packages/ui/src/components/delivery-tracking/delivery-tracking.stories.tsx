@@ -26,11 +26,6 @@ export default meta;
 
 type Story = StoryObj<typeof DeliveryTrackingPanel>;
 
-/**
- * Flujo completo interactivo: togglear el switch, filtrar por estado, expandir las
- * órdenes por franquicia y AVANZAR el estado de entrega (muta el mock localmente,
- * simulando el PUT /api/invoices/{id}/delivery-status con ~600ms de red).
- */
 export const FlujoCompleto: Story = {
   render: () => {
     const [enabled, setEnabled] = useState(true);
@@ -57,7 +52,6 @@ export const FlujoCompleto: Story = {
   },
 };
 
-/** El admin apagó el switch: la lista se oculta y queda el estado deshabilitado. */
 export const Deshabilitado: Story = {
   args: {
     enabled: false,
@@ -65,7 +59,6 @@ export const Deshabilitado: Story = {
   },
 };
 
-/** Habilitado pero sin entregas en curso (estado vacío). */
 export const SinEntregas: Story = {
   args: {
     enabled: true,
@@ -73,7 +66,6 @@ export const SinEntregas: Story = {
   },
 };
 
-/** Factura de 3 franquicias en camino — el caso estrella del carrito mixto. */
 export const CarritoMixtoTresFranquicias: Story = {
   args: {
     enabled: true,

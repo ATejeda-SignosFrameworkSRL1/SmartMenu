@@ -24,21 +24,6 @@ const api = axios.create({
   baseURL: '',
 });
 
-/**
- * QR-FIX.2 — URL base del client-app para QRs físicos.
- *
- * Prioridad:
- *   1. NEXT_PUBLIC_CLIENT_URL (build-time, ej. https://192.168.1.26:8443).
- *      Esta es la opción CORRECTA para producción/QA — sobreescribe todo.
- *   2. Fallback runtime: derivar del hostname actual.
- *      - Si admin está en https://localhost:8444 → cambiar a https://localhost:8451 (client Caddy)
- *      - Si admin está en https://admin.X.nip.io:8443 → cambiar a https://X.nip.io:8443
- *      - Si admin está en una IP directa → mismo origen
- *
- * IMPORTANTE: El QR generado se IMPRIME y se pega en mesas físicas. Los clientes
- * lo escanean con su celular. Por eso NUNCA debe contener "localhost" — ningún
- * celular puede resolverlo. Usar siempre IP LAN o domain accesible en la red.
- */
 function deriveClientUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_CLIENT_URL;
   if (envUrl) return envUrl;
@@ -46,13 +31,10 @@ function deriveClientUrl(): string {
 
   const { protocol, hostname, port } = window.location;
 
-  // localhost detection — usar la convención del stack QA (client en :8451)
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return `${protocol}//${hostname}:8451`;
   }
 
-  // admin.X.nip.io → derivar el client.X.nip.io (mismo cert raíz)
-  // Patrón: cualquier subdomain.* → reemplazar primer label
   if (hostname.includes('.nip.io') || hostname.includes('.qa.smartmenu.local')) {
     const parts = hostname.split('.');
     if (parts.length > 0) {
@@ -61,14 +43,10 @@ function deriveClientUrl(): string {
     }
   }
 
-  // IP directa (192.168.x, 172.x, 10.x) — mismo host, puerto del client (:8451).
-  // Caddy sirve el client en :8451 para CUALQUIER IP (bloque ":8451"), asi el QR
-  // funciona aunque cambie la IP de la PC: solo abre el admin por su IP actual.
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
     return `${protocol}//${hostname}:8451`;
   }
 
-  // Fallback genérico: mismo origin (puede no funcionar, pero al menos no rompe)
   return window.location.origin;
 }
 
@@ -111,14 +89,12 @@ export default function TablesPage() {
     setEditName(selectedTable?.name ?? '');
     setEditColor(selectedTable?.color ?? '');
   }, [selectedTable]);
-  // Lee propiedad en camelCase o PascalCase
+
   const nv = (obj: any, key: string) =>
     obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
 
   const loadData = async (opts?: { silent?: boolean }) => {
-    // silent: refresco de fondo (polling) — sin spinner. El spinner de pagina
-    // completa solo aplica a la carga inicial / boton Refrescar; antes el poll
-    // de 10s reemplazaba el grid por el spinner en cada tick.
+
     if (!opts?.silent) setLoading(true);
     try {
       const token = localStorage.getItem('admin_token');
@@ -131,7 +107,6 @@ export default function TablesPage() {
         api.get('/api/zone'),
       ]);
 
-      // Normalizar zonas — excluir cocinas y bares
       const allZonesRaw: any[] = Array.isArray(zonesRes.data) ? zonesRes.data : [];
       const normalizedZones: Zone[] = allZonesRaw
         .map(z => ({
@@ -148,7 +123,6 @@ export default function TablesPage() {
 
       const diningZoneNames = new Set(normalizedZones.map(z => z.name));
 
-      // Normalizar mesas — API no devuelve zoneId, solo zoneName
       const allTablesRaw: any[] = Array.isArray(tablesRes.data) ? tablesRes.data : [];
       const normalizedTables: Table[] = allTablesRaw
         .map(t => ({
@@ -157,7 +131,7 @@ export default function TablesPage() {
           capacity: Number(nv(t, 'capacity')),
           status: String(nv(t, 'status') ?? 'Available'),
           zoneName: String(nv(t, 'zoneName') ?? ''),
-          zoneId: 0, // no viene del API, no se usa
+          zoneId: 0,
           qrCode: String(nv(t, 'qrCode') ?? ''),
           name: (nv(t, 'name') ?? undefined) as string | undefined,
           color: (nv(t, 'color') ?? undefined) as string | undefined,
@@ -185,7 +159,6 @@ export default function TablesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tras normalización todos los campos son camelCase con tipos correctos
   const getTableStatus = (t: Table) => t.status;
   const getZoneId = (z: Zone) => z.id;
 
@@ -318,7 +291,7 @@ export default function TablesPage() {
   return (
     <MainLayout title={t('pageTitle')} subtitle={t('pageSubtitle')}>
       <div className="space-y-6">
-        {/* Header */}
+
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
@@ -336,7 +309,6 @@ export default function TablesPage() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card className="border-2 border-success/30">
             <CardContent className="pt-6">
@@ -364,10 +336,8 @@ export default function TablesPage() {
           </Card>
         </div>
 
-        {/* Filters Panel */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
 
-          {/* Zone tabs */}
           <div>
             <p className="text-xs font-semibold text-black uppercase tracking-wider mb-2">{t('filterZone')}</p>
             <div className="flex flex-wrap gap-2">
@@ -411,10 +381,8 @@ export default function TablesPage() {
 
           <div className="border-t border-gray-100" />
 
-          {/* Status + Capacity + Results row */}
           <div className="flex flex-wrap items-end gap-6">
 
-            {/* Estado */}
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filterStatus')}</p>
               <div className="flex gap-2">
@@ -443,7 +411,6 @@ export default function TablesPage() {
               </div>
             </div>
 
-            {/* Capacidad */}
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('filterCapacity')}</p>
               <div className="flex gap-2">
@@ -470,7 +437,6 @@ export default function TablesPage() {
               </div>
             </div>
 
-            {/* Results + clear */}
             <div className="ml-auto flex items-center gap-3">
               {hasActiveFilters && (
                 <button
@@ -489,7 +455,6 @@ export default function TablesPage() {
           </div>
         </div>
 
-        {/* Tables Grid */}
         <Card>
           <CardHeader>
             <CardTitle>{t('sectionTables')} {hasActiveFilters ? `(${filteredTables.length} de ${tables.length})` : `(${tables.length})`}</CardTitle>
@@ -529,7 +494,6 @@ export default function TablesPage() {
         </Card>
       </div>
 
-      {/* Modal: Detalle de Mesa */}
       {selectedTable && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTable(null)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -540,7 +504,6 @@ export default function TablesPage() {
               </button>
             </div>
 
-            {/* QR Code */}
             <div className="flex flex-col items-center mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <QRCodeSVG
                 id={`qr-svg-${selectedTable.id}`}
@@ -556,7 +519,6 @@ export default function TablesPage() {
               </Button>
             </div>
 
-            {/* Info */}
             <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                 <span className="text-muted-foreground">{t('detailZone')}</span>
@@ -572,7 +534,6 @@ export default function TablesPage() {
               </div>
             </div>
 
-            {/* Apariencia: nombre + color */}
             <div className="mb-6">
               <h3 className="text-sm font-semibold mb-2 text-muted-foreground">{t('sectionAppearance')}</h3>
               <div className="space-y-3">
@@ -604,7 +565,6 @@ export default function TablesPage() {
               </div>
             </div>
 
-            {/* Cambiar Estado */}
             <div className="mb-6">
               <h3 className="text-sm font-semibold mb-2 text-muted-foreground">{t('sectionChangeStatus')}</h3>
               <div className="grid grid-cols-2 gap-2">
@@ -623,7 +583,6 @@ export default function TablesPage() {
               </div>
             </div>
 
-            {/* Acciones */}
             <div className="flex gap-2">
               <Button
                 variant="destructive"
@@ -640,7 +599,6 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* Modal: Crear Mesa */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
@@ -716,7 +674,6 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* Modal: Mesa Creada — muestra QR */}
       {createdTable && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCreatedTable(null)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-md w-full p-6 text-center" onClick={e => e.stopPropagation()}>

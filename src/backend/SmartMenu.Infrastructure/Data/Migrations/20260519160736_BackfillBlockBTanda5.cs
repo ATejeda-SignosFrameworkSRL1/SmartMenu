@@ -4,24 +4,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <summary>
-    /// Backfill formal de los cambios de Bloque B + Tanda 5 que originalmente
-    /// se aplicaban vía DbInitializer.EnsureConcurrencyAndSoftDeleteColumnsAsync
-    /// y DbInitializer.EnsureTanda5DbObjectsAsync.
-    ///
-    /// Up() es idempotente (IF NOT EXISTS) para que esta migration sea segura tanto en
-    /// DBs nuevas (aplica los cambios) como en DBs existentes donde los Ensure*Async
-    /// ya corrieron (no-op).
-    ///
-    /// Cambios:
-    /// - RowVersion (rowversion NOT NULL) en Orders y Payments — optimistic concurrency.
-    /// - IsDeleted (bit NOT NULL DEFAULT 0) + DeletedAt (datetime2 NULL) en Dishes — soft delete fiscal.
-    /// - FK OrderItems.OrderId: CASCADE → NO ACTION (proteger histórico fiscal de DELETE accidental).
-    /// - 6 índices para queries de dashboard/reports.
-    /// </summary>
+
     public partial class BackfillBlockBTanda5 : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"
@@ -69,7 +55,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     CREATE INDEX IX_TableSessions_TableId_IsActive ON TableSessions(TableId, IsActive);");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"

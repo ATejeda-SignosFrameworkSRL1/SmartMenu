@@ -89,7 +89,7 @@ export default function ReservationsPage() {
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/hubs/reservations', {
-        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+
         accessTokenFactory: () => ensureFreshToken(),
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
@@ -177,7 +177,7 @@ export default function ReservationsPage() {
   return (
     <MainLayout title={t('pageTitle')} subtitle={t('pageSubtitle')}>
       <div className="space-y-6">
-        {/* Header */}
+
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
@@ -189,7 +189,6 @@ export default function ReservationsPage() {
           </Button>
         </div>
 
-        {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="border-2 border-blue-500/30">
             <CardContent className="pt-6">
@@ -211,7 +210,6 @@ export default function ReservationsPage() {
           </Card>
         </div>
 
-        {/* Filtros */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-wrap items-center gap-3">
@@ -238,7 +236,6 @@ export default function ReservationsPage() {
           </CardContent>
         </Card>
 
-        {/* Lista de reservas */}
         <Card>
           <CardHeader>
             <CardTitle>{t('cardTitle', { date: formatDate(date + 'T12:00:00') })}</CardTitle>
@@ -339,7 +336,6 @@ export default function ReservationsPage() {
                           </div>
                         </div>
 
-                        {/* Pre-order expandible */}
                         {isExpanded && preOrder && preOrder.items.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-dashed">
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t('preOrderHeading')}</p>
