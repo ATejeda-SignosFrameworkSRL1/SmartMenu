@@ -1,8 +1,5 @@
 namespace SmartMenu.Domain.Entities;
 
-/// <summary>
-/// Relación mesa virtual - mesa física.
-/// </summary>
 public class VirtualTableTable
 {
     public int VirtualTableId { get; set; }

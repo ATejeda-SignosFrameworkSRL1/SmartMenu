@@ -4,28 +4,13 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <summary>
-    /// PROD-SCHEMA.1 — Consolida en una migration EF formal TODOS los parches de
-    /// esquema que hasta ahora solo aplicaba DbInitializer.Ensure* al arrancar en
-    /// Development. Con esto `dotnet ef database update` produce el esquema COMPLETO
-    /// en una base de datos virgen (camino de produccion), sin depender del startup.
-    ///
-    /// El SQL es IDEMPOTENTE (IF NOT EXISTS), copiado 1:1 de los Ensure*:
-    /// - BDs existentes (dev/QA) que ya recibieron los parches: esta migration es no-op.
-    /// - BDs virgenes: crea todo.
-    /// Los tipos/longitudes son los REALES de las BDs existentes (nvarchar(20/80/120/500),
-    /// FK de FloorStructures a Zones, defaults 1 en visibilidad del plano), NO los del
-    /// snapshot (nvarchar(max)), para que todos los entornos queden identicos.
-    ///
-    /// Incluye ademas 3 parches FUERA del modelo EF (solo SQL crudo en el codigo):
-    /// PIN del waiter + WaiterAuthMode, tabla AuditEvents (DGII) y VirtualTables.PayerTableId.
-    /// </summary>
+
     public partial class SyncEnsurePatchesToMigrations : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // 1. PLANO (Gestion de Salon) — columnas de layout en Tables [ex EnsureFloorPlanColumnsAsync]
+
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'PositionX')
                     ALTER TABLE Tables ADD PositionX float NULL;
@@ -44,7 +29,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Tables') AND name = 'Color')
                     ALTER TABLE Tables ADD Color nvarchar(20) NULL;");
 
-            // 2. Restaurants — paleta + visibilidad del plano [ex EnsureRestaurantPaletteColumnAsync / EnsureFloorPlanVisibilityColumnsAsync]
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'FloorPlanPaletteJson')
                     ALTER TABLE Restaurants ADD FloorPlanPaletteJson nvarchar(max) NULL;
@@ -53,19 +37,16 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'FloorPlanWaiterEnabled')
                     ALTER TABLE Restaurants ADD FloorPlanWaiterEnabled bit NOT NULL DEFAULT 1;");
 
-            // 3. TableReservations — reserva de ZONA completa [ex EnsureZoneExclusiveColumnsAsync]
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'IsZoneExclusive')
                     ALTER TABLE TableReservations ADD IsZoneExclusive bit NOT NULL DEFAULT 0;
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('TableReservations') AND name = 'HostResponseMessage')
                     ALTER TABLE TableReservations ADD HostResponseMessage nvarchar(500) NULL;");
 
-            // 4. OrderItems.CustomerName — pedido compartido por mesa [ex EnsureOrderItemCustomerNameColumnAsync]
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'CustomerName')
                     ALTER TABLE OrderItems ADD CustomerName nvarchar(120) NULL;");
 
-            // 5. FloorStructures — estructuras del plano (paredes/puertas/etiquetas) [ex EnsureFloorStructureTableAsync]
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'FloorStructures')
                 BEGIN
@@ -84,14 +65,10 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                     );
                 END");
 
-            // 6. VirtualTables.PayerTableId — cobro unificado de mesa virtual [ex EnsureVirtualTablePayerColumnAsync]
-            //    (columna fuera del modelo EF: se usa via SQL crudo)
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('VirtualTables') AND name = 'PayerTableId')
                     ALTER TABLE VirtualTables ADD PayerTableId int NULL;");
 
-            // 7. PIN del waiter + WaiterAuthMode [ex EnsureWaiterPinColumnsAsync]
-            //    (columnas fuera del modelo EF: se usan via SQL crudo)
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'PinHash')
                     ALTER TABLE Users ADD PinHash nvarchar(120) NULL;
@@ -104,8 +81,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Restaurants') AND name = 'WaiterAuthMode')
                     ALTER TABLE Restaurants ADD WaiterAuthMode int NOT NULL DEFAULT 0;");
 
-            // 8. AuditEvents — trazabilidad DGII (Sprint 4.2) [ex EnsureAuditEventsTableAsync]
-            //    (tabla fuera del modelo EF: AuditService escribe via SQL crudo)
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'AuditEvents')
                 BEGIN
@@ -137,7 +112,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 END;");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"

@@ -10,23 +10,18 @@ export interface FloorPlanViewerProps {
   width?: number;
   height?: number;
   zoneName?: string;
-  /** Ocupa el 100% del contenedor (responsive). */
+
   fill?: boolean;
-  /** Escala/centra el plano para llenar el área (zoom-to-fit). */
+
   fitToContent?: boolean;
-  /** Mesa resaltada. */
+
   selectedTableId?: string | number;
-  /** Click sobre una mesa (para seleccionarla). */
+
   onTableClick?: (id: string | number) => void;
-  /** Override de la paleta de estados. */
+
   palette?: StatusPaletteOverride;
 }
 
-/**
- * Visor de plano de SOLO LECTURA (host/waiter) de UNA zona. Mesas + estructuras
- * fijas; nada arrastrable, pero las mesas son clicables (selección). Para varias
- * zonas, usar MultiZoneFloorPlanViewer.
- */
 export function FloorPlanViewer({
   tables,
   structures,

@@ -54,7 +54,7 @@
     "noConnection": "Sem conexão"
   },
   "nav": {
-    "generalTables": "Mesas Gerais ({count})",
+    "generalTables": "Mesas Gerais",
     "myTables": "Minhas Mesas ({count})",
     "floorPlan": "Planta baixa",
     "createVirtualTable": "Criar mesa virtual",

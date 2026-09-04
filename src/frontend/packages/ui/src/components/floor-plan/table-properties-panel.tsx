@@ -14,16 +14,11 @@ const SHAPES: { value: TableShapeKind; label: string }[] = [
 
 export interface TablePropertiesPanelProps {
   table: TableData;
-  /** Aplica un cambio parcial a la mesa seleccionada (se persiste arriba vía onChange). */
+
   onPatch: (patch: Partial<TableData>) => void;
   onClose: () => void;
 }
 
-/**
- * Panel lateral del Diseñador: edita los atributos de la mesa seleccionada
- * (nombre, capacidad, forma, sección/badge legado y color manual). Cada cambio
- * se aplica al instante; el guardado lo maneja el contenedor (PUT /api/floorplan).
- */
 export function TablePropertiesPanel({ table, onPatch, onClose }: TablePropertiesPanelProps) {
   const field =
     "w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 focus:border-slate-400 focus:outline-none";

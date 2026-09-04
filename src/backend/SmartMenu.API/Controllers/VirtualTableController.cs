@@ -25,10 +25,6 @@ public class VirtualTableController : ControllerBase
         _broadcaster = broadcaster;
     }
 
-    // Difunde el estado EFECTIVO de una mesa al plano en vivo vía el broadcaster único (recalcula
-    // el estado a partir de Table.Status + reservas). El parámetro `status` se ignora para la
-    // emisión (lo computa el broadcaster); se conserva por compatibilidad con los callsites.
-    // Aditivo y a prueba de fallos: nunca debe romper la operación (ya commiteada).
     private async Task NotifyTableAsync(int tableId, string status, bool clearWaiter)
     {
         await _broadcaster.BroadcastAsync(tableId);
@@ -39,15 +35,12 @@ public class VirtualTableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Crear mesa virtual: el mesero escanea los QR de las mesas unidas.
-    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Create([FromBody] CreateVirtualTableDto dto)
     {
         _logger.LogInformation($"🟢 CREATE VirtualTable - Name: {dto.Name}, CreatedByWaiterId: {dto.CreatedByWaiterId}, TableIds: [{string.Join(", ", dto.TableIds)}]");
-        
+
         if (dto.TableIds == null || dto.TableIds.Count == 0)
             return BadRequest(new { error = "Debe incluir al menos una mesa" });
 
@@ -59,23 +52,15 @@ public class VirtualTableController : ControllerBase
         if (missing.Count > 0)
             return BadRequest(new { error = $"Mesas no encontradas: {string.Join(", ", missing)}" });
 
-        // VT-PAY: la mesa pagadora (si se indica) debe ser una de las mesas del grupo
         if (dto.PayerTableId.HasValue && !dto.TableIds.Contains(dto.PayerTableId.Value))
             return BadRequest(new { error = "La mesa pagadora debe ser una de las mesas seleccionadas." });
 
-        // NOTA: Antes se rechazaban las mesas Ocupadas. Ahora SÍ se permite unir mesas
-        // que ya tienen clientes/orden activa — sus órdenes existentes se muestran
-        // unificadas en la vista de la mesa virtual (ver endpoint GetOrders).
-        // La única restricción que se mantiene es que una mesa no esté ya en OTRA
-        // mesa virtual activa al mismo tiempo (validación de abajo).
-
-        // Verificar que ninguna de las mesas esté ya en otra mesa virtual activa
         var alreadyInVirtualTable = await _context.VirtualTableTables
-            .Where(vtt => dto.TableIds.Contains(vtt.TableId) 
+            .Where(vtt => dto.TableIds.Contains(vtt.TableId)
                 && _context.VirtualTables.Any(vt => vt.Id == vtt.VirtualTableId && vt.IsActive))
             .Select(vtt => vtt.TableId)
             .ToListAsync();
-        
+
         if (alreadyInVirtualTable.Any())
         {
             var tableNumbers = await _context.Tables
@@ -92,13 +77,12 @@ public class VirtualTableController : ControllerBase
             PayerTableId = dto.PayerTableId,
             IsActive = true
         };
-        
+
         _logger.LogInformation($"🟢 Guardando VirtualTable con CreatedByWaiterId: {vt.CreatedByWaiterId}");
         _context.VirtualTables.Add(vt);
         await _context.SaveChangesAsync();
         _logger.LogInformation($"🟢 VirtualTable guardada con ID: {vt.Id}");
 
-        // Asociar mesas a la mesa virtual Y cambiar su estado a Occupied
         foreach (var table in tables)
         {
             _context.VirtualTableTables.Add(new VirtualTableTable { VirtualTableId = vt.Id, TableId = table.Id });
@@ -122,9 +106,6 @@ public class VirtualTableController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Obtener mesa virtual por ID
-    /// </summary>
     [HttpGet("{id}")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Get(int id)
@@ -152,24 +133,20 @@ public class VirtualTableController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Listar mesas virtuales activas del mesero
-    /// </summary>
     [HttpGet("waiter/{waiterId}")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetByWaiter(int waiterId)
     {
         _logger.LogInformation($"🔵 GetByWaiter llamado con waiterId: {waiterId}");
-        
+
         var allVirtualTables = await _context.VirtualTables.ToListAsync();
         _logger.LogInformation($"🔵 Total de mesas virtuales en DB: {allVirtualTables.Count}");
-        
+
         foreach (var vt in allVirtualTables.Take(5))
         {
             _logger.LogInformation($"  - VT ID:{vt.Id}, Name:{vt.Name}, CreatedBy:{vt.CreatedByWaiterId}, IsActive:{vt.IsActive}");
         }
-        
-        // Mesas virtuales ACTIVAS creadas por este mesero.
+
         var list = await _context.VirtualTables
             .Include(v => v.Tables)
             .ThenInclude(t => t.Table)
@@ -190,19 +167,16 @@ public class VirtualTableController : ControllerBase
                 }).ToList()
             })
             .ToListAsync();
-            
+
         _logger.LogInformation($"🔵 Mesas virtuales ACTIVAS (todas, sin filtrar): {list.Count}");
         if (list.Count > 0)
         {
             _logger.LogInformation($"🔵 Primera mesa: {list[0].Name}, IsActive: {list[0].IsActive}, CreatedByWaiterId: {list[0].CreatedByWaiterId}");
         }
-        
+
         return Ok(list);
     }
 
-    /// <summary>
-    /// Órdenes de todas las mesas que pertenecen a la mesa virtual (para vista unificada)
-    /// </summary>
     [HttpGet("{id}/orders")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetOrders(int id)
@@ -236,9 +210,6 @@ public class VirtualTableController : ControllerBase
         return Ok(orders);
     }
 
-    /// <summary>
-    /// Desactivar mesa virtual
-    /// </summary>
     [HttpPut("{id}/deactivate")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> Deactivate(int id)
@@ -251,10 +222,7 @@ public class VirtualTableController : ControllerBase
 
         vt.IsActive = false;
         vt.DeactivatedAt = DateTime.UtcNow;
-        
-        // Liberar las mesas: volver a Available SOLO si ya no tienen órdenes activas.
-        // (Como ahora una VT puede unir mesas que ya tenían cliente/orden, al deshacerla
-        //  no debemos liberar una mesa que aún tiene comensales/orden en curso.)
+
         var tableIds = vt.Tables.Select(t => t.TableId).ToList();
         var tablesWithActiveOrders = await _context.Orders
             .Where(o => o.TableId.HasValue && tableIds.Contains(o.TableId.Value)
@@ -288,11 +256,6 @@ public class VirtualTableController : ControllerBase
         return Ok(new { message = "Mesa virtual desactivada", id = vt.Id, tablesReleased = released });
     }
 
-    /// <summary>
-    /// VT-PAY — Cobro unificado de la mesa virtual: UN solo pago (comprobante único) bajo la
-    /// mesa pagadora que cubre TODAS las órdenes activas del grupo. Marca todas como Completed,
-    /// pasa las mesas a Cleaning y cierra la mesa virtual.
-    /// </summary>
     [HttpPost("{id}/pay")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> PayUnified(int id, [FromBody] PayVirtualTableDto dto)
@@ -309,7 +272,6 @@ public class VirtualTableController : ControllerBase
             var tableIds = vt.Tables.Select(t => t.TableId).ToList();
             var payerTableId = vt.PayerTableId ?? tableIds.FirstOrDefault();
 
-            // Órdenes activas (no completadas/canceladas) de todas las mesas del grupo
             var orders = await _context.Orders
                 .Where(o => o.TableId.HasValue && tableIds.Contains(o.TableId.Value)
                     && o.Status != Domain.Enums.OrderStatus.Completed
@@ -319,20 +281,16 @@ public class VirtualTableController : ControllerBase
             if (orders.Count == 0)
                 return BadRequest(new { error = "La mesa virtual no tiene órdenes pendientes de cobro." });
 
-            // Validación fiscal (igual que el cobro por orden): comprobante exige RNC + razón social
             if (dto.RequiresFiscalReceipt && (string.IsNullOrWhiteSpace(dto.RNC) || string.IsNullOrWhiteSpace(dto.BusinessName)))
                 return BadRequest(new { error = "Comprobante fiscal requiere RNC y razón social." });
 
-            // Total combinado = suma de los totales por orden (cada uno ya con ITBIS 18% + propina 10%)
             decimal groupSubtotal = orders.Sum(o => o.Subtotal);
             decimal groupTax = orders.Sum(o => o.Tax);
             decimal groupTip = orders.Sum(o => o.Tip);
             decimal groupTotal = orders.Sum(o => o.Total);
 
-            // Orden de la mesa pagadora — ancla del comprobante único
             var payerOrder = orders.FirstOrDefault(o => o.TableId == payerTableId) ?? orders.First();
 
-            // UN solo Payment (comprobante único) por el total del grupo
             var payment = new Payment
             {
                 OrderId = payerOrder.Id,
@@ -352,7 +310,6 @@ public class VirtualTableController : ControllerBase
             };
             _context.Payments.Add(payment);
 
-            // Marcar TODAS las órdenes del grupo como Completed
             foreach (var o in orders)
             {
                 o.Status = Domain.Enums.OrderStatus.Completed;
@@ -360,7 +317,6 @@ public class VirtualTableController : ControllerBase
                 o.UpdatedAt = DateTime.UtcNow;
             }
 
-            // Liberar mesas del grupo (Cleaning) y cerrar la mesa virtual
             var tables = await _context.Tables.Where(t => tableIds.Contains(t.Id)).ToListAsync();
             foreach (var t in tables)
                 t.Status = Domain.Enums.TableStatus.Cleaning;
@@ -399,9 +355,6 @@ public class VirtualTableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// TEMPORAL: Desactivar TODAS las mesas virtuales activas (para testing)
-    /// </summary>
     [HttpPost("deactivate-all")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeactivateAll()
@@ -410,7 +363,7 @@ public class VirtualTableController : ControllerBase
             .Include(v => v.Tables)
             .Where(v => v.IsActive)
             .ToListAsync();
-        
+
         int totalTablesReleased = 0;
         var releasedAll = new List<int>();
         foreach (var vt in activeVTs)
@@ -418,7 +371,6 @@ public class VirtualTableController : ControllerBase
             vt.IsActive = false;
             vt.DeactivatedAt = DateTime.UtcNow;
 
-            // Liberar las mesas de cada mesa virtual
             var tableIds = vt.Tables.Select(t => t.TableId).ToList();
             var tables = await _context.Tables.Where(t => tableIds.Contains(t.Id)).ToListAsync();
             foreach (var table in tables)
@@ -432,9 +384,9 @@ public class VirtualTableController : ControllerBase
 
         foreach (var tid in releasedAll)
             await NotifyTableAsync(tid, nameof(Domain.Enums.TableStatus.Available), true);
-        
+
         _logger.LogInformation($"🗑️ Desactivadas {activeVTs.Count} mesas virtuales y liberadas {totalTablesReleased} mesas");
-        return Ok(new { 
+        return Ok(new {
             message = $"Desactivadas {activeVTs.Count} mesas virtuales y liberadas {totalTablesReleased} mesas",
             virtualTablesDeactivated = activeVTs.Count,
             tablesReleased = totalTablesReleased
@@ -447,13 +399,13 @@ public class CreateVirtualTableDto
     public string? Name { get; set; }
     public int CreatedByWaiterId { get; set; }
     public List<int> TableIds { get; set; } = new();
-    /// <summary>Mesa designada para el pago general (cobro unificado). Debe ser una de TableIds.</summary>
+
     public int? PayerTableId { get; set; }
 }
 
 public class PayVirtualTableDto
 {
-    public string? PaymentMethod { get; set; }   // Cash, Card, Transfer, Mixed
+    public string? PaymentMethod { get; set; }
     public int? ProcessedByWaiterId { get; set; }
     public bool RequiresFiscalReceipt { get; set; } = false;
     public string? RNC { get; set; }

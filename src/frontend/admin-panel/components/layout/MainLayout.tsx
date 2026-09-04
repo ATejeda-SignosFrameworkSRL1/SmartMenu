@@ -11,7 +11,6 @@ interface MainLayoutProps {
   subtitle?: string;
 }
 
-/** Guarda token y usuario desde la URL al llegar desde el login (client-app en 3000 redirige a 3001?token=...&user=...) */
 function useAuthFromUrl() {
   useEffect(() => {
     if (typeof window === 'undefined') return;

@@ -1,8 +1,5 @@
 'use client';
 
-// global-error.tsx — Error Boundary de último recurso para errores en RootLayout.
-// Renderiza <html> + <body> propios porque reemplaza el árbol completo.
-
 import { useEffect } from 'react';
 import { captureException } from '@/lib/sentry';
 

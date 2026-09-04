@@ -3,10 +3,6 @@ using SmartMenu.Domain.Entities;
 
 namespace SmartMenu.Infrastructure.Data;
 
-/// <summary>
-/// S4.1 — DbContext separado para auditoría. Tabla AuditLogs vive en DbNewMenuAudit.
-/// Solo escritura (append-only); no se borra ni actualiza nunca.
-/// </summary>
 public class AuditDbContext : DbContext
 {
     public AuditDbContext(DbContextOptions<AuditDbContext> options) : base(options) { }

@@ -21,11 +21,6 @@ const ROWS: { shape: TableShapeKind; y: number; w?: number; h?: number }[] = [
   { shape: "diamond", y: 455, w: 56, h: 56 },
 ];
 
-/**
- * Sillas según capacidad (2/4/6/8) por forma: círculo (radial), cuadrado/rect
- * (por lados), diamante (paralelas a las caras). La 1ª columna lleva badge para
- * comprobar que las sillas NO lo tapan.
- */
 export const PorForma: Story = {
   render: () => (
     <div style={{ padding: 12 }}>

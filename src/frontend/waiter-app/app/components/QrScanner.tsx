@@ -3,30 +3,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
-/** Extrae el número de mesa o GUID del contenido del QR */
 export function parseTableIdFromQrContent(text: string): number | string | null {
   const raw = (text || '').trim();
 
-  // URL con GUID: .../table/a1b2c3d4-... o http://IP:3000/table/a1b2c3d4
   const matchGuidUrl = raw.match(/\/table\/([a-f0-9-]+)/i);
   if (matchGuidUrl && matchGuidUrl[1].length > 10) {
     return matchGuidUrl[1];
   }
 
-  // GUID sin URL (32 o 36 caracteres alfanuméricos)
   if (/^[a-f0-9]{32}$/i.test(raw) || /^[a-f0-9-]{36}$/i.test(raw)) {
     return raw;
   }
 
-  // URL con número: .../table/5
   const matchUrlNum = raw.match(/\/table\/(\d+)/i);
   if (matchUrlNum) return parseInt(matchUrlNum[1], 10);
 
-  // table-5 o table-12
   const matchTable = raw.match(/table[-_]?(\d+)/i);
   if (matchTable) return parseInt(matchTable[1], 10);
 
-  // Solo número
   const num = parseInt(raw, 10);
   if (!Number.isNaN(num) && num > 0) return num;
 
@@ -52,7 +46,6 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
   const scannerRef = useRef<any>(null);
   const mountedRef = useRef(true);
 
-  // QR-FUNCTIONAL: detectar contexto seguro UNA VEZ al montar
   const [isSecureContext, setIsSecureContext] = useState<boolean>(true);
   const [currentHostUrl, setCurrentHostUrl] = useState<string>('');
   useEffect(() => {
@@ -69,7 +62,6 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
       try {
         setStatus('requesting');
 
-        // Verificar contexto seguro ANTES de pedir cámara — falla rápido en HTTP no-localhost
         if (typeof window !== 'undefined' && !window.isSecureContext) {
           if (mountedRef.current) {
             setStatus('no-https');
@@ -78,26 +70,23 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
           return;
         }
 
-        // Importar dinámicamente la librería
         const { Html5Qrcode } = await import('html5-qrcode');
         if (!mountedRef.current) return;
 
         const scanner = new Html5Qrcode(containerId);
         scannerRef.current = scanner;
 
-        // Intentar primero con facingMode (más rápido + universal en móvil)
-        // Si falla → enumerar dispositivos y usar el primero
         let started = false;
         try {
           await scanner.start(
-            { facingMode: { exact: 'environment' } } as any,  // back camera preferred
+            { facingMode: { exact: 'environment' } } as any,
             { fps: 10, qrbox: { width: 220, height: 220 } },
             (decodedText: string) => handleDecode(decodedText, scanner),
             () => {}
           );
           started = true;
         } catch (e1: any) {
-          // Fallback 1: facingMode sin exact (cualquier cámara)
+
           try {
             await scanner.start(
               { facingMode: 'environment' } as any,
@@ -107,13 +96,13 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
             );
             started = true;
           } catch (e2: any) {
-            // Fallback 2: enumerar y usar la primera cámara disponible
+
             try {
               const cameras = await Html5Qrcode.getCameras();
               if (!cameras || cameras.length === 0) {
                 throw new Error('NotFoundError: no camera detected');
               }
-              // En PCs/laptops usualmente solo hay 1 cámara (frontal). En móvil, idealmente "back"
+
               const target = cameras.find(c => /back|rear|environment/i.test(c.label || '')) || cameras[0];
               await scanner.start(
                 target.id,
@@ -123,18 +112,13 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
               );
               started = true;
             } catch (e3: any) {
-              throw e3;  // propaga al catch externo
+              throw e3;
             }
           }
         }
 
         if (started && scannerRef.current !== scanner) {
-          // El cleanup ya corrio (unmount o re-run del efecto) MIENTRAS start()
-          // estaba pendiente: su stop() fallo porque la camara aun no arrancaba
-          // y el stream getUserMedia quedaria vivo (LED encendido, bateria, y
-          // NotReadableError en la proxima apertura en Android). Se compara la
-          // IDENTIDAD del scanner (no mountedRef, que la siguiente corrida del
-          // efecto vuelve a poner en true) para detener al huerfano.
+
           try { await scanner.stop(); } catch {}
           try { scanner.clear(); } catch {}
           return;
@@ -213,7 +197,7 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
 
   return (
     <div className="flex flex-col items-center w-full">
-      {/* CONTEXTO HTTPS — siempre visible al inicio para diagnóstico */}
+
       {!isSecureContext && (
         <div className="w-full max-w-[320px] mb-3 bg-amber-50 border border-amber-300 rounded-lg p-2.5 text-xs">
           <p className="font-bold text-amber-900">{t('noHttps')}</p>
@@ -227,13 +211,11 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
         </div>
       )}
 
-      {/* VIDEO de la cámara */}
       <div
         id={containerId}
         className="w-full max-w-[280px] aspect-square overflow-hidden rounded-lg bg-black"
       />
 
-      {/* Status indicators */}
       {(status === 'init' || status === 'requesting') && (
         <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
           <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"></div>
@@ -264,8 +246,6 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
         </div>
       )}
 
-      {/* INPUT MANUAL — SIEMPRE visible (no solo en error).
-          UX: el waiter puede preferir escribir el número incluso si la cámara funciona */}
       <div className="mt-4 w-full max-w-[320px]">
         <div className="text-center text-xs text-gray-500 mb-2">
           {t('manualSeparator')}
@@ -292,7 +272,6 @@ export function QrScanner({ onScan, singleMode = true, onError, onClose }: QrSca
         </div>
       </div>
 
-      {/* Diagnóstico (collapsed by default) — visible solo al desarrollador en console */}
       {lanIpHint && (status === 'error' || status === 'no-camera') && (
         <details className="mt-3 w-full max-w-[320px] text-[11px] text-gray-500">
           <summary className="cursor-pointer">{t('techInfo')}</summary>

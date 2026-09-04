@@ -43,3 +43,154 @@ body {
     @apply border-blue-500 hover:shadow-lg;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODO RELOJ (smartwatch Android — LOKMAT APPLLP 5 MAX: 2.4", 640x480, ~333 PPI)
+   ───────────────────────────────────────────────────────────────────────────
+   ACTIVACION: la clase .watch-mode la pone el script inline de layout.tsx, que
+   ademas deriva la raiz del viewport real (ancho de diseño fijo de 360px). Se
+   activa con ?watch=1 (persistido) o por deteccion automatica.
+
+   POR QUE NO HAY @media DE RESPALDO: esta app no renderiza nada sin JavaScript
+   (todo el contenido entra por useEffect), asi que un respaldo sin-JS no sirve
+   de nada. Y una media query NO PUEDE cubrir este panel: a DPR 1 el viewport es
+   640x480 y cualquier limite de ancho que lo incluyera atraparia tambien a un
+   telefono Android en horizontal (640x360). Un unico selector = una sola fuente
+   de verdad, sin reglas que se desincronicen.
+
+   LIENZO DE TRABAJO: 360 x 270 px de diseño. El ALTO es el recurso escaso.
+   ═══════════════════════════════════════════════════════════════════════════ */
+html.watch-mode { font-size: 11px; }   /* respaldo; el script inline lo sobreescribe */
+
+/* ─── Ancho ─────────────────────────────────────────────────────────────────── */
+html.watch-mode .max-w-7xl, html.watch-mode .max-w-6xl, html.watch-mode .max-w-5xl,
+html.watch-mode .max-w-4xl, html.watch-mode .max-w-3xl, html.watch-mode .max-w-2xl {
+  max-width: 100% !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important;
+}
+
+/* Rejillas multi-columna -> una columna. La lista va ENUMERADA a proposito: un
+   [class*="grid-cols-"] generico atraparia grid-cols-1, 7..12 y arbitrarios.
+   .watch-cols es la valvula de escape para las rejillas que SI deben conservar
+   sus columnas (propina, metodo de pago, mesas, teclado del PIN): apiladas
+   ocupan mas alto que toda la pantalla. */
+html.watch-mode [class*="grid-cols-2"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-3"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-4"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-5"]:not(.watch-cols),
+html.watch-mode [class*="grid-cols-6"]:not(.watch-cols) { grid-template-columns: 1fr !important; }
+
+/* ─── Modales ───────────────────────────────────────────────────────────────────
+   Antes se forzaban a pantalla completa con height:100%. Eso era un error: los
+   modales de esta app son `flex flex-col` con cuerpos `flex-1` + `overflow-y-auto`,
+   y al fijar el alto del panel esos cuerpos colapsaban a 0 px. Como ademas
+   recortan su contenido (overflow auto con alto cero), el modal se abria VACIO
+   y parecia no abrirse. Es lo que dejaba inalcanzables confirmar, servir, cobrar
+   y liberar mesa.
+
+   Ahora el panel se dimensiona por su CONTENIDO (height:auto) con techo en la
+   pantalla, y es el UNICO eje de scroll: los scrollers internos se neutralizan
+   para que todo fluya en una sola columna. Sale mas pequeño que la pantalla
+   cuando el contenido es corto, que es justo lo deseable en 2.4". */
+html.watch-mode .fixed.inset-0 {
+  padding: 0.25rem !important;
+  align-items: center !important;
+  overflow-y: auto !important;
+  max-height: 100vh !important;
+}
+html.watch-mode .fixed.inset-0 > div {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  /* El tope va en vh, NO en %. Medido en el reloj real (640x480, DPR 1): con
+     max-height:100% el panel salio 552 px de alto sobre una pantalla de 480 y
+     se desbordaba 72 px. Un porcentaje depende de que el padre resuelva su
+     altura; vh se mide contra el viewport y no falla. Se usa vh y no dvh a
+     proposito: dvh es Chrome 108+ y el WebView de Android 10 puede descartar
+     la declaracion en silencio. Se resta el padding del overlay. */
+  max-height: calc(100vh - 0.5rem) !important;
+  margin: auto !important;
+  border-radius: 0.5rem !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+/* Un solo eje de scroll: sin esto, cada contenedor anidado con flex-1 y
+   overflow-y-auto se queda sin alto y recorta lo que contiene. */
+html.watch-mode .fixed.inset-0 > div .overflow-y-auto,
+html.watch-mode .fixed.inset-0 > div .overflow-auto {
+  overflow: visible !important;
+  max-height: none !important;
+}
+html.watch-mode .fixed.inset-0 > div .flex-1 {
+  flex: 0 0 auto !important;
+  min-height: auto !important;
+}
+/* Alturas fijas en px o vh que no escalan con rem (foto del detalle de plato,
+   listas con max-h-*): que no se coman la pantalla ni recorten. */
+html.watch-mode .fixed.inset-0 > div [class*="max-h-"] { max-height: none !important; }
+html.watch-mode .fixed.inset-0 > div [class*="h-44"],
+html.watch-mode .fixed.inset-0 > div [class*="h-52"] { height: 3.5rem !important; }
+/* Las cabeceras/pies sticky de modal pierden sentido con un solo scroller y
+   ademas tapaban botones. */
+html.watch-mode .fixed.inset-0 > div .sticky { position: static !important; }
+
+/* ─── Cromo que se oculta en el reloj ───────────────────────────────────────────
+   El atributo no lleva ningun estilo fuera del modo reloj, asi que en telefono y
+   tablet no cambia nada. Los dos envoltorios usan `contents` (no generan caja),
+   de modo que ahi siguen siendo hijos directos del flex de la cabecera. */
+html.watch-mode [data-watch-hide] { display: none !important; }
+
+/* ─── Area tactil ───────────────────────────────────────────────────────────── */
+/* El escalado rem volveria los controles intocables, asi que se les pone un
+   suelo. Los botones-icono ([data-icon-btn]) quedan EXENTOS: un suelo de 2.75rem
+   los infla y arrastra el alto de toda su fila. */
+html.watch-mode button:not([data-icon-btn]),
+html.watch-mode a[role="button"],
+html.watch-mode [role="checkbox"] { min-height: 2.75rem; }
+html.watch-mode button[data-icon-btn] {
+  min-height: 0; width: 2.25rem; height: 2.25rem; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* min-height no cubre los campos de formulario, y los importes del cobro
+   quedaban en 3 mm de alto. */
+html.watch-mode input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+html.watch-mode select, html.watch-mode textarea { min-height: 2.75rem; }
+
+/* ─── Alto: el recurso escaso (270 px de diseño) ────────────────────────────── */
+/* Solo se colapsaban py-6/py-8, pero las cabeceras y pies de TODOS los modales
+   usan p-6/p-4/py-4. Esto es lo que mas alto recupera. */
+html.watch-mode .p-6, html.watch-mode .p-5 { padding: 0.5rem !important; }
+html.watch-mode .p-4 { padding: 0.375rem !important; }
+html.watch-mode .py-6, html.watch-mode .py-8 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+html.watch-mode .py-4, html.watch-mode .py-3 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+html.watch-mode .px-6, html.watch-mode .px-5 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+html.watch-mode .pb-6, html.watch-mode .pb-8 { padding-bottom: 0.5rem !important; }
+html.watch-mode .mb-6, html.watch-mode .mb-8 { margin-bottom: 0.5rem !important; }
+html.watch-mode .gap-6, html.watch-mode .gap-8 { gap: 0.5rem !important; }
+html.watch-mode .gap-2, html.watch-mode .gap-3,
+html.watch-mode .gap-4, html.watch-mode .gap-5 { gap: 0.375rem !important; }
+html.watch-mode .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem !important; }
+/* Nota: no se toca `header` — en page.tsx no existe ningun <header>; la regla
+   anterior no casaba con nada. Los .sticky si existen (cabeceras de modal). */
+html.watch-mode .sticky { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+
+/* ─── Fiabilidad del toque ──────────────────────────────────────────────────── */
+/* La app no declaraba touch-action en ninguna parte y el viewport permite zoom,
+   asi que Chrome trata cada toque como posible primera mitad de un doble-toque:
+   retrasa el click y, en una pantalla de 49 mm donde el dedo cubre varios
+   controles, a veces lo descarta. `manipulation` desactiva el doble-toque-zoom
+   SOLO en los controles (el pinch-zoom de la pagina se conserva), asi que el tap
+   se dispara de inmediato. */
+html.watch-mode button, html.watch-mode a, html.watch-mode input,
+html.watch-mode select, html.watch-mode textarea, html.watch-mode label,
+html.watch-mode [role="button"], html.watch-mode [class*="cursor-pointer"] {
+  touch-action: manipulation;
+}
+/* Las tarjetas de mesa son el objetivo mas tocado: darles un alto minimo real
+   para que el dedo acierte sin necesidad de precision. */
+html.watch-mode .watch-cols > [class*="cursor-pointer"] { min-height: 3.25rem; }
+
+/* ─── Tacto y scroll ────────────────────────────────────────────────────────── */
+html.watch-mode { -webkit-tap-highlight-color: rgba(22,163,74,.25); }
+html.watch-mode body { overscroll-behavior: contain; }
+html.watch-mode ::-webkit-scrollbar { width: 3px; height: 3px; }
+html.watch-mode ::-webkit-scrollbar-thumb { background: rgba(100,116,139,.5); border-radius: 3px; }

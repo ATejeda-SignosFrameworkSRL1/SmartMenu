@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Viewport — SmartMenu</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #0f172a; color: #e2e8f0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 8px; gap: 6px;
+  }
+  .big { font-size: 30px; font-weight: 800; color: #2dd4bf; line-height: 1.1; letter-spacing: -.5px; }
+  .lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }
+  .row { font-size: 13px; }
+  .k { color: #94a3b8; }
+  .v { color: #f1f5f9; font-weight: 700; }
+  /* Marco de 1px: si NO ves los 4 bordes completos, la pantalla recorta (bisel redondo). */
+  .frame { position: fixed; inset: 0; border: 1px solid #f43f5e; pointer-events: none; }
+  .corner { position: fixed; width: 10px; height: 10px; border: 2px solid #22c55e; }
+  .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; }
+  .tr { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+  .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; }
+  .br { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+  #ua { font-size: 9px; color: #64748b; word-break: break-all; max-width: 100%; }
+</style>
+</head>
+<body>
+  <div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+
+  <div class="lbl">Tamaño CSS</div>
+  <div class="big" id="css">—</div>
+  <div class="row"><span class="k">Físico:</span> <span class="v" id="phys">—</span></div>
+  <div class="row"><span class="k">DPR:</span> <span class="v" id="dpr">—</span> · <span class="k">Táctil:</span> <span class="v" id="touch">—</span></div>
+  <div class="row"><span class="k">Pantalla:</span> <span class="v" id="screen">—</span></div>
+  <div id="ua"></div>
+
+<script>
+(function () {
+  function paint() {
+    var w = window.innerWidth, h = window.innerHeight, dpr = window.devicePixelRatio || 1;
+    document.getElementById('css').textContent = w + ' × ' + h;
+    document.getElementById('phys').textContent = Math.round(w * dpr) + ' × ' + Math.round(h * dpr) + ' px';
+    document.getElementById('dpr').textContent = dpr;
+    document.getElementById('touch').textContent = (navigator.maxTouchPoints || 0) + ' pts';
+    document.getElementById('screen').textContent = (screen.width || '?') + ' × ' + (screen.height || '?');
+    document.getElementById('ua').textContent = navigator.userAgent;
+  }
+  paint();
+  window.addEventListener('resize', paint);
+  window.addEventListener('orientationchange', function () { setTimeout(paint, 250); });
+})();
+</script>
+</body>
+</html>

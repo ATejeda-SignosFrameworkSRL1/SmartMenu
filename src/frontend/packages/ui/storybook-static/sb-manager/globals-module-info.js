@@ -5,7 +5,6 @@ const __filename = ESM_COMPAT_fileURLToPath(import.meta.url);
 const __dirname = ESM_COMPAT_dirname(__filename);
 const require = ESM_COMPAT_Module.createRequire(import.meta.url);
 
-// src/manager/globals/exports.ts
 var t = {
   react: [
     "Children",
@@ -999,7 +998,6 @@ var t = {
   "@storybook/core/client-logger": ["deprecate", "logger", "once", "pretty"]
 };
 
-// src/manager/globals/globals.ts
 var e = {
   react: "__REACT__",
   "react-dom": "__REACT_DOM__",
@@ -1037,7 +1035,6 @@ var e = {
   "@storybook/core/types": "__STORYBOOK_TYPES__"
 }, n = Object.keys(e);
 
-// src/manager/globals/globals-module-info.ts
 var S = n.reduce(
   (r, o) => (r[o] = {
     type: "esm",

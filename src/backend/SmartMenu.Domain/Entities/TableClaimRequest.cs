@@ -1,9 +1,5 @@
 namespace SmartMenu.Domain.Entities;
 
-/// <summary>
-/// Solicitud de un mesero para quedarse con una mesa.
-/// Flujo: Mesero solicita → Admin aprueba/rechaza → Mesero recibe notificación.
-/// </summary>
 public class TableClaimRequest : BaseEntity
 {
     public int WaiterId { get; set; }
@@ -14,7 +10,6 @@ public class TableClaimRequest : BaseEntity
     public DateTime? RespondedAt { get; set; }
     public string? AdminNote { get; set; }
 
-    // Navigation
     public User Waiter { get; set; } = null!;
     public Table Table { get; set; } = null!;
     public User? RespondedByAdmin { get; set; }

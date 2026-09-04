@@ -27,7 +27,6 @@ public interface IOrderService
     Task<OrderDto> SetBarServedAsync(int orderId);
     Task MoveOrderToTableAsync(int orderId, int newTableId);
     Task<OrderDto> AddItemsToOrderAsync(int orderId, List<CreateOrderItemDto> items, string? customerName = null);
-    /// <summary>Id de la orden "viva" de una mesa (status ≠ Completed/Cancelled), o null. Permite
-    /// que varios comensales del mismo QR agreguen a una sola orden en vez de crear varias.</summary>
+
     Task<int?> GetActiveOrderIdForTableAsync(int tableId);
 }

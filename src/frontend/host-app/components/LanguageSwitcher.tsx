@@ -1,6 +1,5 @@
 'use client';
-// LanguageSwitcher — selector de idioma (cookie LOCALE, sin cambiar la URL).
-// Estilo oscuro para el header slate del host.
+
 import { useLocale } from 'next-intl';
 import { useTransition } from 'react';
 import { Globe } from 'lucide-react';

@@ -10,7 +10,7 @@ const preview: Preview = {
     layout: "padded",
   },
   decorators: [
-    // Selector de "skin" en la toolbar: mismas variables, distintos valores por app.
+
     withThemeByClassName({
       themes: {
         "Base (Smart Menu)": "",

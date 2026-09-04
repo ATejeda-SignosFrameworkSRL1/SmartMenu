@@ -26,16 +26,10 @@ import dynamic from 'next/dynamic';
 import { createAuthApi } from '@/lib/auth-client';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-// Client-only: BookingEngineWarm calcula fechas con `new Date()` en el render
-// inicial; al prerenderizar (SSG) la fecha queda congelada a la hora de build y
-// no coincide con la del cliente → mismatch de hidratación (React #418/#423/#425).
-// Cargarlo solo en cliente elimina esos errores sin afectar el SEO del landing.
 const BookingEngineWarm = dynamic(() => import('@/components/BookingEngineWarm'), { ssr: false });
 
-// F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('reservation');
 
-/* ───────── Types ───────── */
 interface Dish {
   id: number;
   name: string;
@@ -45,7 +39,6 @@ interface Dish {
   categoryName?: string;
 }
 
-/* ───────── Helpers ───────── */
 function formatPrice(n: number) {
   return `RD$ ${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
 }
@@ -54,15 +47,10 @@ function cn(...classes: (string | false | undefined | null)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
-/* ═══════════════════════════════════════════════════════
-   PAGE COMPONENT
-   ═══════════════════════════════════════════════════════ */
 export default function ReservationPage() {
   const t = useTranslations();
   const [scrolled, setScrolled] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-
-  // Landing público — sin auth-gate. Staff entra a /login (panel propio) si necesita.
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -84,7 +72,7 @@ export default function ReservationPage() {
 
   return (
     <>
-      {/* ─── HEADER ─── */}
+
       <header
         className={cn(
           'fixed inset-x-0 top-0 z-50 transition-all duration-500',
@@ -99,7 +87,6 @@ export default function ReservationPage() {
             <span className="font-display text-2xl font-bold text-white">SmartMenu</span>
           </button>
 
-          {/* Desktop nav */}
           <nav className="hidden items-center gap-8 md:flex">
             {navItems.map(([id, label]) => (
               <button
@@ -119,7 +106,6 @@ export default function ReservationPage() {
             </button>
           </nav>
 
-          {/* Mobile toggle */}
           <div className="flex items-center gap-3 md:hidden">
             <LanguageSwitcher />
             <button
@@ -132,7 +118,6 @@ export default function ReservationPage() {
           </div>
         </div>
 
-        {/* Mobile nav */}
         {mobileNav && (
           <div className="border-t border-warm-800 bg-warm-950/98 backdrop-blur-md md:hidden">
             <div className="container-narrow flex flex-col gap-1 py-4">
@@ -157,7 +142,7 @@ export default function ReservationPage() {
       </header>
 
       <main>
-        {/* ─── HERO ─── */}
+
         <section
           id="hero"
           className="relative flex min-h-screen items-center justify-center overflow-hidden bg-warm-950"
@@ -191,7 +176,7 @@ export default function ReservationPage() {
               >
                 {t('hero.ctaMenu')}
               </button>
-              {/* Portal de pedidos pickup/delivery */}
+
               <Link
                 href="/pedir"
                 className="btn-outline border-primary/50 text-primary-light hover:border-primary hover:bg-primary hover:text-white"
@@ -200,7 +185,6 @@ export default function ReservationPage() {
               </Link>
             </div>
 
-            {/* Trust */}
             <div className="mx-auto mt-16 flex max-w-lg flex-wrap items-center justify-center gap-8 border-t border-warm-800 pt-8">
               <div className="flex items-center gap-2 text-warm-400">
                 <Star className="h-5 w-5 fill-primary-light text-primary-light" />
@@ -221,7 +205,6 @@ export default function ReservationPage() {
             </div>
           </div>
 
-          {/* Scroll indicator */}
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
             <div className="h-10 w-6 rounded-full border-2 border-warm-600 p-1">
               <div className="mx-auto h-2 w-1 animate-bounce rounded-full bg-primary-light" />
@@ -229,7 +212,6 @@ export default function ReservationPage() {
           </div>
         </section>
 
-        {/* ─── INTRO / ABOUT ─── */}
         <section id="nosotros" className="section-padding bg-warm-50">
           <div className="container-narrow">
             <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
@@ -262,7 +244,6 @@ export default function ReservationPage() {
                 </button>
               </div>
 
-              {/* Image placeholder */}
               <div className="relative">
                 <div className="aspect-[4/5] overflow-hidden rounded-2xl bg-gradient-to-br from-warm-200 to-warm-300 shadow-2xl shadow-warm-300/40">
                   <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
@@ -283,7 +264,6 @@ export default function ReservationPage() {
           </div>
         </section>
 
-        {/* ─── EXPERIENCE PILLARS ─── */}
         <section className="section-padding bg-warm-100/60">
           <div className="container-narrow text-center">
             <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary">
@@ -318,13 +298,10 @@ export default function ReservationPage() {
           </div>
         </section>
 
-        {/* ─── MENU HIGHLIGHTS ─── */}
         <MenuHighlights />
 
-        {/* ─── RESERVATION FORM ─── */}
         <ReservationSection />
 
-        {/* ─── HOURS & LOCATION ─── */}
         <section id="contacto" className="section-padding bg-warm-100/60">
           <div className="container-narrow">
             <div className="text-center">
@@ -337,7 +314,7 @@ export default function ReservationPage() {
             </div>
 
             <div className="mt-14 grid gap-8 sm:grid-cols-3">
-              {/* Hours */}
+
               <div className="rounded-2xl border border-warm-200 bg-white p-8 text-center shadow-sm">
                 <Clock className="mx-auto h-10 w-10 text-primary" />
                 <h3 className="mt-4 font-display text-xl font-bold text-warm-900">
@@ -356,7 +333,6 @@ export default function ReservationPage() {
                 </div>
               </div>
 
-              {/* Address */}
               <div className="rounded-2xl border border-warm-200 bg-white p-8 text-center shadow-sm">
                 <MapPin className="mx-auto h-10 w-10 text-primary" />
                 <h3 className="mt-4 font-display text-xl font-bold text-warm-900">
@@ -369,7 +345,6 @@ export default function ReservationPage() {
                 </p>
               </div>
 
-              {/* Contact */}
               <div className="rounded-2xl border border-warm-200 bg-white p-8 text-center shadow-sm">
                 <Phone className="mx-auto h-10 w-10 text-primary" />
                 <h3 className="mt-4 font-display text-xl font-bold text-warm-900">
@@ -384,7 +359,6 @@ export default function ReservationPage() {
           </div>
         </section>
 
-        {/* ─── TESTIMONIALS ─── */}
         <section className="section-padding bg-warm-50">
           <div className="container-narrow text-center">
             <span className="mb-3 inline-block text-xs font-semibold uppercase tracking-widest text-primary">
@@ -424,7 +398,6 @@ export default function ReservationPage() {
           </div>
         </section>
 
-        {/* ─── CTA BANNER ─── */}
         <section className="relative overflow-hidden bg-warm-950 py-20">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(218,165,32,0.1),transparent_70%)]" />
           <div className="container-narrow relative z-10 text-center">
@@ -450,7 +423,6 @@ export default function ReservationPage() {
         </section>
       </main>
 
-      {/* ─── FOOTER ─── */}
       <footer className="bg-warm-950 px-4 py-12 sm:px-6 lg:px-8">
         <div className="container-narrow">
           <div className="flex flex-col items-center gap-8 border-b border-warm-800 pb-8 md:flex-row md:justify-between">
@@ -497,9 +469,6 @@ export default function ReservationPage() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   MENU HIGHLIGHTS
-   ═══════════════════════════════════════════════════════ */
 function MenuHighlights() {
   const t = useTranslations('menuHighlights');
   const [dishes, setDishes] = useState<Dish[]>([]);
@@ -607,9 +576,6 @@ function MenuHighlights() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   RESERVATION SECTION
-   ═══════════════════════════════════════════════════════ */
 function ReservationSection() {
   const t = useTranslations('reservation');
   const tp = useTranslations('pedidos');

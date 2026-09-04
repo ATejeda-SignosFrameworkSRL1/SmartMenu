@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Utensils, Clock, DollarSign, AlertCircle, XCircle, LogOut, Wine, Check, RefreshCw, QrCode, Users, ArrowRightLeft, Share2, Pin, PinOff, Bell, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Search, Plus, Minus, Pencil } from 'lucide-react';
-// Icono de exclamación para alarma en mesas con pedido sin asignar
+
 const AlertExclamation = () => (
   <span className="inline-flex items-center justify-center text-red-600 font-bold text-xl animate-pulse" style={{ animationDuration: '0.8s' }}>!</span>
 );
@@ -16,13 +16,11 @@ import { useTranslations, useLocale } from 'next-intl';
 import { dateLocale } from '@/i18n/config';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-// Carga dinámica del QrScanner para evitar chunk errors en HTTPS
 const QrScanner = dynamic(() => import('./components/QrScanner').then(mod => ({ default: mod.QrScanner })), {
   ssr: false,
   loading: () => <p className="text-sm text-gray-600 animate-pulse">Cargando cámara...</p>
 });
 
-// Plano de salón (react-konva) en SOLO LECTURA — ssr:false porque Konva necesita el DOM.
 const MultiZoneFloorPlanViewer = dynamic(
   () => import('@smartmenu/ui').then((m) => ({ default: m.MultiZoneFloorPlanViewer })),
   { ssr: false, loading: () => <p className="p-6 text-sm text-gray-500 animate-pulse">Cargando plano...</p> }
@@ -44,47 +42,40 @@ interface Order {
     dishName: string;
     quantity: number;
     notes?: string;
-    customerName?: string; // comensal que pidió este ítem (varios comensales por mesa)
+    customerName?: string;
   }>;
 }
 
-// Bartender: mismo login que waiter pero ve KDS de bebidas
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  // Match por PALABRA completa (con plurales), no substring: 'agua' no debe matchear
-  // 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con KDS/admin/client y backend.
+
   const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
   return DRINK_KEYWORDS.some(k =>
     k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
   );
 }
-// FASE 2 RUTEO — el flag isDrink que calcula el backend (zona del plato asignada
-// en el admin) MANDA; el matcher por nombre queda solo como fallback para
-// payloads viejos sin el campo. Resuelve casos imposibles por texto ("Copa de helado").
+
 function itemIsDrink(item: any): boolean {
   const flag = item?.isDrink ?? item?.IsDrink;
   return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
 }
-// Código de pedido corto y legible para el mesero: ORD-20260611144054-7cfdfa → "7CFDFA"
+
 const shortOrder = (on?: string | null) => ((on ?? '').split('-').pop() ?? '').toUpperCase();
 function getElapsedMinutes(createdAt: string | number | undefined): number {
   if (createdAt == null) return 0;
   const utcStr = typeof createdAt === 'string' && !createdAt.endsWith('Z') ? createdAt + 'Z' : createdAt;
   return Math.floor((Date.now() - new Date(utcStr as string).getTime()) / 60000);
 }
-// Bar KDS está separado: el personal de bar usa el panel de admin (/bar). En Waiter App nunca se muestra la vista Bar.
+
 function isBartender(_u: any): boolean {
   return false;
 }
 
-// Usar siempre el id de la orden (PK), no tableNumber
 function getOrderId(order: Order): number {
   return (order as any).id ?? (order as any).Id;
 }
 
-// Estilo del banner por tipo de notificación — para renderizar el aviso del bell también en la tarjeta de Mis Mesas.
-// Cualquier tipo no listado igual se muestra con NOTIF_CARD_DEFAULT (todas las notificaciones aparecen en la tarjeta).
 const NOTIF_CARD_DEFAULT = { cls: 'bg-slate-100 text-slate-700 border-slate-300', icon: '🔔' };
 const NOTIF_CARD: Record<string, { cls: string; icon: string; pulse?: boolean }> = {
   kitchen_ready:     { cls: 'bg-green-100 text-green-800 border-green-300', icon: '🍽' },
@@ -96,14 +87,13 @@ const NOTIF_CARD: Record<string, { cls: string; icon: string; pulse?: boolean }>
   claim_rejected:    { cls: 'bg-rose-100 text-rose-800 border-rose-300', icon: '🚫' },
 };
 
-// Reloj digital LCD 7-segment estilo radio-despertador
 function DigitalClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-  // Formato 12h con indicador AM/PM al lado (estilo radio-despertador)
+
   const hours24 = now.getHours();
   const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
   const period = hours24 < 12 ? 'AM' : 'PM';
@@ -121,14 +111,14 @@ function DigitalClock() {
   return (
     <div className="flex flex-col items-center justify-center px-4 py-2 bg-black rounded-lg border border-zinc-800 shadow-inner min-w-[150px] relative">
       <div className="flex items-baseline gap-1.5 relative">
-        {/* Ghost de los 8s detrás para imitar el LCD apagado */}
+
         <span className="font-7seg text-xl text-white/[0.04] leading-none absolute select-none pointer-events-none" aria-hidden>
           88:88:88
         </span>
         <span className="font-7seg text-xl text-white clock-glow leading-none relative">
           {time}
         </span>
-        {/* Indicador AM/PM al lado, vertical para imitar relojes despertadores */}
+
         <span
           className={`font-mono text-[9px] font-bold leading-none tracking-wider ml-0.5 relative ${
             period === 'AM' ? 'text-amber-300' : 'text-orange-400'
@@ -171,18 +161,15 @@ export default function WaiterPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [generalOrders, setGeneralOrders] = useState<Order[]>([]);
   const [myOrders, setMyOrders] = useState<Order[]>([]);
-  // Cards de "Mis Mesas" que el mesero ya confirmó/despachó (cancelaciones) — se ocultan
-  // aunque el backend siga devolviéndolas en my-orders (que trae todo lo no-Completed).
+
   const [dismissedOrderIds, setDismissedOrderIds] = useState<Set<number>>(new Set());
   const [stats, setStats] = useState<WaiterStats>({ totalSales: 0, totalTips: 0, totalAmount: 0, transactionCount: 0 });
   const [loading, setLoading] = useState(true);
-  // Guard de hidratación: la página es auth-gated (SSR sin token → render vacío). Mostramos el
-  // loader hasta montar en el cliente para evitar el mismatch (#418) que la dejaba en blanco al recargar.
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const [view, setView] = useState<'general' | 'my-tables' | 'plano'>('general');
-  // Cambios de mesa del host (vía /hubs/tables) → parchear la grilla principal al instante,
-  // sin depender del poll de 5s (que además se pausa con modales abiertos). PascalCase como el API.
+
   const handleTableEvent = useCallback((e: { tableId: number; status?: string }) => {
     if (!e.status) return;
     const pascal = e.status.charAt(0).toUpperCase() + e.status.slice(1).toLowerCase();
@@ -191,13 +178,12 @@ export default function WaiterPage() {
   const { data: floorPlanData, palette: floorPlanPalette, enabled: floorPlanEnabled } = useWaiterFloorPlan({ onTableEvent: handleTableEvent });
   const [planoSel, setPlanoSel] = useState<string | number | null>(null);
 
-  // Si el admin oculta el plano para meseros (switch en Gestión de Salón), salir de la pestaña Plano.
   useEffect(() => {
     if (!floorPlanEnabled && view === 'plano') setView('general');
   }, [floorPlanEnabled, view]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  // Estados del modal de cobro expandido
+
   const [pmMethod, setPmMethod] = useState('Cash');
   const [pmTipPct, setPmTipPct] = useState(0);
   const [pmCustomTip, setPmCustomTip] = useState('');
@@ -213,7 +199,7 @@ export default function WaiterPage() {
   const [pmMixedCard, setPmMixedCard] = useState('');
   const [pmMixedTransfer, setPmMixedTransfer] = useState('');
   const [pmProcessing, setPmProcessing] = useState(false);
-  // División por comensal: partes ya cobradas + suma cobrada + parte activa a cobrar.
+
   const [pmPaidParts, setPmPaidParts] = useState<number[]>([]);
   const [pmPaidAmount, setPmPaidAmount] = useState(0);
   const [pmPayPartIndex, setPmPayPartIndex] = useState(1);
@@ -221,40 +207,35 @@ export default function WaiterPage() {
   const [orderModalOrder, setOrderModalOrder] = useState<Order | null>(null);
   const [barOrdersRaw, setBarOrdersRaw] = useState<any[]>([]);
   const [identifiedTableId, setIdentifiedTableId] = useState<number | null>(null);
-  // WAITER-QR.1 — verificación de mesa desde modal de orden:
-  //   - tableId: mesa esperada (de la orden)
-  //   - tableNumber: número visible al usuario para mostrar en el modal
+
   const [qrVerifyContext, setQrVerifyContext] = useState<{ tableId: number; tableNumber: number | string } | null>(null);
-  // QR-MESA-DIRECT.1: mini-modal de confirmación al tap directo en mesa disponible
+
   const [confirmIdentifyTable, setConfirmIdentifyTable] = useState<{ id: number; tableNumber: number; zoneName: string } | null>(null);
   const [showVirtualTableCamera, setShowVirtualTableCamera] = useState(false);
   const [showVirtualTableModal, setShowVirtualTableModal] = useState(false);
   const [virtualTableIds, setVirtualTableIds] = useState<string>('');
   const [showMoveModal, setShowMoveModal] = useState<{ order: Order } | null>(null);
   const [moveTargetTableId, setMoveTargetTableId] = useState<number | null>(null);
-  // TAREA 5: transferencia de mesas por MULTI-SELECCIÓN con checks (reemplaza el modal anterior).
-  // `transferMode` = botón "TRANSFERIR MESAS" hundido/activo; mientras está activo, el click
-  // normal sobre una mesa queda SUSPENDIDO y en su lugar marca/desmarca la mesa.
+
   const [transferMode, setTransferMode] = useState(false);
   const [selectedTableIds, setSelectedTableIds] = useState<Set<number>>(new Set());
   const [transferToWaiterId, setTransferToWaiterId] = useState<number | null>(null);
   const [sendingTransfer, setSendingTransfer] = useState(false);
   const [waiterList, setWaiterList] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
-  // CHANGE-TABLE.2: "Cambiar de mesa" eliminado — funcionalidad redundante.
-  // El flujo "Mover comensal a otra mesa" en el modal de cada orden ya cubre el mismo caso.
+
   const [showManualOrderModal, setShowManualOrderModal] = useState(false);
   const [manualOrderTableId, setManualOrderTableId] = useState<number | null>(null);
   const [dishesForManual, setDishesForManual] = useState<any[]>([]);
   const [virtualTablesList, setVirtualTablesList] = useState<any[]>([]);
   const [showVirtualTableDetailsModal, setShowVirtualTableDetailsModal] = useState<any>(null);
-  // VT-PAY — mesa pagadora (al crear) + cobro unificado de mesa virtual
+
   const [vtPayerTableId, setVtPayerTableId] = useState<number | null>(null);
   const [showVtPayModal, setShowVtPayModal] = useState<{ vt: any; total: number; orderCount: number } | null>(null);
   const [vtPayMethod, setVtPayMethod] = useState<string>('Cash');
   const [vtPaying, setVtPaying] = useState(false);
   const [showMyOrderModal, setShowMyOrderModal] = useState(false);
-  // RES-DETAIL.3: Modal de detalles de reserva cuando waiter toca una mesa Reserved
+
   interface ReservedTableInfo {
     id: number;
     customerName: string;
@@ -266,26 +247,21 @@ export default function WaiterPage() {
     specialRequests?: string;
     tableNumber: number;
     zoneName: string;
-    // PARTE A: nombre del host (empleado) que aceptó la reserva
+
     createdByHostName?: string | null;
     preOrder?: { items: Array<{ dishName: string; quantity: number; notes?: string }> } | null;
   }
   const [reservedInfo, setReservedInfo] = useState<ReservedTableInfo | null>(null);
   const [loadingReservation, setLoadingReservation] = useState(false);
 
-  // TAREA 4: filtro waiter de UN SOLO DÍA (default = hoy) con mini-calendario.
-  // Reemplaza el antiguo rango DESDE→HASTA: ahora se marca como Reservada cualquier mesa
-  // con una reserva confirmada cuyo día coincida con `selectedDay`.
   const todayKey = new Date().toLocaleDateString('sv-SE');
   const [selectedDay, setSelectedDay] = useState<string>(todayKey);
   const [dpMonth, setDpMonth] = useState<Date>(() => new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [reservedTableIdsInRange, setReservedTableIdsInRange] = useState<Set<number>>(new Set());
-  // Se incrementa con cada evento de /hubs/reservations para re-disparar el cálculo del set
-  // (dominio reservas). NO toca el estado de mesa (eso viaja por /hubs/tables → TableStatusChanged).
+
   const [resVersion, setResVersion] = useState(0);
 
-  // Carga las reservas y computa el set de tableIds reservados ese día
   useEffect(() => {
     if (!selectedDay) {
       setReservedTableIdsInRange(new Set());
@@ -299,9 +275,9 @@ export default function WaiterPage() {
         const ids = new Set<number>();
         list.forEach((r: any) => {
           if (r.isCancelled) return;
-          if (!r.isConfirmed) return; // Solo cuenta reservas YA aceptadas por el host
+          if (!r.isConfirmed) return;
           if (!r.tableId) return;
-          // TAREA 4: igualdad de día (no rango)
+
           if (new Date(r.reservationDateTime).toLocaleDateString('sv-SE') === selectedDay) ids.add(r.tableId);
         });
         if (!cancelled) setReservedTableIdsInRange(ids);
@@ -312,10 +288,6 @@ export default function WaiterPage() {
     return () => { cancelled = true; };
   }, [selectedDay, resVersion]);
 
-  // Tiempo real (dominio RESERVAS): re-suscribe a /hubs/reservations SOLO para mantener
-  // sincronizado reservedTableIdsInRange. En cada cambio de reserva incrementa resVersion, lo que
-  // re-dispara el GET /api/tablereservation de arriba (la LISTA de reservas, no el plano). NO usa
-  // loadFloorPlan ni recarga: el estado de mesa sigue llegando por /hubs/tables (TableStatusChanged).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const token = localStorage.getItem('waiter_token');
@@ -346,40 +318,39 @@ export default function WaiterPage() {
   }, []);
   const [myOrderModalOrder, setMyOrderModalOrder] = useState<Order | null>(null);
   const [myOrderModalTab, setMyOrderModalTab] = useState<'kitchen' | 'bar'>('kitchen');
+
+  const [servingId, setServingId] = useState<number | null>(null);
+
+  const loadSeqRef = useRef(0);
   const [abandonConfirmOrder, setAbandonConfirmOrder] = useState<Order | null>(null);
-  // CLAIM-MODAL.1: estado del modal eliminado — el botón "Quedarme con esta Mesa" envía la solicitud directamente.
-  // tableIds donde el mesero tiene sesión reclamada (pin activo); se pierde al soltar
+
   const [claimedTableIds, setClaimedTableIds] = useState<Set<number>>(new Set());
-  // tableIds con solicitud de claim pendiente (esperando respuesta del admin)
-  // Inicializar desde sessionStorage para sobrevivir refresh/navegación interna
+
   const [pendingClaimTableIds, setPendingClaimTableIds] = useState<Set<number>>(() => {
     try {
       const stored = sessionStorage.getItem('pendingClaimTableIds');
       if (stored) return new Set<number>(JSON.parse(stored));
-    } catch { /* ignore */ }
+    } catch {  }
     return new Set<number>();
   });
-  // Shift state (turno auto-gestionado por login/logout)
+
   const [activeShift, setActiveShift] = useState<{ id: number; startTime: string; durationMinutes: number } | null>(null);
   const [selectedVTTableIndex, setSelectedVTTableIndex] = useState(0);
   const [notifToken, setNotifToken] = useState<string | null>(null);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
-  
-  // SignalR notifications
+
   const waiterId = user ? getUserId(user) : null;
   const { notifications, unreadCount, connected, markAllRead, markRead, dismiss, clearAll } = useWaiterNotifications({
     waiterId: waiterId ?? null,
     token: notifToken,
   });
 
-  // Sincronizar pendingClaimTableIds con sessionStorage cuando cambia
   useEffect(() => {
     try {
       sessionStorage.setItem('pendingClaimTableIds', JSON.stringify([...pendingClaimTableIds]));
-    } catch { /* ignore */ }
+    } catch {  }
   }, [pendingClaimTableIds]);
 
-  // ── Polling de respaldo: detecta claims aprobados/rechazados aunque SignalR falle ──
   const processedClaimIdsRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const pollClaims = async () => {
@@ -394,14 +365,14 @@ export default function WaiterPage() {
         const list: any[] = Array.isArray(res.data) ? res.data : [];
         for (const r of list) {
           if (processedClaimIdsRef.current.has(r.id)) continue;
-          if (r.status === 1 /* Approved */ && pendingClaimTableIds.has(r.tableId)) {
+          if (r.status === 1  && pendingClaimTableIds.has(r.tableId)) {
             processedClaimIdsRef.current.add(r.id);
             setClaimedTableIds(prev => new Set(prev).add(r.tableId));
             setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(r.tableId); return s; });
             toast(t('notifications.requestApproved', { table: r.tableNumber }), {
               duration: 8000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 700 }
             });
-          } else if (r.status === 2 /* Rejected */ && pendingClaimTableIds.has(r.tableId)) {
+          } else if (r.status === 2  && pendingClaimTableIds.has(r.tableId)) {
             processedClaimIdsRef.current.add(r.id);
             setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(r.tableId); return s; });
             toast(t('notifications.requestRejected', { table: r.tableNumber }), {
@@ -410,7 +381,7 @@ export default function WaiterPage() {
           }
         }
       } catch {
-        // silencioso — es un respaldo
+
       }
     };
 
@@ -422,14 +393,11 @@ export default function WaiterPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingClaimTableIds.size, user]);
 
-  // ── Respaldo de notificaciones por polling de estado ─────────────────────────
-  // Si SignalR no conecta, este useEffect detecta transiciones de estado en las
-  // órdenes y mesas cada vez que el polling de 5s actualiza los datos.
   const notifStateRef = useRef<{
-    kitchenReady: Set<number>;  // orderIds ya notificados
+    kitchenReady: Set<number>;
     barReady:     Set<number>;
-    billing:      Set<number>;  // tableIds ya notificados
-    customerFinished: Set<number>; // orderIds ya notificados (cliente terminó de comer)
+    billing:      Set<number>;
+    customerFinished: Set<number>;
     initialized:  boolean;
   }>({ kitchenReady: new Set(), barReady: new Set(), billing: new Set(), customerFinished: new Set(), initialized: false });
 
@@ -437,7 +405,7 @@ export default function WaiterPage() {
     const allOrders = [...myOrders, ...generalOrders];
 
     if (!notifStateRef.current.initialized) {
-      // Primera carga: registrar estado actual como línea base (no notificar)
+
       notifStateRef.current.initialized = true;
       for (const o of allOrders) {
         const oid: number = (o as any).id;
@@ -451,7 +419,6 @@ export default function WaiterPage() {
       return;
     }
 
-    // Detección de cocina/bar listos
     for (const o of allOrders) {
       const oid: number = (o as any).id;
       const tn: number  = (o as any).tableNumber ?? (o as any).TableNumber ?? 0;
@@ -473,8 +440,7 @@ export default function WaiterPage() {
           duration: 10000, style: { background: '#f3e8ff', color: '#6b21a8', fontWeight: 700 }
         });
       }
-      // Cliente terminó de comer — notificar SOLO al mesero que atiende esa orden.
-      // (Respaldo por polling: customer_finished es solo-SignalR y puede no llegar por el proxy.)
+
       const cf = !!((o as any).customerFinishedEating || (o as any).CustomerFinishedEating);
       const assignedTo = (o as any).assignedWaiterId ?? (o as any).AssignedWaiterId ?? null;
       if (cf && assignedTo === waiterId && !notifStateRef.current.customerFinished.has(oid)) {
@@ -483,13 +449,11 @@ export default function WaiterPage() {
           duration: 9000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 700 }
         });
       }
-      // Limpiar cuando ya fue servido para que futuras órdenes puedan notificar
+
       if (ks) notifStateRef.current.kitchenReady.delete(oid);
       if (bs) notifStateRef.current.barReady.delete(oid);
     }
 
-    // Rastrear estado de billing por polling (solo para limpieza del Set,
-    // el toast/notificación lo envía SignalR para evitar duplicados).
     for (const t of tables) {
       if (t.status !== 'Billing') {
         notifStateRef.current.billing.delete(t.id);
@@ -500,7 +464,6 @@ export default function WaiterPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myOrders, generalOrders, tables]);
 
-  // Mostrar toast cuando llega una notificación nueva (vía SignalR)
   const prevUnreadRef = useRef(0);
   useEffect(() => {
     if (unreadCount > prevUnreadRef.current && notifications.length > 0) {
@@ -512,8 +475,7 @@ export default function WaiterPage() {
       } else if (latest.type === 'billing_requested') {
         toast(`💳 ${latest.message}`, { duration: 8000, style: { background: '#fefce8', color: '#854d0e', fontWeight: 600 } });
       } else if (latest.type === 'claim_approved') {
-        // El admin aprobó: marcar la mesa como reclamada y quitar de pendientes
-        // Usamos latest.tableId (ID de DB) que es lo que almacena pendingClaimTableIds/claimedTableIds
+
         const tId = latest.tableId ?? Number(latest.tableNumber);
         if (tId) {
           setClaimedTableIds(prev => new Set(prev).add(tId));
@@ -521,7 +483,7 @@ export default function WaiterPage() {
         }
         toast(`✅ ${latest.message}`, { duration: 8000, style: { background: '#f0fdf4', color: '#166534', fontWeight: 700 } });
       } else if (latest.type === 'claim_rejected') {
-        // El admin rechazó: quitar de pendientes
+
         const tId = latest.tableId ?? Number(latest.tableNumber);
         if (tId) {
           setPendingClaimTableIds(prev => { const s = new Set(prev); s.delete(tId); return s; });
@@ -535,22 +497,19 @@ export default function WaiterPage() {
     prevUnreadRef.current = unreadCount;
   }, [unreadCount, notifications]);
 
-  // Ref para el intervalo de polling (no causa re-renders)
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldPollRef = useRef(true);
 
-  // Callbacks memoizados para QrScanner (evita re-crear funciones y desmontar el componente)
-  // WAITER-QR.1 — callback para verificar que el QR escaneado coincide con la mesa esperada (la de la orden)
   const handleQrVerifyTable = useCallback(async (tableIdOrQrCode: number | string) => {
     if (!qrVerifyContext) return;
     let scannedTableId: number | null = null;
 
     if (typeof tableIdOrQrCode === 'number') {
-      // Si es número, ya es tableNumber o tableId
+
       const tbl = tables.find(tb => tb.tableNumber === tableIdOrQrCode || tb.id === tableIdOrQrCode);
       scannedTableId = tbl?.id ?? tableIdOrQrCode;
     } else {
-      // Es GUID, resolver a tableId vía API
+
       try {
         const token = localStorage.getItem('waiter_token');
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -579,12 +538,11 @@ export default function WaiterPage() {
 
   const handleQrScanVirtual = useCallback(async (tableIdOrQrCode: number | string) => {
     let tableNumber: number;
-    
-    // Si es número, usar directamente
+
     if (typeof tableIdOrQrCode === 'number') {
       tableNumber = tableIdOrQrCode;
     } else {
-      // Es un GUID, buscar mesa por qrCode
+
       try {
         const token = localStorage.getItem('waiter_token');
         if (token) {
@@ -605,7 +563,7 @@ export default function WaiterPage() {
         return;
       }
     }
-    
+
     setVirtualTableIds(prev => {
       const parts = prev.split(/[\s,]+/).filter(Boolean);
       if (parts.includes(String(tableNumber))) return prev;
@@ -627,11 +585,10 @@ export default function WaiterPage() {
       const token = localStorage.getItem('waiter_token');
       if (!token) return;
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
+
       await api.put(`/api/virtualtable/${vtId}/deactivate`);
       toast.success(t('virtualTable.undoSuccess'));
-      
-      // Recargar datos
+
       await loadVirtualTables();
       await loadData(getUserId(user));
     } catch (e: any) {
@@ -676,12 +633,10 @@ export default function WaiterPage() {
     }
   };
 
-  // Efecto para pausar/reanudar polling cuando se abre/cierra la cámara
   useEffect(() => {
     shouldPollRef.current = !showVirtualTableCamera;
   }, [showVirtualTableCamera]);
 
-  // Bloquear scroll del body cuando hay modales abiertos (efecto único: considera todos los modales)
   useEffect(() => {
     const hasModal = showPaymentModal || showOrderModal || showVirtualTableModal || showMoveModal || showManualOrderModal || showMyOrderModal;
     if (hasModal) {
@@ -694,7 +649,6 @@ export default function WaiterPage() {
     };
   }, [showPaymentModal, showOrderModal, showVirtualTableModal, showMoveModal, showManualOrderModal, showMyOrderModal]);
 
-  // TAREA 5: el modo transferencia sólo aplica en "Mis Mesas"; salir de esa vista lo cancela.
   useEffect(() => {
     if (view !== 'my-tables' && transferMode) exitTransferMode();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -725,7 +679,7 @@ export default function WaiterPage() {
       let resolvedUser: any;
       try {
         const { data: currentUser } = await api.get('/api/auth/me');
-        
+
         if (currentUser && (currentUser.id != null || currentUser.Id != null)) {
           resolvedUser = currentUser;
           setUser(currentUser);
@@ -756,41 +710,34 @@ export default function WaiterPage() {
         return;
       }
       await Promise.all([loadData(waiterId), loadVirtualTables()]);
-      // Load shift status
+
       try {
         const shiftRes = await api.get(`/api/waitershift/active/${waiterId}`);
         if (shiftRes.data?.hasActiveShift) {
           setActiveShift({ id: shiftRes.data.id, startTime: shiftRes.data.startTime, durationMinutes: shiftRes.data.durationMinutes });
         }
-      } catch { /* ignore */ }
+      } catch {  }
 
-      // ── Restaurar solicitudes de claim pendientes desde la base de datos ──────
-      // Esto garantiza que al refrescar o cambiar de tab, el estado "Solicitud pendiente"
-      // se muestre correctamente aunque React haya perdido el estado en memoria.
       try {
         const claimRes = await api.get(`/api/tableclaim/history?waiterId=${waiterId}`);
         const claimList: any[] = Array.isArray(claimRes.data) ? claimRes.data : [];
 
-        // Pre-marcar todos los claims YA resueltos (no-pendientes) como procesados.
-        // Esto evita que el polling de respaldo los tome como "nuevos" al arrancar.
         claimList
-          .filter(r => r.status !== 0 /* cualquiera que no sea Pending */)
+          .filter(r => r.status !== 0 )
           .forEach(r => processedClaimIdsRef.current.add(r.id));
 
-        // Restaurar solo los realmente pendientes al state.
-        // El backend es la fuente de verdad — reemplaza lo que había en sessionStorage.
         const stillPending = claimList
-          .filter(r => r.status === 0 /* Pending */)
+          .filter(r => r.status === 0 )
           .map(r => r.tableId as number);
-        // Siempre sincronizar (incluyendo vacío) para limpiar datos obsoletos del sessionStorage
+
         setPendingClaimTableIds(new Set(stillPending));
-      } catch { /* ignore — no crítico */ }
+      } catch {  }
 
       setLoading(false);
-      if (cancelled) return; // El componente se desmontó durante los awaits — no crear el interval
+      if (cancelled) return;
       pollingIntervalRef.current = setInterval(() => {
         if (!shouldPollRef.current) {
-          return; // Pausar si la cámara está abierta
+          return;
         }
         const u = JSON.parse(localStorage.getItem('waiter_user') || '{}');
         const id = getUserId(u);
@@ -813,7 +760,6 @@ export default function WaiterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // RES-DETAIL.3: cargar la reserva próxima/activa de una mesa Reserved
   async function openReservedTableInfo(tableId: number) {
     setLoadingReservation(true);
     setReservedInfo(null);
@@ -821,12 +767,12 @@ export default function WaiterPage() {
       const res = await api.get('/api/tablereservation');
       const list: any[] = Array.isArray(res.data) ? res.data : [];
       const now = Date.now();
-      // Buscar la reserva confirmada más próxima (futura o reciente) para esta mesa
+
       const candidate = list
         .filter(r => r.tableId === tableId)
-        .filter(r => !r.isCancelled && r.isConfirmed) // Solo reservas YA aceptadas por el host
+        .filter(r => !r.isCancelled && r.isConfirmed)
         .map(r => ({ ...r, _ts: new Date(r.reservationDateTime).getTime() }))
-        .filter(r => r._ts > now - 4 * 3600000) // descarta reservas viejas (4h)
+        .filter(r => r._ts > now - 4 * 3600000)
         .sort((a, b) => Math.abs(a._ts - now) - Math.abs(b._ts - now))[0];
       if (!candidate) {
         toast.error(t('reservation.noActiveReservation'));
@@ -847,6 +793,7 @@ export default function WaiterPage() {
       return;
     }
 
+    const seq = ++loadSeqRef.current;
     try {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
@@ -857,9 +804,10 @@ export default function WaiterPage() {
         api.get(`/api/payment/waiter-stats/${waiterId}`)
       ]);
 
+      if (seq !== loadSeqRef.current) return;
+
       const unassigned = Array.isArray(unassignedRes.data) ? unassignedRes.data : (unassignedRes.data?.data ?? []);
       const myOrdersList = Array.isArray(myOrdersRes.data) ? myOrdersRes.data : (myOrdersRes.data?.data ?? []);
-
 
       setTables(Array.isArray(tablesRes.data) ? tablesRes.data : tablesRes.data?.data ?? []);
       setGeneralOrders(unassigned);
@@ -867,6 +815,49 @@ export default function WaiterPage() {
       setStats(statsRes?.data ?? { totalSales: 0, totalTips: 0, totalAmount: 0, transactionCount: 0 });
     } catch (error: any) {
       console.error('Error loading data:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!showMyOrderModal || !myOrderModalOrder) return;
+    const openId = getOrderId(myOrderModalOrder);
+    const fresh = myOrders.find((o: any) => getOrderId(o) === openId);
+    if (fresh && fresh !== myOrderModalOrder) setMyOrderModalOrder(fresh);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myOrders, showMyOrderModal]);
+
+  const serveAll = async (order: Order) => {
+    if (!user) return;
+    const orderId = getOrderId(order);
+    if (servingId === orderId) return;
+    const items = (order as any).items ?? [];
+    const hasFood = items.some((i: any) => !itemIsDrink(i));
+    const hasDrinks = items.some((i: any) => itemIsDrink(i));
+    const kServed = (order as any).kitchenServed ?? (order as any).KitchenServed ?? false;
+    const bServed = (order as any).barServed ?? (order as any).BarServed ?? false;
+
+    setServingId(orderId);
+    try {
+      let done = 0;
+      const errors: string[] = [];
+      if (hasFood && !kServed) {
+        try { await api.put(`/api/order/${orderId}/kitchen-served`); done++; }
+        catch (e: any) { errors.push(e?.response?.data?.error ?? 'cocina'); }
+      }
+      if (hasDrinks && !bServed) {
+        try { await api.put(`/api/order/${orderId}/bar-served`); done++; }
+        catch (e: any) { errors.push(e?.response?.data?.error ?? 'bar'); }
+      }
+      if (errors.length > 0) {
+        toast.error(errors[0]);
+      } else if (done > 0) {
+        toast.success(t('orders.markServedSuccess'));
+      }
+      await loadData(getUserId(user));
+      loadVirtualTables();
+    } finally {
+      setServingId(null);
     }
   };
 
@@ -901,7 +892,7 @@ export default function WaiterPage() {
   };
 
   const loadVirtualTables = async () => {
-    // Intentar obtener user del estado, si no del localStorage
+
     let currentUser = user;
     if (!currentUser || (!currentUser.id && !currentUser.Id)) {
       const userData = localStorage.getItem('waiter_user');
@@ -909,7 +900,7 @@ export default function WaiterPage() {
         currentUser = JSON.parse(userData);
       }
     }
-    
+
     const uid = getUserId(currentUser);
 
     if (!uid) {
@@ -923,7 +914,7 @@ export default function WaiterPage() {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       const res = await api.get(`/api/virtualtable/waiter/${uid}`);
       const list = Array.isArray(res.data) ? res.data : [];
-      setVirtualTablesList([...list]); // Crear nueva referencia para forzar re-render
+      setVirtualTablesList([...list]);
 
     } catch (error: any) {
       setVirtualTablesList([]);
@@ -942,28 +933,26 @@ export default function WaiterPage() {
       toast.error(t('virtualTable.minTwoAlert'), { duration: 4000 });
       return;
     }
-    
-    // VALIDACIÓN PREVIA: Verificar si alguna mesa ya está en una mesa virtual
+
     const tableObjects = ids
       .map(id => tables.find(tb => tb.tableNumber === id || tb.id === id))
       .filter((t): t is Table => t != null);
-    
+
     if (tableObjects.length !== ids.length) {
       const missingIds = ids.filter(id => !tableObjects.some(tb => tb?.tableNumber === id || tb?.id === id));
       toast.error(t('virtualTable.tablesNotFound', { ids: missingIds.join(', ') }), { duration: 4000 });
       return;
     }
-    
-    // Verificar si alguna mesa ya está en una mesa virtual activa
+
     const tableIdsSet = new Set(tableObjects.map(t => t!.id));
-    const alreadyInVirtual = virtualTablesList.flatMap(vt => 
-      (vt.tables || vt.Tables || []).map((t: any) => ({ 
-        tableId: t.id || t.Id, 
+    const alreadyInVirtual = virtualTablesList.flatMap(vt =>
+      (vt.tables || vt.Tables || []).map((t: any) => ({
+        tableId: t.id || t.Id,
         tableNumber: t.tableNumber || t.TableNumber,
-        vtName: vt.name || vt.Name 
+        vtName: vt.name || vt.Name
       }))
     ).filter(t => tableIdsSet.has(t.tableId));
-    
+
     if (alreadyInVirtual.length > 0) {
       const tableNumbers = alreadyInVirtual.map(t => `#${t.tableNumber}`).join(', ');
       const vtNames = [...new Set(alreadyInVirtual.map(t => t.vtName))].join(', ');
@@ -973,14 +962,9 @@ export default function WaiterPage() {
       );
       return;
     }
-    
-    // NOTA: Antes se bloqueaban las mesas ocupadas. Ahora SÍ se permite unir mesas
-    // con cliente/orden activa — el backend conserva y unifica sus órdenes en la
-    // vista de la mesa virtual. Se mantiene el resto de validaciones (mín 2, etc.).
 
-    // tableObjects ya está definido arriba
     const tableIdList = tableObjects.map(t => t!.id);
-    
+
     if (tableIdList.length < 2) {
       toast.error(t('virtualTable.minTwoValid'));
       return;
@@ -992,64 +976,56 @@ export default function WaiterPage() {
         toast.error(t('virtualTable.noAuthToken'));
         console.error('❌ No hay token');
         return;
-      }  
+      }
       const uid = getUserId(user);
       if (!uid || uid === 0 || Number.isNaN(uid)) {
         toast.error(t('virtualTable.invalidUser', { id: uid }));
         console.error('❌ No hay user ID válido:', uid);
         return;
       }
-      
-      // Crear nombre descriptivo: V(Zona) #1, #2, #3
+
       const zones = [...new Set(tableObjects.map(t => t.zoneName || 'Sin Zona'))].filter(Boolean);
       const tableNumbers = tableObjects.map(t => `#${t.tableNumber}`).join(', ');
-      const virtualTableName = zones.length > 0 
-        ? `V${zones.join('/')} ${tableNumbers}` 
+      const virtualTableName = zones.length > 0
+        ? `V${zones.join('/')} ${tableNumbers}`
         : `V ${tableNumbers}`;
-      
+
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
+
       const payload = {
         name: virtualTableName,
         createdByWaiterId: uid,
         tableIds: tableIdList,
         payerTableId: vtPayerTableId ?? tableIdList[0],
       };
-      
+
       const response = await api.post('/api/virtualtable', payload);
-      
+
       toast.success(t('virtualTable.createdSuccess', { name: virtualTableName }));
-      
-      // Cerrar modal y limpiar
+
       setShowVirtualTableModal(false);
       setVirtualTableIds('');
       setShowVirtualTableCamera(false);
-      
-      // Delay para asegurar que el backend terminó de guardar
+
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Forzar re-fetch con timestamp para evitar cache
+
       const timestamp = Date.now();
       api.defaults.headers.common['X-Refresh'] = timestamp.toString();
-      
-      // Recargar en orden específico
+
       await loadData(uid);
-      
+
       await loadVirtualTables();
-      
-      // Esperar un tick para que React procese los cambios de estado
+
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Cambiar a vista "Mis Mesas" DESPUÉS de cargar todo
+
       setView('my-tables');
-      
+
     } catch (e: any) {
       console.error('❌ Error completo al crear mesa virtual:', e);
       console.error('❌ Error response:', e?.response);
       console.error('❌ Error response data:', e?.response?.data);
       const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || t('virtualTable.createError');
-      
-      // Mostrar error de manera más visible
+
       if (errorMsg.includes('ya están en otra mesa virtual') || errorMsg.includes('ya están ocupadas')) {
         toast.error(`⚠️ ${errorMsg}`, { duration: 6000 });
       } else {
@@ -1058,7 +1034,6 @@ export default function WaiterPage() {
     }
   };
 
-  // VT-PAY — abrir modal de cobro unificado (calcula el total del grupo)
   const openVtPay = async (vt: any) => {
     const vtId = vt?.id ?? vt?.Id;
     if (!vtId) return;
@@ -1114,10 +1089,6 @@ export default function WaiterPage() {
     }
   };
 
-  // CHANGE-TABLE.2: funciones eliminadas — se usa "Mover comensal a otra mesa" del modal de orden.
-
-  // TAREA 5 — Modo transferencia (multi-selección con checks) ────────────────
-  // Entrar/salir del modo. Al entrar cargamos la lista de meseros destino.
   const enterTransferMode = () => {
     setTransferMode(true);
     setSelectedTableIds(new Set());
@@ -1138,9 +1109,6 @@ export default function WaiterPage() {
     });
   };
 
-  // Confirma la transferencia de TODAS las mesas seleccionadas al mesero destino.
-  // El endpoint /api/tabletransfer ya acepta `tableIds` como arreglo, así que un solo
-  // POST en lote cubre todas las mesas. El mesero destino deberá aceptarlas.
   const confirmTransferSelected = async () => {
     const tableIds = [...selectedTableIds];
     if (tableIds.length === 0 || !transferToWaiterId) {
@@ -1199,7 +1167,7 @@ export default function WaiterPage() {
     const orderId = getOrderId(order);
     const waiterId = getUserId(user);
     try {
-      // assign-waiter ya pone la orden en Confirmed y la asigna al mesero; evita doble request que podía dejar la mesa en General
+
       await api.put(`/api/order/${orderId}/assign-waiter/${waiterId}`);
       toast.success(t('orders.confirmed'));
       await loadData(waiterId);
@@ -1223,7 +1191,6 @@ export default function WaiterPage() {
     }
   };
 
-  /** Marcar todas las órdenes Ready de la mesa como servidas (por mesa completa). */
   const markTableAsServed = async (orders: Order[]) => {
     const readyOrders = orders.filter(o => (o as any).status === 'Ready' || (o as any).Status === 'Ready');
     if (readyOrders.length === 0) {
@@ -1243,7 +1210,6 @@ export default function WaiterPage() {
     }
   };
 
-  // Carga las partes YA cobradas (división por comensal) de una orden, desde el backend.
   const loadPaidParts = async (orderId: number) => {
     try {
       const res = await api.get(`/api/payment/order/${orderId}`);
@@ -1251,9 +1217,7 @@ export default function WaiterPage() {
       const completed = rows.filter(p => p.status === 'Completed');
       const bc = completed.filter(p => p.billSplitType === 'ByComensal' && p.splitPartIndex != null);
       setPmPaidParts(bc.map(p => Number(p.splitPartIndex)));
-      // Total YA cobrado por CUALQUIER método/split (no solo ByComensal). Se descuenta del
-      // monto a cobrar para no re-cobrar el total completo cuando se agregaron ítems a una
-      // orden ya pagada → el backend rechazaba por sobrepago y el cobro quedaba "congelado".
+
       setPmPaidAmount(completed.reduce((s, p) => s + Number(p.amount ?? 0), 0));
     } catch {
       setPmPaidParts([]);
@@ -1263,7 +1227,7 @@ export default function WaiterPage() {
 
   const openPaymentModal = (order: Order) => {
     setSelectedOrder(order);
-    // Pre-cargar preferencias del cliente
+
     const o = order as any;
     const clientMethod = o.clientRequestedPaymentMethod ?? o.ClientRequestedPaymentMethod ?? 'Cash';
     const orderTotalForModal = Number(o.total ?? o.totalAmount ?? 0);
@@ -1286,7 +1250,7 @@ export default function WaiterPage() {
     setPmPaidAmount(0);
     setPmPayPartIndex(1);
     loadPaidParts(getOrderId(order));
-    // Si el cliente pidió Mixto, pre-rellenar el monto completo en efectivo como punto de partida
+
     if (clientMethod === 'Mixed') {
       setPmMixedCash(orderTotalForModal > 0 ? orderTotalForModal.toFixed(2) : '');
       setPmMixedCard('');
@@ -1308,14 +1272,13 @@ export default function WaiterPage() {
       const orderTotal = Number((order as any).total ?? (order as any).totalAmount ?? 0);
       const orderItems: any[] = (order as any).items ?? [];
 
-      // Calcular la porción a cobrar según split
       const taxRate = orderTotal > 0 ? (Number((order as any).tax ?? 0) / (Number((order as any).subtotal ?? 1) || 1)) : 0.18;
-      // Saldo pendiente = total − lo ya cobrado (evita el sobrepago que congelaba el cobro).
+
       let myPortion = Math.max(0, orderTotal - pmPaidAmount);
       if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
         const equalShareBC = Math.round((orderTotal / pmSplitParts) * 100) / 100;
         const unpaidBC = Array.from({ length: pmSplitParts }, (_, i) => i + 1).filter(n => !pmPaidParts.includes(n));
-        // La última parte por cobrar salda el remanente exacto (evita drift de redondeo).
+
         myPortion = unpaidBC.length <= 1 ? Math.round((orderTotal - pmPaidAmount) * 100) / 100 : equalShareBC;
       } else if (pmSplitType === 'ByTime') {
         myPortion = pmByTimePayPart === 1 ? (parseFloat(pmByTimePart1) || 0) : (parseFloat(pmByTimePart2) || 0);
@@ -1341,10 +1304,6 @@ export default function WaiterPage() {
         myPortion = catTotals[pmPayCategory] ?? 0;
       }
 
-      // Propina del mesero — sobre la PORCION cobrada (myPortion), la MISMA base
-      // que muestra el modal. Antes se calculaba sobre el total de la orden ANTES
-      // del split: la UI mostraba RD$100 y el backend recibia RD$300 (y en
-      // ByComensal cada parte volvia a enviar la propina completa).
       const tipAmt = pmTipPct > 0
         ? myPortion * (pmTipPct / 100)
         : (pmCustomTip ? parseFloat(pmCustomTip) || 0 : 0);
@@ -1387,7 +1346,7 @@ export default function WaiterPage() {
       const res = await api.post('/api/payment/collect', body);
       const ordenSaldada = res?.data?.completed !== false;
       if (pmSplitType === 'ByComensal' && !ordenSaldada) {
-        // Pago parcial por comensal: refrescar partes y MANTENER el modal abierto.
+
         toast.success(res?.data?.message ?? t('payment.paymentPartial'));
         await loadPaidParts(orderId);
         loadData(getUserId(user));
@@ -1410,7 +1369,7 @@ export default function WaiterPage() {
     try {
       await api.put(`/api/table/${tableId}/status`, { newStatus: 'Available' });
       toast.success(t('tables.releaseTable'));
-      // Actualización optimista: marcar la mesa como Available en la UI de inmediato
+
       setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: 'Available' } : t));
       await loadData(getUserId(user));
     } catch (err: any) {
@@ -1419,12 +1378,6 @@ export default function WaiterPage() {
     }
   };
 
-  // BUG-2 FIX — la card Served/Completed ya no tiene callejones sin salida:
-  //  - Served sin cobrar: el botón abre el modal de COBRO (cobrar es lo que la
-  //    completa en el backend y libera la mesa) en vez de quedarse disabled.
-  //  - Served ya cobrada (edge: pagos por otras vías): PUT status→Completed — el
-  //    backend libera la mesa + cierra la sesión + la saca de my-orders.
-  //  - Completed (mesa en Cleaning): solo libera la mesa (comportamiento previo).
   const completeAndRelease = async (order: Order) => {
     if (!user) return;
     const oid = getOrderId(order);
@@ -1444,10 +1397,6 @@ export default function WaiterPage() {
     }
   };
 
-  // BUG-1 FIX — confirmar una cancelación: la mesa ya se libera en el backend al
-  // cancelar (Pending/Confirmed), pero my-orders sigue devolviendo la orden Cancelled
-  // (trae todo lo no-Completed) y la card quedaba pegada sin acción. Esto asegura la
-  // mesa Available y la saca de "Mis Mesas" (dismiss local, resistente al re-fetch).
   const confirmCancellation = async (order: Order) => {
     const oid = getOrderId(order);
     const tableId = (order as any).tableId ?? (order as any).TableId;
@@ -1475,13 +1424,13 @@ export default function WaiterPage() {
   };
 
   const handleLogout = async () => {
-    // SHIFT — cerrar el turno activo antes de salir (turno auto-gestionado por login/logout).
+
     try {
       const token = localStorage.getItem('waiter_token');
       if (activeShift?.id && token) {
         await api.put(`/api/waitershift/${activeShift.id}/end`, { unassignOrders: false }, { headers: { Authorization: `Bearer ${token}` } });
       }
-    } catch { /* no bloquear el logout si falla el cierre del turno */ }
+    } catch {  }
     localStorage.removeItem('waiter_token');
     localStorage.removeItem('waiter_user');
     window.location.href = '/login';
@@ -1498,7 +1447,6 @@ export default function WaiterPage() {
     );
   }
 
-  // Bar KDS separado: personal de bar usa admin-panel /bar. Waiter App solo muestra flujo de mesero (nunca entra aquí).
   if (user && isBartender(user)) {
     const getOrderStatus = (o: any) => o?.status ?? o?.Status ?? '';
     const getOrderItems = (o: any) => o?.items ?? o?.Items ?? [];
@@ -1614,17 +1562,18 @@ export default function WaiterPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-            {/* IZQUIERDA: título + Ventas/Propinas */}
+
             <div className="flex flex-wrap items-center gap-3 sm:gap-5">
-              <div>
+
+              <div data-watch-hide>
                 <h1 className="text-2xl font-bold text-gray-900">{t('header.title')}</h1>
                 <p className="text-sm text-gray-600">{t('header.welcome', { name: user?.firstName || user?.name || 'Usuario' })}</p>
               </div>
-              {/* Estadísticas */}
+
               <div className="flex gap-2 sm:gap-4">
                 <div className="bg-green-50 px-4 py-2 rounded-lg">
                   <p className="text-xs text-green-600 font-medium">{t('header.sales')}</p>
@@ -1636,9 +1585,9 @@ export default function WaiterPage() {
                 </div>
               </div>
             </div>
-            {/* DERECHA: campana + En turno + reloj + Salir, alineados al borde derecho */}
+
             <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-              {/* Campana de notificaciones */}
+
               <button
                 onClick={() => { setShowNotifPanel(v => !v); if (!showNotifPanel) markAllRead(); }}
                 className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -1652,8 +1601,6 @@ export default function WaiterPage() {
                 )}
               </button>
 
-              {/* SHIFT — turno auto-gestionado por login/logout. Sin botón de cerrar:
-                  el admin ve el "tiempo en turno" en el módulo de Usuarios. */}
               {activeShift && (
                 <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-semibold">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
@@ -1661,11 +1608,11 @@ export default function WaiterPage() {
                 </span>
               )}
 
-              {/* Reloj digital — movido a la derecha, antes de Salir */}
-              <DigitalClock />
-              <LanguageSwitcher />
+              <span className="contents" data-watch-hide><DigitalClock /></span>
+              <span className="contents" data-watch-hide><LanguageSwitcher /></span>
 
               <button
+                data-watch-hide
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
@@ -1677,8 +1624,6 @@ export default function WaiterPage() {
         </div>
       </div>
 
-
-      {/* Panel de notificaciones */}
       {showNotifPanel && (
         <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col">
           <div className="flex items-center justify-between px-5 py-4 border-b bg-gray-50">
@@ -1743,7 +1688,6 @@ export default function WaiterPage() {
         <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowNotifPanel(false)} />
       )}
 
-      {/* View Toggle + Acciones */}
       <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3">
         <div className="bg-white rounded-lg shadow p-1 inline-flex">
           <button
@@ -1752,13 +1696,8 @@ export default function WaiterPage() {
               view === 'general' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            {t('nav.generalTables', { count: (() => {
-              const vtTableIds = virtualTablesList.flatMap((vt: any) => {
-                const vtTables = Array.isArray(vt?.tables) ? vt.tables : (Array.isArray(vt?.Tables) ? vt.Tables : []);
-                return vtTables.map((tbl: any) => tbl?.id ?? tbl?.Id);
-              });
-              return generalOrders.filter(o => !vtTableIds.includes((o as any).tableId ?? (o as any).TableId)).length;
-            })() })}
+
+            {t('nav.generalTables')}
           </button>
           <button
             onClick={() => setView('my-tables')}
@@ -1779,22 +1718,16 @@ export default function WaiterPage() {
             </button>
           )}
         </div>
-        {/* QR-MESA-DIRECT.1: botón "Identificar mesa por QR" eliminado.
-            La identificación se hace tap directo en la card de la mesa (vista Mesas General). */}
+
         <button
+          data-watch-hide
           onClick={() => { setShowVirtualTableModal(true); loadVirtualTables(); }}
           className="ml-auto flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
         >
           <Users className="w-5 h-5" />
           {t('nav.createVirtualTable')}
         </button>
-        {/* CHANGE-TABLE.2: botón eliminado — "Mover comensal a otra mesa" del modal de orden ya cubre el caso. */}
-        {/* Transferir mesas — visible SOLO en la vista "Mis Mesas" (un waiter no transfiere mesas
-            que aún no le pertenecen). Si hay transferencias PENDIENTES dirigidas a este waiter,
-            mostramos un botón ALERT igual en "Mesas General" para que pueda aceptarlas — UX safety. */}
-        {/* TAREA 5: en "Mis Mesas" este botón ENTRA/SALE del modo transferencia (multi-selección
-            con checks sobre las tarjetas). En "Mesas General" sólo alerta de transferencias
-            pendientes por aceptar (el panel inferior las acepta/rechaza). */}
+
         {view === 'my-tables' ? (
           <button
             type="button"
@@ -1823,7 +1756,6 @@ export default function WaiterPage() {
           </button>
         ) : null}
 
-        {/* TAREA 4: Filtro de reservas de UN SOLO DÍA con mini-calendario (default = hoy). */}
         {(() => {
           const isCustomDay = selectedDay !== todayKey;
           const dayLabel = selectedDay
@@ -1863,10 +1795,10 @@ export default function WaiterPage() {
               </button>
               {showDatePicker && (
                 <>
-                  {/* backdrop para cerrar al hacer click fuera */}
+
                   <div className="fixed inset-0 z-40" onClick={() => setShowDatePicker(false)} />
                   <div className="absolute right-0 mt-2 z-50 w-72 border border-gray-200 rounded-xl p-3 bg-white shadow-xl">
-                    {/* Header con navegación de mes */}
+
                     <div className="flex items-center justify-between mb-2">
                       <button
                         type="button"
@@ -1888,13 +1820,13 @@ export default function WaiterPage() {
                         <ChevronRight className="w-4 h-4 text-slate-600" />
                       </button>
                     </div>
-                    {/* Labels de día de la semana */}
+
                     <div className="grid grid-cols-7 mb-1">
                       {['D','L','M','M','J','V','S'].map((d, i) => (
                         <span key={i} className="text-center text-[10px] font-bold text-slate-400 uppercase py-1">{d}</span>
                       ))}
                     </div>
-                    {/* Grid de días (tablet-friendly: h-10) */}
+
                     <div className="grid grid-cols-7 gap-0.5">
                       {(() => {
                         const year = dpMonth.getFullYear();
@@ -1960,7 +1892,6 @@ export default function WaiterPage() {
         )}
       </div>
 
-      {/* Transferencias pendientes (aceptar/rechazar) */}
       {pendingTransfers.length > 0 && (
         <div className="max-w-7xl mx-auto px-4 pb-2">
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -1978,7 +1909,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Vista mesa identificada por QR: pedidos en tiempo real + pedido manual */}
       {identifiedTableId != null && (
         <div className="max-w-7xl mx-auto px-4 pb-4">
           <div className="bg-white rounded-lg shadow border-2 border-indigo-200 p-4">
@@ -2015,10 +1945,9 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Orders */}
       <div className="max-w-7xl mx-auto px-4 pb-8">
         {view === 'plano' ? (
-          // Vista Plano del salón (solo lectura) — click en mesa → ver el pedido
+
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">{t('tables.floorPlan')}</h2>
@@ -2050,36 +1979,33 @@ export default function WaiterPage() {
             </div>
           </div>
         ) : view === 'general' ? (
-          // Vista Mesas General
+
           <div className="space-y-6">
-            {/* Todas las Mesas: solo mesas sin orden asignada a mí (las mías aparecen en "Mis Mesas") */}
+
             <div>
               {(() => {
-                // Obtener IDs de mesas que están en mesas virtuales
+
                 const virtualTableIds = virtualTablesList.flatMap(vt => {
                   const vtTables = Array.isArray(vt?.tables) ? vt.tables : (Array.isArray(vt?.Tables) ? vt.Tables : []);
                   return vtTables.map((t: any) => t?.id ?? t?.Id);
                 });
-                
-                
+
                 const tablesNotMine = tables.filter(t => {
                   const inMyOrders = myOrders.some(o => String(o.tableNumber) === String(t.tableNumber));
                   const inVirtualTable = virtualTableIds.includes(t.id);
                   return !inMyOrders && !inVirtualTable;
                 });
-                
-                
+
                 return (
                   <>
               <h2 className="text-xl font-bold text-gray-900 mb-4">
                 {t('tables.allTables', { count: tablesNotMine.length })}
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="watch-cols grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {tablesNotMine.map((table) => {
                   const unassignedOrder = generalOrders.find(o => String(o.tableNumber) === String(table.tableNumber));
                   const hasUnassigned = !!unassignedOrder;
 
-                  // RES-RANGE: override Reserved si está en el set del filtro de fechas
                   const isReservedInRange = reservedTableIdsInRange.has(table.id);
                   const effectiveStatus = isReservedInRange ? 'Reserved' : table.status;
                   return (
@@ -2097,10 +2023,10 @@ export default function WaiterPage() {
                           setOrderModalOrder(unassignedOrder);
                           setShowOrderModal(true);
                         } else if (effectiveStatus === 'Reserved') {
-                          // RES-DETAIL.3: abrir popup con datos del cliente reservante
+
                           openReservedTableInfo(table.id);
                         } else if (effectiveStatus === 'Available') {
-                          // QR-MESA-DIRECT.1: tap directo → confirmar identificación de mesa
+
                           setConfirmIdentifyTable({ id: table.id, tableNumber: table.tableNumber, zoneName: table.zoneName });
                         }
                       }}
@@ -2139,12 +2065,12 @@ export default function WaiterPage() {
             </div>
           </div>
         ) : (
-          // Vista Mis Mesas (Asignadas)
+
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {t('tables.myAssigned')}
             </h2>
-            {/* TAREA 5: banda de ayuda mientras el modo transferencia está activo */}
+
             {transferMode && (
               <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 flex items-center gap-2 text-sm text-teal-800">
                 <Share2 className="w-4 h-4 flex-shrink-0" />
@@ -2152,20 +2078,18 @@ export default function WaiterPage() {
               </div>
             )}
             {(() => {
-              // Filtrar órdenes que NO estén en mesas virtuales
+
               const virtualTableIds = virtualTablesList.flatMap(vt => {
                 const vtTables = Array.isArray(vt?.tables) ? vt.tables : (Array.isArray(vt?.Tables) ? vt.Tables : []);
                 return vtTables.map((t: any) => t?.id ?? t?.Id);
               });
-              
-              
+
               const filteredMyOrders = myOrders.filter(o => {
                 const tId = (o as any).tableId ?? (o as any).TableId;
                 const isInVirtual = virtualTableIds.includes(tId);
                 return !isInVirtual && !dismissedOrderIds.has(getOrderId(o));
               });
-              
-              
+
               return filteredMyOrders.length === 0 ? (
                 <div className="bg-white rounded-lg shadow p-8 text-center">
                   <Utensils className="w-12 h-12 text-gray-400 mx-auto mb-2" />
@@ -2184,29 +2108,23 @@ export default function WaiterPage() {
                     const readyToServe = (kitchenReady || !hasFoodItems) && (barReady || !hasDrinkItems);
                     const isPaid = (order as Order).paymentCollectedByWaiter || order.status === 'Completed';
 
-                    // ── Eventos/notificaciones del comensal (avisos destacados) ──────────
-                    // No dependen de order.items (que puede venir vacío en myOrders).
-                    // 1) "Pidió la cuenta": señal más confiable = estado de la MESA en 'Billing'
-                    //    (se cruza `tables` por tableNumber). Refuerzo: el order trae método de
-                    //    pago solicitado por el cliente (clientRequestedPaymentMethod no-vacío).
                     const cardTable = tables.find(tb => tb.tableNumber === order.tableNumber);
                     const tableIsBilling = cardTable?.status === 'Billing';
                     const clientRequestedPay = String(
                       (order as any).clientRequestedPaymentMethod ?? (order as any).ClientRequestedPaymentMethod ?? ''
                     ).trim() !== '';
                     const requestedBill = !isPaid && (tableIsBilling || clientRequestedPay);
-                    // 2) "Terminó de comer": flag del comensal (mismo campo del polling, línea ~384)
+
                     const customerFinished =
                       !!((order as any).customerFinishedEating || (order as any).CustomerFinishedEating)
                       && order.status !== 'Served' && order.status !== 'Completed';
-                    // 3) "Listo para servir": reutiliza readyToServe ya calculado (si aún no se sirvió/cobró)
+
                     const showReadyToServe =
                       readyToServe && order.status !== 'Served' && order.status !== 'Completed'
                       && !((!hasFoodItems || kitchenServed) && (!hasDrinkItems || barServed));
-                    // ¿Hay algún aviso urgente del comensal? (badge pulsante de esquina)
+
                     const hasUrgentDinerEvent = requestedBill || customerFinished;
 
-                    // TAREA 5: en modo transferencia, el click marca/desmarca la mesa (no abre el modal).
                     const cardTableId = (order as any).tableId ?? (order as any).TableId;
                     const isSelectedForTransfer = transferMode && selectedTableIds.has(cardTableId);
                     return (
@@ -2228,7 +2146,7 @@ export default function WaiterPage() {
                             : 'border-gray-200 hover:border-primary-400'
                         }`}
                       >
-                        {/* TAREA 5: check de selección (esquina) en modo transferencia */}
+
                         {transferMode && (
                           <div className={`absolute -top-2 -left-2 w-7 h-7 rounded-full flex items-center justify-center border-2 z-10 transition-colors ${
                             isSelectedForTransfer
@@ -2238,9 +2156,7 @@ export default function WaiterPage() {
                             <Check className="w-4 h-4" strokeWidth={3} />
                           </div>
                         )}
-                        {/* Aviso de esquina pulsante para eventos urgentes del comensal
-                            (mismo lenguaje visual que la vista General). Rojo = pidió la
-                            cuenta (prioridad); ámbar = terminó de comer. Oculto en modo transferencia. */}
+
                         {!transferMode && hasUrgentDinerEvent && (
                           <div
                             className={`absolute -top-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center animate-pulse z-10 ${
@@ -2271,7 +2187,7 @@ export default function WaiterPage() {
                           <p className="text-xs text-primary-600 font-medium truncate mb-1">{(order as any).customerName}</p>
                         )}
                         <p className="text-xs text-gray-400 font-mono truncate mb-2">Pedido #{shortOrder(order.orderNumber)}</p>
-                        {/* WAITER-CARD-NOTIF: el aviso del bell también se renderiza aquí, en la mesa que se atiende */}
+
                         {!transferMode && (() => {
                           const oid = getOrderId(order);
                           const tn = notifications.filter(n => !n.read
@@ -2298,8 +2214,7 @@ export default function WaiterPage() {
                             {hasAllergies && <span title="Alergias" className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-bold">⚠</span>}
                           </div>
                         </div>
-                        {/* Avisos destacados del comensal (apilados). No dependen de items.
-                            Se ocultan en modo transferencia para no competir con la selección. */}
+
                         {!transferMode && (requestedBill || customerFinished || showReadyToServe) && (
                           <div className="mt-2 flex flex-col gap-1">
                             {requestedBill && (
@@ -2319,10 +2234,7 @@ export default function WaiterPage() {
                             )}
                           </div>
                         )}
-                        {/* PARA LLEVAR / PENDING: una orden separada para llevar nace Pending y
-                            asignada al mesero; sin este botón no había forma de confirmarla
-                            (enviarla a cocina) desde "Mis Mesas" → se quedaba pegada y nunca
-                            llegaba al KDS. Confirmar = assign-waiter → Confirmed → NewKitchenOrder. */}
+
                         {!transferMode && order.status === 'Pending' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); confirmOrder(order); }}
@@ -2331,27 +2243,30 @@ export default function WaiterPage() {
                             {(order as any).isTakeaway ? `🥡 ${t('orders.confirmSend')}` : t('orders.confirmSend')}
                           </button>
                         )}
-                        {/* TAREA 5: en modo transferencia ocultamos las acciones por-mesa para evitar
-                            clicks accidentales; el card sólo se marca/desmarca. */}
-                        {!transferMode && (!hasFoodItems || kitchenServed) && (!hasDrinkItems || barServed) && order.status !== 'Served' && order.status !== 'Completed' && order.status !== 'Pending' && (
+
+                        {!transferMode && order.status !== 'Served' && order.status !== 'Completed' && order.status !== 'Pending' && order.status !== 'Cancelled' && (
                           <button
+                            disabled={servingId === getOrderId(order)}
                             onClick={async (e) => {
                               e.stopPropagation();
                               const oid = getOrderId(order);
+                              const bothServedNow = (!hasFoodItems || kitchenServed) && (!hasDrinkItems || barServed);
+                              if (!bothServedNow) { await serveAll(order); return; }
+                              setServingId(oid);
                               try {
                                 await api.put(`/api/order/${oid}/status`, { newStatus: 'Served' });
                                 toast.success(t('orders.markServedSuccess'));
-                                loadData(getUserId(user));
+                                await loadData(getUserId(user));
                                 loadVirtualTables();
                               } catch (err: any) { toast.error(err?.response?.data?.error || t('orders.markServedError')); }
+                              finally { setServingId(null); }
                             }}
-                            className="w-full mt-2 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-bold flex items-center justify-center gap-1"
+                            className="w-full mt-2 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center justify-center gap-1"
                           >
-                            {t('tables.markServed')}
+                            {servingId === getOrderId(order) ? '…' : t('tables.markServed')}
                           </button>
                         )}
-                        {/* Confirmar cancelación: la card Cancelled se queda en my-orders sin
-                            acción; el mesero la confirma → mesa a normal + fuera de "Mis Mesas". */}
+
                         {!transferMode && order.status === 'Cancelled' && (
                           <button
                             onClick={async (e) => { e.stopPropagation(); await confirmCancellation(order); }}
@@ -2360,9 +2275,7 @@ export default function WaiterPage() {
                             {t('tables.confirmCancellation')}
                           </button>
                         )}
-                        {/* Liberar Mesa: SOLO cuando ya está cobrada (Served pagada o Completed).
-                            Sin cobrar no se muestra ningún botón aquí (decisión de producto);
-                            el cobro vive en el modal de la card. */}
+
                         {!transferMode && (order.status === 'Served' || order.status === 'Completed') && isPaid && (
                           <button
                             onClick={async (e) => {
@@ -2381,7 +2294,6 @@ export default function WaiterPage() {
               );
             })()}
 
-            {/* Sección Mesas Virtuales */}
             {virtualTablesList.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">{t('virtualTable.virtualTables')}</h3>
@@ -2390,8 +2302,7 @@ export default function WaiterPage() {
                     const vtId = vt?.id ?? vt?.Id;
                     const vtName = vt?.name ?? vt?.Name ?? `Mesa Virtual #${vtId}`;
                     const vtTables = Array.isArray(vt?.tables) ? vt.tables : (Array.isArray(vt?.Tables) ? vt.Tables : []);
-                    
-                    // Encontrar órdenes de esta mesa virtual (asignadas y no asignadas)
+
                     const vtTableIds = vtTables.map((t: any) => t?.id ?? t?.Id);
                     const vtOrders = [
                       ...myOrders.filter(o => {
@@ -2404,7 +2315,7 @@ export default function WaiterPage() {
                       })
                     ];
                     const totalVT = vtOrders.reduce((sum, o) => sum + ((o as any).total ?? (o as any).totalAmount ?? 0), 0);
-                    
+
                     return (
                       <div key={vtId} className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-400 rounded-lg shadow-md p-4">
                         <div className="flex items-center justify-between mb-3">
@@ -2417,8 +2328,7 @@ export default function WaiterPage() {
                             <p className="text-xl font-bold text-purple-900">RD$ {totalVT.toFixed(2)}</p>
                           </div>
                         </div>
-                        
-                        {/* Chips de las mesas individuales */}
+
                         <div className="flex flex-wrap gap-2 mb-3">
                           {vtTables.map((t: any) => (
                             <div key={t?.id ?? t?.Id} className="px-3 py-1 bg-purple-100 border-2 border-purple-400 rounded-md">
@@ -2428,7 +2338,6 @@ export default function WaiterPage() {
                           ))}
                         </div>
 
-                        {/* Resumen rápido */}
                         <div className="bg-purple-100 rounded-lg p-2 mb-3 text-xs text-purple-800">
                           {vtOrders.length > 0 ? (
                             <span>{t('virtualTable.activeOrders', { count: vtOrders.length, amount: totalVT.toFixed(2) })}</span>
@@ -2437,14 +2346,13 @@ export default function WaiterPage() {
                           )}
                         </div>
 
-                        {/* Botones de acción */}
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              setSelectedVTTableIndex(0); // Reset al abrir
+                              setSelectedVTTableIndex(0);
                               setShowVirtualTableDetailsModal(vt);
                             }}
                             className="flex-1 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 flex items-center justify-center gap-2"
@@ -2473,11 +2381,10 @@ export default function WaiterPage() {
             )}
           </div>
         )}
-        {/* TAREA 5: espaciador para que la barra fija de transferencia no tape las últimas tarjetas */}
+
         {transferMode && selectedTableIds.size > 0 && <div className="h-24" aria-hidden />}
       </div>
 
-      {/* Modal: Pedido sin asignar (al hacer clic en mesa con alarma) */}
       {showOrderModal && orderModalOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowOrderModal(false)}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
@@ -2553,8 +2460,7 @@ export default function WaiterPage() {
               });
               return (
                 <div className="space-y-2">
-                  {/* WAITER-QR.3 — verificar físicamente la mesa antes de tomar la orden.
-                      Solo en mesas reales (no virtuales) y siempre que tengamos tableId. */}
+
                   {orderTableId && !isVirtualTableOrder && (
                     <button
                       onClick={() => setQrVerifyContext({ tableId: Number(orderTableId), tableNumber: orderTableNumber })}
@@ -2584,7 +2490,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Modal Cobrar expandido: división de cuenta, método de pago, propina */}
       {showPaymentModal && selectedOrder && (() => {
         const so = selectedOrder as any;
         const orderTotal    = Number(so.total ?? so.totalAmount ?? 0);
@@ -2593,7 +2498,6 @@ export default function WaiterPage() {
         const orderItems: any[] = so.items ?? [];
         const taxRate = orderSubtotal > 0 ? orderTax / orderSubtotal : 0.18;
 
-        // Totales por categoría
         const catTotals: Record<string, number> = {};
         orderItems.forEach((item: any) => {
           const cat = item.categoryName ?? item.CategoryName ?? 'Otros';
@@ -2602,8 +2506,7 @@ export default function WaiterPage() {
         });
         Object.keys(catTotals).forEach(c => { catTotals[c] = catTotals[c] + catTotals[c] * taxRate; });
 
-        // Porción a cobrar según split
-        let myPortion = Math.max(0, orderTotal - pmPaidAmount); // saldo pendiente (resta lo ya cobrado)
+        let myPortion = Math.max(0, orderTotal - pmPaidAmount);
         const equalShareBC = pmSplitParts > 0 ? Math.round((orderTotal / pmSplitParts) * 100) / 100 : orderTotal;
         if (pmSplitType === 'ByComensal' && pmSplitParts > 0) {
           const unpaidBC = Array.from({ length: pmSplitParts }, (_, i) => i + 1).filter(n => !pmPaidParts.includes(n));
@@ -2640,7 +2543,7 @@ export default function WaiterPage() {
         return (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-3">
             <div className="bg-white rounded-xl max-w-lg w-full max-h-[92vh] overflow-y-auto shadow-2xl">
-              {/* Header */}
+
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-xl">
                 <div className="flex items-center justify-between">
                   <div>
@@ -2656,7 +2559,6 @@ export default function WaiterPage() {
 
               <div className="p-5 space-y-5">
 
-                {/* Preferencias del cliente */}
                 {(() => {
                   const clientFiscal = so.clientRequiresFiscalReceipt ?? so.ClientRequiresFiscalReceipt ?? false;
                   const clientRNC    = so.clientRNC ?? so.ClientRNC ?? '';
@@ -2685,7 +2587,6 @@ export default function WaiterPage() {
                   );
                 })()}
 
-                {/* Resumen de la orden */}
                 <div>
                   <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.summary')}</p>
                   <div className="space-y-1 max-h-28 overflow-y-auto mb-2">
@@ -2705,7 +2606,6 @@ export default function WaiterPage() {
                   </div>
                 </div>
 
-                {/* División de cuenta */}
                 <div>
                   <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.splitTitle')}</p>
                   <div className="flex flex-wrap gap-2 mb-3">
@@ -2727,7 +2627,7 @@ export default function WaiterPage() {
                           setPmPropAssign({});
                           setPmPayCategory('');
                           setPmPayPartIndex(1);
-                          // Si Mixto, resetear al total completo en efectivo cuando vuelve a None
+
                           if (pmMethod === 'Mixed' && value === 'None') {
                             setPmMixedCash(orderTotal.toFixed(2));
                             setPmMixedCard('');
@@ -2833,10 +2733,9 @@ export default function WaiterPage() {
                   )}
                 </div>
 
-                {/* Propina */}
                 <div>
                   <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.tipTitle')}</p>
-                  <div className="grid grid-cols-4 gap-2 mb-2">
+                  <div className="watch-cols grid grid-cols-4 gap-2 mb-2">
                     {[{pct:10,label:'10%'},{pct:15,label:'15%'},{pct:20,label:'20%'},{pct:0,label:t('payment.noTip')}].map(({pct,label}) => (
                       <button key={label} type="button"
                         onClick={() => { setPmTipPct(pct); setPmCustomTip(''); }}
@@ -2855,10 +2754,9 @@ export default function WaiterPage() {
                   )}
                 </div>
 
-                {/* Método de pago */}
                 <div>
                   <p className="text-sm font-semibold text-gray-700 mb-2">{t('payment.methodTitle')}</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="watch-cols grid grid-cols-2 gap-2">
                     {[
                       { id: 'Cash',     name: t('payment.methodCash') },
                       { id: 'Card',     name: t('payment.methodCard') },
@@ -2896,7 +2794,6 @@ export default function WaiterPage() {
                   )}
                 </div>
 
-                {/* Total final */}
                 {pmMethod !== 'Mixed' && (
                   <div className="bg-gray-50 rounded-lg p-3 space-y-1">
                     <div className="flex justify-between text-sm text-gray-700"><span>{t('payment.toPay')}</span><span>RD$ {myPortion.toFixed(2)}</span></div>
@@ -2909,7 +2806,6 @@ export default function WaiterPage() {
 
               </div>
 
-              {/* Footer */}
               <div className="sticky bottom-0 bg-white border-t border-gray-200 px-5 py-4 flex gap-3 rounded-b-xl">
                 <button
                   onClick={() => { setShowPaymentModal(false); setSelectedOrder(null); }}
@@ -2935,7 +2831,6 @@ export default function WaiterPage() {
         );
       })()}
 
-      {/* QR-MESA-DIRECT.1: Mini-modal de confirmación al tap directo en card de mesa */}
       {confirmIdentifyTable && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -2945,7 +2840,7 @@ export default function WaiterPage() {
             className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header con número de mesa grande */}
+
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white px-6 py-5 text-center">
               <p className="text-xs uppercase tracking-widest text-indigo-200 mb-1">{t('identifyTable.headerLabel')}</p>
               <p className="text-5xl font-black leading-none">#{confirmIdentifyTable.tableNumber}</p>
@@ -2958,7 +2853,7 @@ export default function WaiterPage() {
               </p>
 
               <div className="flex flex-col gap-2.5">
-                {/* Botón primario grande para tap fácil */}
+
                 <button
                   onClick={() => {
                     setIdentifiedTableId(confirmIdentifyTable.id);
@@ -2982,7 +2877,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* WAITER-QR.1 — Modal de verificación de mesa desde modal de orden */}
       {qrVerifyContext && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -2992,7 +2886,7 @@ export default function WaiterPage() {
             className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
+
             <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-5 py-3.5 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center">
@@ -3008,7 +2902,6 @@ export default function WaiterPage() {
               </button>
             </div>
 
-            {/* Body */}
             <div className="p-5 space-y-4">
               <p className="text-xs text-gray-600 leading-relaxed text-center">
                 {t('qrVerify.hint')}
@@ -3024,26 +2917,23 @@ export default function WaiterPage() {
         </div>
       )}
 
-
-      {/* Modal: Crear mesa virtual */}
       {showVirtualTableModal && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={(e) => {
             e.stopPropagation();
           }}
         >
-          <div 
-            className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col" 
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header fijo */}
+
             <div className="p-6 pb-3 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">{t('virtualTable.title')}</h2>
               <p className="text-sm text-gray-600 mt-1">{t('virtualTable.subtitle')}</p>
             </div>
-            
-            {/* Contenido scrolleable */}
+
             <div className="flex-1 overflow-y-auto p-6 pt-4">
               {showVirtualTableCamera ? (
                 <div className="space-y-3">
@@ -3080,7 +2970,6 @@ export default function WaiterPage() {
               </div>
               )}
 
-              {/* Chips visuales de las mesas añadidas */}
               <div className="mt-4">
                 <p className="text-sm font-medium text-gray-700 mb-2">{t('virtualTable.selectedTables')}</p>
                 <div className="flex flex-wrap gap-2 min-h-[60px] p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -3107,7 +2996,6 @@ export default function WaiterPage() {
                 </div>
               </div>
 
-              {/* VT-PAY: selector de mesa pagadora (para el cobro unificado) */}
               {virtualTableIds.split(/[\s,]+/).filter(Boolean).length >= 2 && (
                 <div className="mt-4">
                   <p className="text-sm font-medium text-gray-700 mb-2">{t('virtualTable.payerTableLabel')}</p>
@@ -3128,18 +3016,17 @@ export default function WaiterPage() {
                 </div>
               )}
             </div>
-            
-            {/* Footer fijo con botones */}
+
             <div className="p-6 pt-3 border-t border-gray-200 flex gap-2">
-              <button 
+              <button
                 type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setShowVirtualTableModal(false); 
-                  setVirtualTableIds(''); 
-                  setShowVirtualTableCamera(false); 
-                }} 
+                  setShowVirtualTableModal(false);
+                  setVirtualTableIds('');
+                  setShowVirtualTableCamera(false);
+                }}
                 className="flex-1 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
               >
                 {t('common.cancel')}
@@ -3161,7 +3048,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Modal: Detalle de Orden (Mis Mesas) */}
       {showMyOrderModal && myOrderModalOrder && (() => {
         const order = myOrderModalOrder;
         const orderId = getOrderId(order);
@@ -3179,27 +3065,33 @@ export default function WaiterPage() {
         const closeModal = () => { setShowMyOrderModal(false); setMyOrderModalOrder(null); };
 
         const doKitchenServed = async () => {
+          if (servingId === orderId) return;
+          setServingId(orderId);
           try {
             const res = await api.put(`/api/order/${orderId}/kitchen-served`);
             toast.success(t('orders.foodServedSuccess'));
             setMyOrderModalOrder((prev: any) => prev ? { ...prev, ...(res.data ?? {}), kitchenServed: true, KitchenServed: true } : prev);
-            loadData(getUserId(user));
+            await loadData(getUserId(user));
           } catch (e: any) { toast.error(e?.response?.data?.error || t('orders.registerError')); }
+          finally { setServingId(null); }
         };
 
         const doBarServed = async () => {
+          if (servingId === orderId) return;
+          setServingId(orderId);
           try {
             const res = await api.put(`/api/order/${orderId}/bar-served`);
             toast.success(t('orders.drinksServedSuccess'));
             setMyOrderModalOrder((prev: any) => prev ? { ...prev, ...(res.data ?? {}), barServed: true, BarServed: true } : prev);
-            loadData(getUserId(user));
+            await loadData(getUserId(user));
           } catch (e: any) { toast.error(e?.response?.data?.error || t('orders.registerError')); }
+          finally { setServingId(null); }
         };
 
         return (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={closeModal}>
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              {/* Header */}
+
               <div className="flex items-start justify-between p-4 border-b">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -3215,7 +3107,6 @@ export default function WaiterPage() {
                 </div>
               </div>
 
-              {/* Alertas de alergias */}
               {allAllergies.length > 0 && (
                 <div className="mx-4 mt-3 rounded-lg bg-red-50 border border-red-200 p-2 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
@@ -3223,7 +3114,6 @@ export default function WaiterPage() {
                 </div>
               )}
 
-              {/* Tabs Cocina / Bar */}
               {hasFoodItems && hasDrinkItems && (
                 <div className="flex gap-1 mx-4 mt-3 bg-gray-100 p-1 rounded-lg">
                   <button
@@ -3241,7 +3131,6 @@ export default function WaiterPage() {
                 </div>
               )}
 
-              {/* Contenido del tab activo */}
               <div className="p-4 space-y-2">
                 {(() => {
                   const items = (!hasFoodItems || !hasDrinkItems)
@@ -3264,11 +3153,8 @@ export default function WaiterPage() {
                 })()}
               </div>
 
-              {/* Botones de acción del tab */}
               <div className="px-4 pb-2 space-y-2">
-                {/* Confirmar y enviar a cocina: una orden Pending (p.ej. para llevar separada)
-                    no puede servirse hasta confirmarse; sin esto el modal era un callejón sin
-                    salida (los botones "Servir" quedan deshabilitados porque no fue al KDS). */}
+
                 {order.status === 'Pending' && (
                   <button
                     onClick={() => { closeModal(); confirmOrder(order); }}
@@ -3277,10 +3163,20 @@ export default function WaiterPage() {
                     {(order as any).isTakeaway ? `🥡 ${t('orders.confirmSend')}` : t('orders.confirmSend')}
                   </button>
                 )}
-                {/* Servir Cocina */}
+
+                {order.status !== 'Pending' && order.status !== 'Cancelled' && !bothServed && (
+                  <button
+                    disabled={servingId === orderId}
+                    onClick={() => serveAll(order)}
+                    className="w-full py-2.5 rounded-lg font-bold text-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2"
+                  >
+                    {servingId === orderId ? '…' : `✅ ${t('tables.markServed')}`}
+                  </button>
+                )}
+
                 {order.status !== 'Pending' && (!hasDrinkItems || myOrderModalTab === 'kitchen' || !hasFoodItems) && hasFoodItems && (
                   <button
-                    disabled={!kitchenReady || kitchenServed}
+                    disabled={!kitchenReady || kitchenServed || servingId === orderId}
                     onClick={doKitchenServed}
                     className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 ${
                       kitchenServed ? 'bg-teal-100 text-teal-700 cursor-default'
@@ -3291,10 +3187,10 @@ export default function WaiterPage() {
                     {kitchenServed ? t('orders.kitchenServedDone') : kitchenReady ? t('orders.kitchenReadyBtn') : t('orders.kitchenPreparing')}
                   </button>
                 )}
-                {/* Servir Bar */}
-                {order.status !== 'Pending' && (!hasFoodItems || myOrderModalTab === 'bar' || !hasDrinkItems) && hasDrinkItems && (
+
+                {order.status !== 'Pending' && hasDrinkItems && (
                   <button
-                    disabled={!barReady || barServed}
+                    disabled={!barReady || barServed || servingId === orderId}
                     onClick={doBarServed}
                     className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 ${
                       barServed ? 'bg-teal-100 text-teal-700 cursor-default'
@@ -3307,13 +3203,8 @@ export default function WaiterPage() {
                 )}
               </div>
 
-              {/* Separador + Acciones generales */}
               <div className="px-4 pb-4 space-y-2 border-t pt-3 mt-1">
-                {/* WAITER-QR.3 — botón QR movido al modal "Pedido sin asignar" (línea ~2438)
-                    porque ese es el modal real que aparece en Mesas General antes de tomar la orden. */}
 
-                {/* Quedarme con la mesa (se oculta si ya está reclamada).
-                    CLAIM-MODAL.1: click directo envía la solicitud al admin, sin modal intermedio. */}
                 {['Pending','Confirmed','Preparing','Ready','Served'].includes(order.status) && !claimedTableIds.has((order as any).tableId ?? (order as any).TableId) && (
                   pendingClaimTableIds.has((order as any).tableId ?? (order as any).TableId) ? (
                     <div className="w-full py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm font-semibold flex items-center justify-center gap-2">
@@ -3349,7 +3240,6 @@ export default function WaiterPage() {
                   )
                 )}
 
-                {/* Mover comensal */}
                 {['Pending','Confirmed','Preparing','Ready'].includes(order.status) && (
                   <button
                     onClick={() => { closeModal(); setShowMoveModal({ order }); }}
@@ -3360,7 +3250,6 @@ export default function WaiterPage() {
                   </button>
                 )}
 
-                {/* Cobrar */}
                 {(order.status === 'Served' || order.status === 'Completed') && !(order as Order).paymentCollectedByWaiter && (
                   <button
                     onClick={() => { closeModal(); openPaymentModal(order); }}
@@ -3375,10 +3264,6 @@ export default function WaiterPage() {
         );
       })()}
 
-      {/* CLAIM-MODAL.1: modal de confirmación "Quedarme con Mesa" eliminado.
-          El click directo en el botón envía la solicitud al admin (ver onClick arriba). */}
-
-      {/* Modal: Soltar asignación (pin) */}
       {abandonConfirmOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
@@ -3423,7 +3308,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Modal: Mover comensal */}
       {showMoveModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
@@ -3450,10 +3334,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-
-      {/* TAREA 5: Barra inferior de transferencia (multi-selección). Aparece cuando hay ≥1 mesa
-          marcada en modo transferencia. Reutiliza waiterList + transferToWaiterId y el endpoint
-          batch /api/tabletransfer vía confirmTransferSelected(). */}
       {transferMode && selectedTableIds.size > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
           <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
@@ -3492,7 +3372,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Modal: Pedido manual (para mesa identificada) */}
       {showManualOrderModal && manualOrderTableId != null && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl h-[96vh] sm:h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -3517,9 +3396,8 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* Modal de detalles de mesa virtual */}
       {showVirtualTableDetailsModal && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={(e) => {
             e.preventDefault();
@@ -3527,28 +3405,27 @@ export default function WaiterPage() {
           }}
         >
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
-            {/* Header fijo */}
+
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-purple-900">
                 {showVirtualTableDetailsModal?.name ?? showVirtualTableDetailsModal?.Name ?? 'Mesa Virtual'}
               </h2>
               <p className="text-sm text-purple-700">
                 {(() => {
-                  const vtTables = Array.isArray(showVirtualTableDetailsModal?.tables) 
-                    ? showVirtualTableDetailsModal.tables 
+                  const vtTables = Array.isArray(showVirtualTableDetailsModal?.tables)
+                    ? showVirtualTableDetailsModal.tables
                     : (Array.isArray(showVirtualTableDetailsModal?.Tables) ? showVirtualTableDetailsModal.Tables : []);
                   return t('virtualTable.tablesJoined', { count: vtTables.length });
                 })()}
               </p>
             </div>
 
-            {/* Contenido scrolleable */}
             <div className="flex-1 overflow-y-auto">
               {(() => {
-                const vtTables = Array.isArray(showVirtualTableDetailsModal?.tables) 
-                  ? showVirtualTableDetailsModal.tables 
+                const vtTables = Array.isArray(showVirtualTableDetailsModal?.tables)
+                  ? showVirtualTableDetailsModal.tables
                   : (Array.isArray(showVirtualTableDetailsModal?.Tables) ? showVirtualTableDetailsModal.Tables : []);
-                
+
                 if (vtTables.length === 0) {
                   return <div className="p-6 text-center text-gray-500">{t('virtualTable.noTablesInVT')}</div>;
                 }
@@ -3559,8 +3436,7 @@ export default function WaiterPage() {
                 const currentTableZone = currentTable?.zoneName ?? currentTable?.ZoneName ?? 'Sin zona';
 
                 const vtTableIds = vtTables.map((t: any) => t?.id ?? t?.Id);
-                
-                // Incluir tanto órdenes asignadas como no asignadas de las mesas virtuales
+
                 const vtOrders = [
                   ...myOrders.filter(o => {
                     const tId = (o as any).tableId ?? (o as any).TableId;
@@ -3572,7 +3448,7 @@ export default function WaiterPage() {
                   })
                 ];
 
-                const currentTableOrders = vtOrders.filter(o => 
+                const currentTableOrders = vtOrders.filter(o =>
                   (o as any).tableId === currentTableId || (o as any).TableId === currentTableId
                 );
 
@@ -3580,7 +3456,7 @@ export default function WaiterPage() {
 
                 return (
                   <div className="flex flex-col h-full">
-                    {/* Navegación de mesas */}
+
                     <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                       <div className="flex gap-2 overflow-x-auto pb-2">
                         {vtTables.map((t: any, idx: number) => {
@@ -3588,7 +3464,7 @@ export default function WaiterPage() {
                           const tNumber = t?.tableNumber ?? t?.TableNumber ?? '?';
                           const tOrders = vtOrders.filter(o => (o as any).tableId === tId || (o as any).TableId === tId);
                           const isSelected = idx === selectedVTTableIndex;
-                          
+
                           return (
                             <button
                               key={tId}
@@ -3599,8 +3475,8 @@ export default function WaiterPage() {
                                 setSelectedVTTableIndex(idx);
                               }}
                               className={`flex-shrink-0 px-4 py-2 rounded-lg border-2 transition-all ${
-                                isSelected 
-                                  ? 'bg-purple-600 text-white border-purple-600' 
+                                isSelected
+                                  ? 'bg-purple-600 text-white border-purple-600'
                                   : 'bg-white text-purple-900 border-purple-300 hover:border-purple-500'
                               }`}
                             >
@@ -3612,7 +3488,6 @@ export default function WaiterPage() {
                       </div>
                     </div>
 
-                    {/* Contenido de la mesa seleccionada */}
                     <div className="flex-1 overflow-y-auto px-6 py-4">
                       <div className="mb-4">
                         <h3 className="text-lg font-bold text-purple-900">Mesa #{currentTableNumber}</h3>
@@ -3643,7 +3518,6 @@ export default function WaiterPage() {
                                 {new Date(order.createdAt).toLocaleTimeString(dl, { hour: 'numeric', minute: '2-digit', hour12: true })}
                               </div>
 
-                              {/* Bloque alergias */}
                               {(() => {
                                 const allAllergies = (order.items ?? []).map((i: any) => (i.allergies ?? i.Allergies ?? '').trim()).filter(Boolean);
                                 const uniq = [...new Set(allAllergies)];
@@ -3655,7 +3529,7 @@ export default function WaiterPage() {
                                   </div>
                                 );
                               })()}
-                              
+
                               <div className="space-y-2 mb-3">
                                 {order.items?.map((item: any, idx: number) => (
                                   <div key={idx} className="text-sm rounded-lg bg-amber-50/50 border border-amber-200/60 p-2">
@@ -3674,7 +3548,7 @@ export default function WaiterPage() {
                                   </div>
                                 ))}
                               </div>
-                              
+
                               <div className="flex justify-between items-center pt-3 border-t-2 border-purple-200">
                                 <span className="font-bold text-gray-700">{t('common.total')}:</span>
                                 <span className="text-xl font-bold text-purple-900">
@@ -3682,7 +3556,6 @@ export default function WaiterPage() {
                                 </span>
                               </div>
 
-                              {/* Mismo flujo que mesa individual: por orden */}
                               <div className="flex flex-col gap-2 mt-3 pt-3 border-t-2 border-purple-100">
                                 {(order as any).status === 'Pending' && (
                                   <button
@@ -3743,7 +3616,6 @@ export default function WaiterPage() {
                         </div>
                       )}
 
-                      {/* Marcar toda la mesa como servida (solo si hay órdenes Ready en esta mesa) */}
                       {currentTableOrders.some((o: any) => o.status === 'Ready') && (
                         <div className="mt-4 px-6">
                           <button
@@ -3758,7 +3630,6 @@ export default function WaiterPage() {
 
                     </div>
 
-                    {/* Total general de la mesa virtual */}
                     <div className="px-6 py-4 border-t-2 border-purple-300 bg-purple-50">
                       <div className="flex justify-between items-center">
                         <div>
@@ -3775,7 +3646,6 @@ export default function WaiterPage() {
               })()}
             </div>
 
-            {/* Footer fijo */}
             <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
               <button
                 type="button"
@@ -3800,7 +3670,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* VT-PAY — Modal de cobro unificado de mesa virtual */}
       {showVtPayModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={() => !vtPaying && setShowVtPayModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -3838,7 +3707,6 @@ export default function WaiterPage() {
         </div>
       )}
 
-      {/* RES-DETAIL.3: Modal de detalles de cliente reservante */}
       {(loadingReservation || reservedInfo) && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -3880,14 +3748,14 @@ export default function WaiterPage() {
             )}
             {reservedInfo && !loadingReservation && (
               <div className="px-6 py-5 space-y-5">
-                {/* ───── SECCIÓN: CLIENTE ───────────────────────────────────────── */}
+
                 <section className="space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
                     <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">{t('reservation.client')}</p>
                   </div>
                   <p className="text-2xl font-bold text-gray-900 leading-tight">{reservedInfo.customerName}</p>
-                  {/* "Contactar" (llamada al cliente) eliminado a pedido. Solo se muestran comensales. */}
+
                   <div className="text-sm">
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5 flex items-center gap-1">
@@ -3900,14 +3768,12 @@ export default function WaiterPage() {
                   </div>
                 </section>
 
-                {/* ───── SECCIÓN: RESERVA ───────────────────────────────────────── */}
                 <section className="space-y-3 pt-2 border-t border-gray-100">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-4 bg-amber-500 rounded-full"></div>
                     <p className="text-[11px] uppercase tracking-widest font-bold text-gray-500">{t('reservation.reservationSection')}</p>
                   </div>
 
-                  {/* Hora reservada */}
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
                       <Clock className="w-5 h-5 text-amber-600" />
@@ -3927,10 +3793,9 @@ export default function WaiterPage() {
                       )}
                     </div>
                   </div>
-                  {/* TAREA 3: bloque "Recibida por: …" eliminado del render (el campo createdByHostName sigue en la interface). */}
+
                 </section>
 
-                {/* ───── SECCIÓN: NOTAS / PRE-ORDEN ─────────────────────────────── */}
                 {(reservedInfo.specialRequests || (reservedInfo.preOrder && reservedInfo.preOrder.items && reservedInfo.preOrder.items.length > 0)) && (
                   <section className="space-y-3 pt-2 border-t border-gray-100">
                     <div className="flex items-center gap-2">
@@ -3978,7 +3843,6 @@ export default function WaiterPage() {
   );
 }
 
-// Normaliza un plato (acepta PascalCase y camelCase) a una forma estable.
 function normalizeDish(d: any) {
   return {
     id: (d.id ?? d.Id) as number,
@@ -3994,11 +3858,9 @@ function normalizeDish(d: any) {
 
 type NormalizedDish = ReturnType<typeof normalizeDish>;
 
-// ─── Detección y opciones de detalle (espejo del DishModal del cliente) ───
 const MANUAL_DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'coctel', 'refresco', 'agua', 'cafe', 'café', 'té', 'te', 'bebida', 'margarita', 'ron', 'whisky', 'whiskey', 'colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi', 'sprite', 'fanta', 'ginger', 'tónica', 'tonica', 'lager', 'pilsner'];
 const MANUAL_MEAT_KEYWORDS = ['carne', 'filete', 'res', 'pollo', 'cerdo', 'chuleta', 'bistec', 'steak', 'ribeye', 'rib eye', 'churrasco', 'sirloin', 'mignon', 'picaña', 'picana', 'cordero', 'chivo', 'costilla', 'lomo', 'pechuga', 'ternera'];
 
-// Opciones de cocción — key = valor del backend, label = chip, short = resumen del carrito.
 const MANUAL_COOKING_OPTIONS = [
   { key: 'Rare',     label: '💧 Poco',  short: 'Poco' },
   { key: 'Medium',   label: '🔥 Medio', short: 'Medio' },
@@ -4033,14 +3895,14 @@ const MANUAL_LIGA_OPTIONS = [
   { value: 'Jugo de Tomate',   label: '🍅 Jugo de Tomate' },
 ];
 type SelectedItem = {
-  /** id único de línea — cada "Agregar" crea una línea independiente (no se fusiona por dishId). */
+
   lineId: number;
   dishId: number;
   name: string;
   price: number;
   quantity: number;
   notes?: string;
-  // Preferencias y detalles (espejo del DishModal del cliente)
+
   meatCooking?: string;
   sideDish?: string;
   customizations?: string;
@@ -4048,11 +3910,10 @@ type SelectedItem = {
   drinkTiming?: string;
   withAlcohol?: boolean;
   liga?: string;
-  /** 0=Entrada, 1=PlatoFuerte, 2=Postre */
+
   courseTiming?: number;
 };
 
-/** Preferencias de UNA unidad de un plato (carne) en el configurador por unidad. */
 type UnitPref = { meatCooking: string; sideDish: string; customizations: string; allergies: string; notes: string };
 const EMPTY_UNIT: UnitPref = { meatCooking: '', sideDish: '', customizations: '', allergies: '', notes: '' };
 
@@ -4073,32 +3934,31 @@ function ManualOrderForm({
 }) {
   const [selected, setSelected] = useState<SelectedItem[]>([]);
   const t = useTranslations();
-  // Generador de id de línea (estable entre renders) + línea en edición (null = agregar nueva).
+
   const lineIdRef = useRef(1);
   const [editingLineId, setEditingLineId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // Filtros del menú (estilo cliente)
+
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState<string>(MANUAL_TODAS);
-  // Detalle del plato (sub-modal sobre el menú) — mismos campos que el cliente
+
   const [detailDish, setDetailDish] = useState<NormalizedDish | null>(null);
   const [detailQty, setDetailQty] = useState(1);
   const [detailNotes, setDetailNotes] = useState('');
-  // Preferencias comida (cocción/guarnición/notas son por unidad → ver detailUnits)
-  const [detailCourseTiming, setDetailCourseTiming] = useState(1); // default PlatoFuerte
-  // Preferencias bebida
+
+  const [detailCourseTiming, setDetailCourseTiming] = useState(1);
+
   const [detailDrinkTiming, setDetailDrinkTiming] = useState('');
   const [detailWithAlcohol, setDetailWithAlcohol] = useState<boolean | null>(null);
   const [detailLiga, setDetailLiga] = useState('');
-  // Configurador por unidad (carnes): una preferencia por cada unidad de la cantidad.
+
   const [detailUnits, setDetailUnits] = useState<UnitPref[]>([]);
   const [expandedUnit, setExpandedUnit] = useState<number | null>(null);
   const setUnitField = (i: number, field: keyof UnitPref, value: string) =>
     setDetailUnits(prev => prev.map((u, idx) => (idx === i ? { ...u, [field]: value } : u)));
   const applyCookingToAll = (cooking: string) =>
     setDetailUnits(prev => prev.map(u => ({ ...u, meatCooking: cooking })));
-  // Cambia la cantidad. Toda la COMIDA va por unidad (redimensiona unidades, nuevas heredan la
-  // última); las BEBIDAS usan cantidad simple y se dividen en N líneas al confirmar.
+
   const changeDetailQty = (next: number) => {
     const q = Math.max(1, Math.min(99, next));
     setDetailQty(q);
@@ -4128,14 +3988,12 @@ function ManualOrderForm({
     if (selected.length === 0) return;
     setSubmitting(true);
     try {
-      // El backend (CreateOrderItemDto) acepta por ítem: notes, drinkTiming, withAlcohol,
-      // meatCooking, sideDish, customizations, allergies, courseTiming.
-      // Enviamos los mismos nombres/lógica que el client-app (cart/page.tsx).
+
       await api.post('/api/order', {
         tableId,
         sessionId: `manual-${Date.now()}`,
         items: selected.map(s => {
-          // `liga` no tiene columna propia → se concatena en customizations (igual que el cliente).
+
           const customizations = [s.customizations, s.liga ? `Liga: ${s.liga}` : '']
             .filter(Boolean)
             .join(' | ') || undefined;
@@ -4162,15 +4020,13 @@ function ManualOrderForm({
     }
   };
 
-  // Platos disponibles, normalizados una sola vez.
   const availableDishes = dishes.map(normalizeDish).filter(d => d.available && d.id != null);
-  // Categorías presentes (orden de aparición).
+
   const categories = availableDishes.reduce<string[]>((acc, d) => {
     if (!acc.includes(d.cat)) acc.push(d.cat);
     return acc;
   }, []);
 
-  // Filtrado combinado: categoría + búsqueda (nombre o descripción).
   const q = search.trim().toLowerCase();
   const visibleDishes = availableDishes.filter(d => {
     if (activeCat !== MANUAL_TODAS && d.cat !== activeCat) return false;
@@ -4178,15 +4034,12 @@ function ManualOrderForm({
     return true;
   });
 
-  // Abre el sub-modal de detalle.
-  //  • Sin `editLine` (desde la tarjeta del menú) → AGREGAR una línea nueva con valores por defecto.
-  //  • Con `editLine` (al tocar una línea del carrito) → EDITAR esa línea, precargando sus datos.
   const openDetail = (d: NormalizedDish, editLine?: SelectedItem) => {
     setEditingLineId(editLine?.lineId ?? null);
     setDetailDish(d);
     setDetailQty(editLine?.quantity && editLine.quantity > 0 ? editLine.quantity : 1);
     setDetailNotes(editLine?.notes ?? '');
-    // Curso por defecto: categoría manda (entrada→0, postre→2); si no, DefaultCourse del plato.
+
     const catL = (d.cat ?? '').toLowerCase();
     let course = editLine?.courseTiming ?? d.defaultCourse ?? 1;
     if (editLine?.courseTiming === undefined) {
@@ -4197,7 +4050,7 @@ function ManualOrderForm({
     setDetailDrinkTiming(editLine?.drinkTiming ?? '');
     setDetailWithAlcohol(editLine?.withAlcohol ?? null);
     setDetailLiga(editLine?.liga ?? '');
-    // Inicializa las unidades (carnes): N copias de las prefs de la línea (o 1 vacía).
+
     const unitCount = editLine?.quantity && editLine.quantity > 0 ? editLine.quantity : 1;
     setDetailUnits(Array.from({ length: unitCount }, () => ({
       meatCooking: editLine?.meatCooking ?? '',
@@ -4220,14 +4073,14 @@ function ManualOrderForm({
     setDetailUnits([]);
     setExpandedUnit(null);
   };
-  // Confirma el detalle: crea una línea por unidad (comida) o N unidades separadas (bebidas).
+
   const confirmDetail = () => {
     if (!detailDish) return;
     const d = detailDish;
     const isDrink = manualDetectIsDrink(d.name);
 
     if (!isDrink) {
-      // COMIDA (entrada/plato fuerte/postre): cada unidad es una línea (cant. 1) con su detalle.
+
       const units = detailUnits.length ? detailUnits : [EMPTY_UNIT];
       const lines: SelectedItem[] = units.map((u, i) => ({
         lineId: editingLineId != null && i === 0 ? editingLineId : lineIdRef.current++,
@@ -4246,8 +4099,6 @@ function ManualOrderForm({
       return;
     }
 
-    // BEBIDAS: preferencia compartida en el modal, pero se crean N unidades separadas
-    // (cada una editable desde el carrito). Nada se consolida.
     const clean = detailNotes.trim() || undefined;
     const prefs: Partial<SelectedItem> = {};
     if (detailDrinkTiming) prefs.drinkTiming = detailDrinkTiming;
@@ -4267,9 +4118,9 @@ function ManualOrderForm({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-      {/* Menú digital — búsqueda + chips de categoría + tarjetas */}
+
       <div className="flex-1 min-h-0 flex flex-col">
-        {/* Barra de búsqueda + filtros (sticky) */}
+
         <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 sm:px-5 py-3 space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -4306,7 +4157,6 @@ function ManualOrderForm({
           </div>
         </div>
 
-        {/* Grid de tarjetas */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
           {visibleDishes.length === 0 ? (
             <p className="text-center text-gray-400 text-sm py-10">{t('common.noResults')}</p>
@@ -4358,14 +4208,13 @@ function ManualOrderForm({
         </div>
       </div>
 
-      {/* Carrito / Pedido */}
       <div className="lg:w-80 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-gray-100 flex flex-col bg-gray-50 max-h-[42vh] lg:max-h-none">
         <div className="p-4 flex-1 min-h-0 overflow-y-auto">
           <p className="text-sm font-bold text-gray-700 mb-3">{t('manualOrder.cart', { count: itemCount })}</p>
           {selected.length === 0 && <p className="text-gray-400 text-sm">{t('manualOrder.emptyCart')}</p>}
           <div className="space-y-2">
             {(() => {
-              // Agrupar por plato → cabecera "N× Plato" con una fila por unidad/línea.
+
               const groups: { dishId: number; name: string; lines: SelectedItem[] }[] = [];
               const idx = new Map<number, number>();
               for (const s of selected) {
@@ -4376,7 +4225,7 @@ function ManualOrderForm({
                 const gQty = g.lines.reduce((n, s) => n + s.quantity, 0);
                 const gPrice = g.lines.reduce((sum, s) => sum + s.price * s.quantity, 0);
                 const perUnit = g.lines.length > 1;
-                // Resumen de preferencias de una línea (reutilizado en ambos modos).
+
                 const prefSummary = (s: SelectedItem) => {
                   const courseLabel = s.courseTiming !== undefined
                     ? MANUAL_COURSE_OPTIONS.find(o => o.value === s.courseTiming)?.label
@@ -4395,7 +4244,6 @@ function ManualOrderForm({
                   );
                 };
 
-                // SIMPLE — una sola línea ×cantidad (platos sin carne, bebidas, o un único ítem).
                 if (!perUnit) {
                   const s = g.lines[0];
                   const cookLabel = s.meatCooking
@@ -4424,7 +4272,6 @@ function ManualOrderForm({
                   );
                 }
 
-                // POR UNIDAD — varias unidades (carnes): cabecera "N× Plato" + filas Unidad N.
                 return (
                   <div key={g.dishId} className="rounded-lg bg-white border border-gray-100 px-3 py-2">
                     <div className="flex justify-between items-center gap-2">
@@ -4475,7 +4322,6 @@ function ManualOrderForm({
         </div>
       </div>
 
-      {/* Sub-modal: Detalle del plato (sobre el modal de menú) */}
       {detailDish && (
         <div
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-2 sm:p-4"
@@ -4485,7 +4331,7 @@ function ManualOrderForm({
             className="bg-white rounded-2xl shadow-2xl w-full max-w-lg sm:max-w-xl max-h-[90vh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            {/* Imagen grande */}
+
             <div className="relative h-44 sm:h-52 bg-gray-100 flex items-center justify-center flex-shrink-0">
               {detailDish.img ? (
                 <img
@@ -4515,7 +4361,6 @@ function ManualOrderForm({
               {detailDish.desc && <p className="text-sm text-gray-600 mt-1 leading-relaxed">{detailDish.desc}</p>}
               <p className="text-2xl font-bold text-green-600 mt-3">RD$ {detailDish.price.toFixed(2)}</p>
 
-              {/* Selector de cantidad */}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.detailQtyLabel')}</label>
                 <div className="flex items-center gap-4">
@@ -4550,9 +4395,9 @@ function ManualOrderForm({
                 const isAlcoholic = detailWithAlcohol === true;
 
                 return isDrink ? (
-                  /* ─── SECCIÓN BEBIDAS ─── */
+
                   <>
-                    {/* ¿Con o sin alcohol? */}
+
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.alcoholQuestion')}</label>
                       <div className="grid grid-cols-2 gap-2">
@@ -4573,7 +4418,6 @@ function ManualOrderForm({
                       </div>
                     </div>
 
-                    {/* Liga (solo si con alcohol) */}
                     {isAlcoholic && (
                       <div className="mt-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.ligaTitle')}</label>
@@ -4592,7 +4436,6 @@ function ManualOrderForm({
                       </div>
                     )}
 
-                    {/* ¿Cuándo deseas tu bebida? */}
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.drinkTimingTitle')}</label>
                       <div className="grid grid-cols-3 gap-2">
@@ -4613,7 +4456,6 @@ function ManualOrderForm({
                       </div>
                     </div>
 
-                    {/* Notas para bebida */}
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Notas (opcional)</label>
                       <textarea
@@ -4627,9 +4469,9 @@ function ManualOrderForm({
                     </div>
                   </>
                 ) : (
-                  /* ─── SECCIÓN COMIDA ─── */
+
                   <>
-                    {/* ¿Cuándo lo quieres servir? */}
+
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualOrder.servingTitle')}</label>
                       <div className="grid grid-cols-3 gap-2">
@@ -4648,7 +4490,6 @@ function ManualOrderForm({
                       </div>
                     </div>
 
-                    {/* Configurador POR UNIDAD — toda la comida (entrada/plato fuerte/postre) */}
                     <div className="mt-4">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <label className="text-sm font-medium text-gray-700">{hasMeat ? t('manualOrder.cookingPerUnit') : t('manualOrder.detailPerUnit')}</label>
@@ -4736,7 +4577,6 @@ function ManualOrderForm({
               })()}
             </div>
 
-            {/* Acciones — footer sticky siempre visible */}
             <div className="flex-shrink-0 flex gap-3 p-4 sm:p-5 border-t border-gray-100 bg-white">
               <button
                 type="button"

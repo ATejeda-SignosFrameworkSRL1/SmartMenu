@@ -9,10 +9,7 @@ export default function Home() {
   const t = useTranslations('common');
 
   useEffect(() => {
-    // El customer-app es anónimo (sin login). El flujo real entra por
-    // /table/<qrCode> al escanear un QR. La raíz "/" lleva al listado de
-    // mesas con QR codes — útil para staff/dev y para que el cliente
-    // que abrió la URL sin escanear igual pueda elegir su mesa.
+
     router.replace('/table');
   }, [router]);
 

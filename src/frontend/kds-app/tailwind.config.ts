@@ -23,7 +23,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Inter (vía variable de next/font) + fallbacks CJK del sistema (zh/ja/ko).
+
         sans: [
           'var(--font-inter)',
           'system-ui',

@@ -46,19 +46,16 @@ const api = axios.create({
   baseURL: '',
 });
 
-// Misma lógica que Bar: solo contar bebidas para badge Bar y solo comida para Cocina
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  // Match por PALABRA completa (con plurales), no substring: 'agua' no debe matchear
-  // 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con KDS/waiter/client y backend.
+
   const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
   return DRINK_KEYWORDS.some(k =>
     k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
   );
 }
-// FASE 2 RUTEO — el flag isDrink del backend (zona del plato) MANDA; el matcher
-// por nombre queda solo como fallback para payloads sin el campo.
+
 function itemIsDrink(item: any): boolean {
   const flag = item?.isDrink ?? item?.IsDrink;
   return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
@@ -102,10 +99,10 @@ export function AppSidebar() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
     if (!token) return;
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    // Cargar usuario actual
+
     const stored = localStorage.getItem('admin_user');
     if (stored) {
-      try { setCurrentUser(JSON.parse(stored)); } catch { /* ignore */ }
+      try { setCurrentUser(JSON.parse(stored)); } catch {  }
     }
     const fetchCounts = async () => {
       try {
@@ -282,12 +279,10 @@ export function AppSidebar() {
       </SidebarFooter>
     </Sidebar>
 
-    {/* Modal Configuración / Perfil */}
     {showSettings && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSettings(false)}>
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
 
-          {/* Header modal */}
           <div className="flex items-center justify-between px-6 py-4 border-b">
             <h2 className="text-lg font-bold">{t('settings.accountTitle')}</h2>
             <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
@@ -296,7 +291,7 @@ export function AppSidebar() {
           </div>
 
           <div className="p-6 space-y-6">
-            {/* Info usuario */}
+
             <div className="flex items-center gap-4 p-4 bg-muted/40 rounded-xl">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold flex-shrink-0">
                 {userInitials}
@@ -311,7 +306,6 @@ export function AppSidebar() {
               </div>
             </div>
 
-            {/* Cambiar contraseña */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <KeyRound className="h-4 w-4 text-muted-foreground" />
@@ -350,7 +344,6 @@ export function AppSidebar() {
               </div>
             </div>
 
-            {/* Cerrar sesión */}
             <div className="border-t pt-4">
               <Button
                 variant="outline"

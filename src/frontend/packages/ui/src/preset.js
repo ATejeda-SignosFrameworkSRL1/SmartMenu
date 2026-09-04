@@ -1,14 +1,4 @@
-/**
- * @smartmenu/ui — preset de Tailwind compartido.
- *
- * Define la ESTRUCTURA de los tokens (colores que apuntan a `hsl(var(--…))`,
- * radios y animaciones que usan los primitivos). Los VALORES de esas
- * CSS-variables los define cada app en su propio `tokens.css` → "skin por app".
- *
- * Uso en la app (tailwind.config.ts):
- *   import preset from "@smartmenu/ui/preset";
- *   export default { presets: [preset], content: [...] };
- */
+
 const animate = require("tailwindcss-animate");
 
 /** @type {Partial<import('tailwindcss').Config>} */
@@ -50,7 +40,7 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Tokens semánticos comunes (cada app puede redefinir su valor).
+
         success: {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",

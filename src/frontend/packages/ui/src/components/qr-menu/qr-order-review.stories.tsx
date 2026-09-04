@@ -24,14 +24,12 @@ export default meta;
 
 type Story = StoryObj<typeof QrOrderReview>;
 
-/** Un plato (como la captura de referencia). */
 export const UnPlato: Story = {
   args: {
     initialLines: [{ dish: MOCK_QR_MENU.find((d) => d.dishId === 1)!, quantity: 1, takeaway: false }],
   },
 };
 
-/** Varios platos, para ver el resumen con más líneas. */
 export const VariosPlatos: Story = {
   args: {
     initialLines: [

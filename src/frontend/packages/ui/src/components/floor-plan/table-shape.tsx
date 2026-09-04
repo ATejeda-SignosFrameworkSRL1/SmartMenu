@@ -14,44 +14,38 @@ export interface TableShapeProps {
   x: number;
   y: number;
   status: TableStatus;
-  /** Si true, la mesa se puede arrastrar (modo editor). */
+
   isDraggable?: boolean;
-  /** Etiqueta visible (si difiere del id). */
+
   number?: string | number;
-  /** Forma de la mesa. Default 'circle'. */
+
   shape?: TableShapeKind;
-  /** Ancho/alto para formas no circulares (px). Default 2*radius. */
+
   width?: number;
   height?: number;
   radius?: number;
-  /** Código de mozo/sección (legado). El badge usa `waiter`. */
+
   server?: string;
-  /** Iniciales del MESERO en vivo a cargo (ej. "KI"); rige el badge superior izquierdo. */
+
   waiter?: string;
-  /** Si true, dibuja un badge de reloj ámbar (esquina sup. derecha) indicando que la mesa tiene reserva. */
+
   hasReservation?: boolean;
-  /** Nombre/etiqueta visible (si difiere del número). */
+
   name?: string;
-  /** Color manual de la mesa (hex). Sobrescribe el relleno por estado. */
+
   color?: string;
-  /** Paleta de estados resuelta (default = STATUS_COLORS). */
+
   colors?: Record<TableStatus, StatusColor>;
-  /** Capacidad (personas): dibuja esa cantidad de sillas alrededor de la mesa. */
+
   capacity?: number;
-  /** Resalta la mesa (glow azul) cuando está seleccionada. */
+
   isSelected?: boolean;
-  /** Click/tap sobre la mesa (para seleccionarla). */
+
   onSelect?: (id: string | number) => void;
-  /** Se dispara al soltar la mesa (solo si isDraggable). */
+
   onDragEnd?: (id: string | number, x: number, y: number) => void;
 }
 
-/**
- * Una mesa en el plano, dibujada con react-konva. La forma depende de `shape`,
- * el color del `status`, muestra opcionalmente un badge de mozo/sección y dibuja
- * `capacity` sillas alrededor. Soporta selección (glow) y click. Todo va dentro de
- * un mismo `<Group>` (arrastrable en conjunto). Debe renderizarse dentro de un `<Layer>`.
- */
 export function TableShape({
   id,
   x,
@@ -135,7 +129,7 @@ export function TableShape({
       onMouseEnter={onSelect ? (e) => setCursor(e, "pointer") : undefined}
       onMouseLeave={onSelect ? (e) => setCursor(e, "default") : undefined}
     >
-      {/* Sillas PRIMERO (detrás de la mesa); el badge va último (encima) → nunca se tapa. */}
+
       {chairs.map((c, i) => (
         <Rect
           key={`chair-${i}`}
@@ -187,11 +181,10 @@ export function TableShape({
         </Group>
       )}
 
-      {/* Badge de reserva: reloj ámbar en la esquina superior derecha (independiente del estado/color). */}
       {hasReservation && (
         <Group x={halfW * 0.78} y={-halfH * 0.78} listening={false}>
           <Circle radius={9} fill="#f59e0b" stroke="#ffffff" strokeWidth={1.5} shadowColor="#0f172a" shadowBlur={2} shadowOpacity={0.25} />
-          {/* Manecillas del reloj (blancas). */}
+
           <Line points={[0, 0, 0, -4]} stroke="#ffffff" strokeWidth={1.4} lineCap="round" />
           <Line points={[0, 0, 3, 0.5]} stroke="#ffffff" strokeWidth={1.4} lineCap="round" />
         </Group>

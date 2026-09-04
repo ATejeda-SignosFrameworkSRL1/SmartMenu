@@ -13,7 +13,6 @@ import { useTranslations } from 'next-intl';
 import { DishModal } from '@/components/DishModal';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-// Código corto de la orden (6 chars del OrderNumber) que ve el cliente: "Pedido #6A1305".
 const shortOrder = (on?: string | null) => ((on ?? '').split('-').pop() ?? '').toUpperCase();
 
 const TAG_STYLES: Record<string, { bg: string; text: string; activeBg: string; activeText: string }> = {
@@ -55,12 +54,10 @@ function MenuPageInner() {
   const categories = useMemo(() => menuData?.data ?? [], [menuData]);
   const cartItemCount = getItemCount();
 
-  // Parámetros de URL: ?category=Postres&addToOrder=71
   const categoryParam = searchParams?.get('category');
   const addToOrderParam = searchParams?.get('addToOrder');
   const addToOrderId = addToOrderParam ? parseInt(addToOrderParam) : null;
 
-  // Al montar: pre-seleccionar categoría y guardar orderId en el store
   useEffect(() => {
     if (addToOrderId) setAddToOrderId(addToOrderId);
 
@@ -94,15 +91,12 @@ function MenuPageInner() {
     const candidateId = activeOrderParam || localStorage.getItem('current_order_id');
     if (!candidateId) return;
 
-    // Clave corrupta (no numerica): limpiarla en vez de pedir /api/order/NaN (400) por siempre.
     const orderIdNum = Number(candidateId);
     if (!Number.isInteger(orderIdNum) || orderIdNum <= 0) {
       localStorage.removeItem('current_order_id');
       return;
     }
 
-    // Verificar que la orden siga activa (no completada ni cancelada ni pagada).
-    // Ruta real del backend: GET /api/order/{id} (singular, AllowAnonymous).
     let cancelled = false;
     apiClient.getOrder(orderIdNum)
       .then(({ data: order }: { data: any }) => {
@@ -121,8 +115,7 @@ function MenuPageInner() {
       })
       .catch((err: any) => {
         if (cancelled) return;
-        // Solo un 404 real (la orden no existe) invalida la referencia guardada;
-        // un fallo transitorio de red no debe destruirla.
+
         if (err?.response?.status === 404) localStorage.removeItem('current_order_id');
         setActiveOrderId(null);
         setActiveOrderNumber(null);
@@ -161,7 +154,7 @@ function MenuPageInner() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Banner modo "agregar a orden existente" */}
+
       {addToOrderId && (
         <div className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-4 py-2 flex items-center justify-between gap-3">
           <span className="text-sm font-medium">{tm('addingDessertsBanner', { orderNum: addToOrderParam })}</span>
@@ -175,7 +168,6 @@ function MenuPageInner() {
         </div>
       )}
 
-      {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -212,8 +204,6 @@ function MenuPageInner() {
         </div>
       </header>
 
-      {/* Banner MODO PARA LLEVAR: el cliente eligió "Para llevar" en el carrito y
-          volvió al menú a elegir sus platos; lo que agregue va al pedido para llevar. */}
       {takeaway && (
         <div className="bg-primary-600 text-white">
           <div className="container mx-auto px-4 py-2.5 flex items-center justify-between gap-2">
@@ -225,10 +215,9 @@ function MenuPageInner() {
         </div>
       )}
 
-      {/* Search + Tag filters */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-4 space-y-3">
-          {/* Search */}
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -240,7 +229,6 @@ function MenuPageInner() {
             />
           </div>
 
-          {/* Tags */}
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             {allTags.map(tag => {
               const active = activeTags.has(tag.code);
@@ -272,7 +260,6 @@ function MenuPageInner() {
         </div>
       </div>
 
-      {/* Category tabs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3 overflow-x-auto">
           <div className="flex gap-2">
@@ -303,7 +290,6 @@ function MenuPageInner() {
         </div>
       </div>
 
-      {/* Dishes */}
       <div className="container mx-auto px-4 py-6">
         {categories
           .filter((cat: Category) => !selectedCategory || cat.id === selectedCategory)
@@ -350,7 +336,7 @@ function MenuPageInner() {
                         )}
 
                         <div className="p-4 flex flex-col flex-1">
-                          {/* Tag badges */}
+
                           {(() => {
                             const tagList = dish.tags && dish.tags.length > 0
                               ? dish.tags

@@ -1,11 +1,5 @@
 "use client";
 
-// QR-ORDER-REVIEW (PROTOTIPO) — pantalla "Agregar a mi Orden" del cliente: revision
-// de la orden antes de sumarla a la existente (Tus Platos, Instrucciones Especiales,
-// Tu orden detallada, Resumen fiscal). Aqui vive el boton VISUAL "Para llevar" junto
-// al boton "Agregar a mi Orden" (placeholder de diseno, sin funcion, segun lo pedido).
-// PRESENTACIONAL: estado local + mocks; sin APIs ni BD.
-
 import { useState } from "react";
 import { ArrowLeft, DollarSign, Minus, Plus, Sparkles, Trash2 } from "lucide-react";
 
@@ -43,7 +37,7 @@ export function QrOrderReview({ initialLines, className }: QrOrderReviewProps) {
 
   return (
     <div className={cn("mx-auto max-w-3xl", className)}>
-      {/* ── Header ── */}
+
       <div className="mb-6 flex items-center justify-between gap-3 border-b pb-4">
         <div className="flex items-center gap-3">
           <button aria-label="Volver" className="rounded-full p-1 hover:bg-muted/50">
@@ -62,7 +56,7 @@ export function QrOrderReview({ initialLines, className }: QrOrderReviewProps) {
       </div>
 
       <div className="space-y-5">
-        {/* ── Tus Platos ── */}
+
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
           <h2 className="mb-4 text-lg font-bold">Tus Platos</h2>
           <div className="space-y-4">
@@ -95,7 +89,6 @@ export function QrOrderReview({ initialLines, className }: QrOrderReviewProps) {
           </div>
         </div>
 
-        {/* ── Instrucciones Especiales ── */}
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
           <h2 className="mb-3 text-lg font-bold">Instrucciones Especiales</h2>
           <textarea rows={3} value={instructions} onChange={(e) => setInstructions(e.target.value)}
@@ -103,7 +96,6 @@ export function QrOrderReview({ initialLines, className }: QrOrderReviewProps) {
                     className="w-full resize-none rounded-xl border bg-card px-4 py-3 text-sm" />
         </div>
 
-        {/* ── Tu orden detallada ── */}
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
           <h2 className="text-lg font-bold">Tu orden detallada</h2>
           <p className="mb-3 text-xs text-muted-foreground">Revisa que todo esté correcto antes de confirmar</p>
@@ -120,7 +112,6 @@ export function QrOrderReview({ initialLines, className }: QrOrderReviewProps) {
           </div>
         </div>
 
-        {/* ── Resumen ── */}
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
           <h2 className="mb-3 text-lg font-bold">Resumen</h2>
           <div className="space-y-1.5 text-sm">
@@ -136,9 +127,8 @@ export function QrOrderReview({ initialLines, className }: QrOrderReviewProps) {
           </p>
         </div>
 
-        {/* ── Footer: "Agregar a mi Orden" + "Para llevar" al lado (visual, sin funcion) ── */}
         <div className="flex flex-col gap-2 rounded-2xl border bg-card p-4 shadow-sm sm:flex-row">
-          {/* Boton visual "Para llevar" — placeholder de diseno, sin funcion. */}
+
           <Button variant="outline" size="lg" type="button" className="sm:w-52">
              Para llevar
           </Button>

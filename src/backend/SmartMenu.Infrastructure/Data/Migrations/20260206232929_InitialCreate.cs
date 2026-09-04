@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <inheritdoc />
+
     public partial class InitialCreate : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -367,7 +367,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 column: "RestaurantId");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

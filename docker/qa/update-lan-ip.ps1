@@ -5,6 +5,10 @@
 # recrea SOLO Caddy. NO reconstruye las apps (el QR se deriva en runtime de la
 # IP con la que abras el panel).
 #
+# ORDEN IMPORTANTE: primero se detecta la IP y se ESCRIBE el .env (no necesita
+# Docker), y solo despues se espera a Docker para recrear Caddy. Si Docker esta
+# apagado el .env ya queda correcto y Caddy lo toma en el proximo arranque.
+#
 # Uso manual: clic derecho -> "Ejecutar con PowerShell".
 # Uso automatico (Tarea Programada): se invoca con -Auto (silencioso, espera a Docker).
 
@@ -18,21 +22,9 @@ function Log($m) {
     if (-not $Auto) { Write-Host $m }
 }
 
-# --- 1) Esperar a que Docker responda (al iniciar sesion tarda en arrancar) ---
-$deadline = (Get-Date).AddMinutes(4)
-$dockerReady = $false
-while ((Get-Date) -lt $deadline) {
-    docker info > $null 2>&1
-    if ($LASTEXITCODE -eq 0) { $dockerReady = $true; break }
-    Start-Sleep -Seconds 6
-}
-if (-not $dockerReady) {
-    Log "Docker no respondio en 4 min; abortando (se reintenta en el proximo arranque/cambio de red)."
-    if (-not $Auto) { Read-Host "Enter para cerrar" }
-    exit 1
-}
-
-# --- 2) Detectar la IP LAN actual (interfaz con gateway, sin WSL/Hyper-V) ---
+# --- 1) Detectar la IP LAN actual (interfaz con gateway, sin WSL/Hyper-V) -----
+# No requiere Docker: se hace ANTES de esperarlo para que el .env nunca quede
+# con la IP vieja aunque Docker Desktop este apagado.
 $cfg = Get-NetIPConfiguration |
     Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' -and $_.InterfaceAlias -notmatch 'WSL|vEthernet|Loopback' } |
     Select-Object -First 1
@@ -45,15 +37,38 @@ if (-not $ip) {
 $nip = $ip.Replace('.', '-')
 Log "IP LAN detectada: $ip  (nip.io: $nip)"
 
-# --- 3) Actualizar QA_LAN_IP / QA_LAN_NIP en docker/qa/.env (preserva el resto) ---
+# --- 2) Actualizar QA_LAN_IP / QA_LAN_NIP en docker/qa/.env (preserva el resto) ---
 $envFile = Join-Path $PSScriptRoot ".env"
 $lines = @()
 if (Test-Path $envFile) { $lines = Get-Content $envFile | Where-Object { $_ -notmatch '^(QA_LAN_IP|QA_LAN_NIP)=' } }
 $lines += "QA_LAN_IP=$ip"
 $lines += "QA_LAN_NIP=$nip"
 Set-Content -Path $envFile -Value $lines -Encoding ascii
+Log ".env actualizado: QA_LAN_IP=$ip / QA_LAN_NIP=$nip"
 
-# --- 4) Recrear SOLO Caddy con la IP nueva (sin rebuild de las apps) ---
+# --- 3) Esperar a que Docker responda (al iniciar sesion tarda en arrancar) ---
+$deadline = (Get-Date).AddMinutes(4)
+$dockerReady = $false
+while ((Get-Date) -lt $deadline) {
+    docker info > $null 2>&1
+    if ($LASTEXITCODE -eq 0) { $dockerReady = $true; break }
+    Start-Sleep -Seconds 6
+}
+if (-not $dockerReady) {
+    Log "Docker no respondio en 4 min. El .env YA quedo actualizado con $ip; Caddy tomara la IP nueva en el proximo arranque del stack (docker compose -f docker-compose.qa.yml up -d caddy)."
+    if (-not $Auto) {
+        Write-Host ""
+        Write-Host "==========================================================="
+        Write-Host " Docker no respondio, pero el .env ya quedo en $ip."
+        Write-Host " Cuando Docker arranque, recrea Caddy con:"
+        Write-Host "   docker compose -f docker-compose.qa.yml up -d caddy"
+        Write-Host "==========================================================="
+        Read-Host "Enter para cerrar"
+    }
+    exit 0
+}
+
+# --- 4) Recrear SOLO Caddy con la IP nueva (sin rebuild de las apps) ---------
 Push-Location $PSScriptRoot
 docker compose -f docker-compose.qa.yml up -d caddy > $null 2>&1
 $ok = ($LASTEXITCODE -eq 0)

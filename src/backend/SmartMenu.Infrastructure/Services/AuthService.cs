@@ -30,8 +30,6 @@ public class AuthService : IAuthService
         _db = db;
     }
 
-    // S4.2 — password policy: ≥12 chars, ≥1 upper, ≥1 lower, ≥1 digit, ≥1 special.
-    // Configurable a futuro vía AuthSettings; defaults razonables hoy.
     private static (bool Ok, string? Error) ValidatePasswordStrength(string password)
     {
         if (string.IsNullOrWhiteSpace(password) || password.Length < 12)
@@ -52,13 +50,12 @@ public class AuthService : IAuthService
         var (strong, pwErr) = ValidatePasswordStrength(dto.Password);
         if (!strong)
             throw new InvalidOperationException(pwErr!);
-        // Verificar si el email ya existe
+
         if (await _userRepository.EmailExistsAsync(dto.Email))
         {
             throw new InvalidOperationException("Email already registered");
         }
 
-        // Crear usuario
         var user = new User
         {
             Email = dto.Email,
@@ -83,7 +80,6 @@ public class AuthService : IAuthService
         };
     }
 
-    // S4.3 — Account lockout: 5 fallos en 15 min ⇒ rechazar.
     private const int MaxFailedAttempts = 5;
     private const int LockoutWindowMinutes = 15;
 
@@ -103,7 +99,6 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByEmailAsync(dto.Email);
         var pwOk = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash);
 
-        // Registrar SIEMPRE el intento (auditoría + futuras decisiones de lockout)
         _db.LoginAttempts.Add(new LoginAttempt
         {
             Email = emailLower,
@@ -118,15 +113,11 @@ public class AuthService : IAuthService
         if (!user.IsActive)
             throw new UnauthorizedAccessException("User is inactive");
 
-        // En login exitoso, limpiar histórico de fallos viejos del usuario para no
-        // contar contra futuros bloqueos (ya no son "recientes" tras éxito).
         var oldFailures = _db.LoginAttempts
             .Where(la => la.Email == emailLower && !la.Success && la.AttemptedAt < windowStart);
         _db.LoginAttempts.RemoveRange(oldFailures);
         await _db.SaveChangesAsync();
 
-        // SHIFT — Auto-iniciar el turno del waiter al hacer login (si no hay uno activo).
-        // El "tiempo en turno" que ve el admin en Usuarios arranca aquí; se cierra en logout.
         if (user.Role == UserRole.Waiter)
         {
             var hasActiveShift = await _db.WaiterShifts.AnyAsync(s => s.WaiterId == user.Id && s.IsActive);
@@ -154,17 +145,15 @@ public class AuthService : IAuthService
         };
     }
 
-    // SPRINT 3 — Login por PIN (modo público / shared device)
-    private const int PinExpirationMinutes = 60;       // PIN-token vida útil (acomoda turnos cortos)
-    private const int PinMaxFailedAttempts = 3;        // por User, no por IP
-    private const int PinLockoutMinutes = 5;           // bloqueo corto para no enojar al staff
+    private const int PinExpirationMinutes = 60;
+    private const int PinMaxFailedAttempts = 3;
+    private const int PinLockoutMinutes = 5;
 
     public async Task<AuthResultDto> LoginByPinAsync(string pin, string? ip = null)
     {
         if (string.IsNullOrWhiteSpace(pin) || !System.Text.RegularExpressions.Regex.IsMatch(pin, "^[0-9]{6}$"))
             throw new UnauthorizedAccessException("PIN inválido (debe ser 6 dígitos)");
 
-        // Candidatos: usuarios activos con PIN configurado y no bloqueados
         var now = DateTime.UtcNow;
         var candidates = await _db.Users
             .Where(u => u.PinHash != null && u.IsActive
@@ -183,9 +172,7 @@ public class AuthService : IAuthService
 
         if (match == null)
         {
-            // PIN inválido — incrementamos counters de TODOS los users que están sin lockout
-            // (no podemos saber quién intentó, así que penalizar a "alguien" sería injusto).
-            // Mejor: solo log a LoginAttempts con Email="pin-failed:<ip>" para auditoría.
+
             _db.LoginAttempts.Add(new LoginAttempt
             {
                 Email = $"pin-failed:{ip ?? "unknown"}",
@@ -197,7 +184,6 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("PIN incorrecto");
         }
 
-        // Match: si tenía intentos previos, resetearlos
         if (match.PinFailedAttempts > 0 || match.PinLockedUntil != null)
         {
             match.PinFailedAttempts = 0;
@@ -212,13 +198,11 @@ public class AuthService : IAuthService
         });
         await _db.SaveChangesAsync();
 
-        // Generar JWT más corto que un login normal (60 min vs default 60 min — idéntico por ahora,
-        // pero se puede acortar en producción a 5-15 min para mayor seguridad en device compartido).
         var accessToken = GenerateAccessTokenWithExpiration(match, PinExpirationMinutes, isPinAuth: true);
         return new AuthResultDto
         {
             AccessToken = accessToken,
-            RefreshToken = string.Empty,  // PIN no emite refresh — al expirar hay que re-ingresar PIN
+            RefreshToken = string.Empty,
             User = MapToUserDto(match)
         };
     }
@@ -236,7 +220,6 @@ public class AuthService : IAuthService
         if (stored is null)
             throw new UnauthorizedAccessException("Invalid refresh token");
 
-        // Detección de replay: si llega un token ya rotado, revocamos toda la cadena del usuario.
         if (stored.RevokedAt != null)
         {
             var allActive = await _db.RefreshTokens.Where(rt => rt.UserId == stored.UserId && rt.RevokedAt == null).ToListAsync();
@@ -252,7 +235,6 @@ public class AuthService : IAuthService
         if (!user.IsActive)
             throw new UnauthorizedAccessException("User is inactive");
 
-        // Rotación: marcar el actual como usado, emitir uno nuevo, encadenar.
         var newRefresh = await IssueRefreshTokenAsync(user.Id, ip);
         stored.RevokedAt = DateTime.UtcNow;
         stored.ReplacedByTokenHash = HashToken(newRefresh);
@@ -269,7 +251,7 @@ public class AuthService : IAuthService
 
     private async Task<string> IssueRefreshTokenAsync(int userId, string? ip)
     {
-        // 64 bytes aleatorios → base64url-safe.
+
         var bytes = RandomNumberGenerator.GetBytes(64);
         var plain = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
@@ -287,7 +269,7 @@ public class AuthService : IAuthService
     private static string HashToken(string token)
     {
         var sha = SHA256.HashData(Encoding.UTF8.GetBytes(token));
-        return Convert.ToHexString(sha); // 64 chars
+        return Convert.ToHexString(sha);
     }
 
     private string GenerateAccessToken(User user)
@@ -297,10 +279,6 @@ public class AuthService : IAuthService
         return GenerateAccessTokenWithExpiration(user, expirationMinutes);
     }
 
-    /// <summary>
-    /// Variante para PIN-login: permite expiración custom y agrega claim "auth_method=pin"
-    /// para que los endpoints sepan que la sesión vino de un device compartido.
-    /// </summary>
     private string GenerateAccessTokenWithExpiration(User user, int expirationMinutes, bool isPinAuth = false)
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");

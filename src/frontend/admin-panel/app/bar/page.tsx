@@ -36,22 +36,18 @@ const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe'
 
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  // Match por PALABRA completa (con plurales), no substring: 'agua' no debe matchear
-  // 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con KDS/waiter/client y backend.
+
   const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
   return DRINK_KEYWORDS.some(k =>
     k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
   );
 }
 
-// FASE 2 RUTEO — el flag isDrink del backend (zona del plato) MANDA; el matcher
-// por nombre queda solo como fallback para payloads sin el campo.
 function itemIsDrink(item: any): boolean {
   const flag = item?.isDrink ?? item?.IsDrink;
   return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
 }
 
-// Filtro por momento de servicio de bebida
 type DrinkTimingFilter = 'all' | 'Before' | 'During' | 'After';
 
 const TIMING_META: Record<string, { labelKey: string; icon: string; colorClass: string; badgeClass: string }> = {
@@ -60,10 +56,9 @@ const TIMING_META: Record<string, { labelKey: string; icon: string; colorClass: 
   After:  { labelKey: 'timing.after',   icon: '🍸', colorClass: 'bg-amber-50 border-amber-400 text-amber-800',    badgeClass: 'bg-amber-100 text-amber-700' },
 };
 
-// Resuelve el drinkTiming de un ítem → 'Before' | 'During' | 'After'
 function resolveDrinkTiming(item: any): string {
   const dt = item.drinkTiming ?? item.DrinkTiming;
-  if (dt === undefined || dt === null) return 'During'; // default
+  if (dt === undefined || dt === null) return 'During';
   if (typeof dt === 'string') {
     if (['Before', 'During', 'After'].includes(dt)) return dt;
     const idx = ['Before', 'During', 'After'].indexOf(dt);
@@ -139,9 +134,6 @@ export default function BarPage() {
   const getOrderItems = (o: any) => o?.items ?? o?.Items ?? [];
   const getItemDishName = (i: any) => i?.dishName ?? i?.DishName ?? '';
 
-  // Todas las órdenes con al menos una bebida.
-  // Excluir órdenes donde el bar ya sirvió su parte (BarServed=true)
-  // para evitar que reaparezcan cuando el cliente agrega comida a una orden ya servida.
   const barOrders = orders
     .filter(o => {
       const barServed = (o as any)?.barServed ?? (o as any)?.BarServed ?? false;
@@ -155,7 +147,6 @@ export default function BarPage() {
 
   const queueCount = barOrders.length;
 
-  // Tabs de filtro por DrinkTiming
   const timingTabs = [
     { key: 'all' as DrinkTimingFilter,    label: t('tabs.all'),    icon: '🍹' },
     { key: 'Before' as DrinkTimingFilter, label: t('timing.before'), icon: '🥂' },
@@ -182,7 +173,7 @@ export default function BarPage() {
   return (
     <MainLayout title={t('title')} subtitle={t('subtitleQueue')}>
       <div className="space-y-4">
-        {/* Header */}
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Wine className="h-8 w-8 text-primary" />
@@ -197,7 +188,6 @@ export default function BarPage() {
           </Button>
         </div>
 
-        {/* Filtro por momento de servicio */}
         <div className="flex gap-2 flex-wrap border-b pb-4">
           {timingTabs.map(tab => {
             const count = getTimingCount(tab.key);
@@ -240,7 +230,6 @@ export default function BarPage() {
               const elapsed = getElapsedMinutes(order.createdAt ?? order.CreatedAt);
               const isUrgent = elapsed > 20;
 
-              // Filtrar bebidas por timing seleccionado
               const visibleItems: any[] = timingFilter === 'all'
                 ? order.drinkItems
                 : order.drinkItems.filter((i: any) => resolveDrinkTiming(i) === timingFilter);

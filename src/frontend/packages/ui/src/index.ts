@@ -1,7 +1,4 @@
-/**
- * @smartmenu/ui — barrel de primitivos compartidos.
- * Importá: import { Button, Card, Dialog, Select, cn } from "@smartmenu/ui";
- */
+
 export { cn } from "./lib/cn";
 export { useIsMobile } from "./hooks/use-mobile";
 export {
@@ -10,7 +7,6 @@ export {
   type FloorPlanTableEvent,
 } from "./hooks/use-floor-plan-readonly";
 
-// ── Átomos ───────────────────────────────────────────────────────────────
 export { Button, buttonVariants, type ButtonProps } from "./components/button";
 export {
   Card,
@@ -28,7 +24,6 @@ export { Separator } from "./components/separator";
 export { Skeleton } from "./components/skeleton";
 export { ScrollArea, ScrollBar } from "./components/scroll-area";
 
-// ── Formulario ───────────────────────────────────────────────────────────
 export { Checkbox } from "./components/checkbox";
 export { Switch } from "./components/switch";
 export {
@@ -44,7 +39,6 @@ export {
   SelectScrollDownButton,
 } from "./components/select";
 
-// ── Overlays / navegación ─────────────────────────────────────────────────
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./components/tooltip";
 export {
   Dialog,
@@ -72,7 +66,6 @@ export {
 } from "./components/sheet";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/tabs";
 
-// ── Layout: Sidebar ────────────────────────────────────────────────────────
 export {
   Sidebar,
   SidebarContent,
@@ -100,7 +93,6 @@ export {
   useSidebar,
 } from "./components/sidebar";
 
-// ── Floor Plan (react-konva) ────────────────────────────────────────────────
 export { TableShape, type TableShapeProps } from "./components/floor-plan/table-shape";
 export { getChairLayout, type ChairTransform } from "./components/floor-plan/chair-layout";
 export { StructureShape, type StructureShapeProps } from "./components/floor-plan/structure-shape";
@@ -154,7 +146,6 @@ export type {
 } from "./components/floor-plan/types";
 export { BISTRO_TABLES } from "./components/floor-plan/bistro-tables";
 
-// ── QR Menu "Para Llevar" (PROTOTIPO menu del QR con senal takeaway — solo Storybook) ──
 export { QrMenu, type QrMenuProps } from "./components/qr-menu/qr-menu";
 export { QrOrderReview, type QrOrderReviewProps } from "./components/qr-menu/qr-order-review";
 export type {
@@ -164,7 +155,6 @@ export type {
   MenuCategory,
 } from "./components/qr-menu/types";
 
-// ── Franchise Directory (PROTOTIPO marketplace del cliente — solo Storybook) ──
 export {
   FranchiseDirectory,
   type FranchiseDirectoryProps,
@@ -177,7 +167,6 @@ export type {
   FoodCategory,
 } from "./components/franchise-directory/types";
 
-// ── Delivery Tracking (PROTOTIPO multi-franquicia — solo Storybook por ahora) ──
 export {
   DeliveryTrackingPanel,
   type DeliveryTrackingPanelProps,

@@ -10,7 +10,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Default: protegido. GETs marcados con [AllowAnonymous] son catálogo público para customer-app.
+[Authorize]
 public class DishController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -21,7 +21,7 @@ public class DishController : ControllerBase
     }
 
     [HttpGet]
-    [AllowAnonymous] // Customer-app necesita listar el catálogo sin login (QR flow).
+    [AllowAnonymous]
     public async Task<IActionResult> GetDishes([FromQuery] int? categoryId, [FromQuery] bool all = false, [FromQuery] int? page = null, [FromQuery] int pageSize = 50)
     {
         var query = _context.Dishes
@@ -38,14 +38,12 @@ public class DishController : ControllerBase
         if (categoryId.HasValue)
             query = query.Where(d => d.CategoryId == categoryId.Value);
 
-        // Legacy: sin ?page devuelve array completo (compat).
         if (page is null)
         {
             var dishes = await query.OrderBy(d => d.Id).ToListAsync();
             return Ok(dishes.Select(d => MapToDishDto(d)).ToList());
         }
 
-        // Paginado.
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
         if (pageSize > 200) pageSize = 200;
@@ -59,7 +57,7 @@ public class DishController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [AllowAnonymous] // Customer-app necesita ver detalle de plato sin login.
+    [AllowAnonymous]
     public async Task<ActionResult<DishDto>> GetDish(int id)
     {
         var dish = await _context.Dishes
@@ -160,9 +158,7 @@ public class DishController : ControllerBase
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> DeleteDish(int id)
     {
-        // Soft delete: la DGII exige conservar histórico de productos vendidos.
-        // El plato deja de aparecer en queries normales (via HasQueryFilter), pero los
-        // OrderItem históricos siguen pudiéndose mostrar.
+
         var dish = await _context.Dishes.FindAsync(id);
         if (dish == null)
             return NotFound(new { message = "Dish not found" });
@@ -191,7 +187,6 @@ public class DishController : ControllerBase
         return Ok(new { isAvailable = dish.IsAvailable });
     }
 
-    /// <summary>Add image to a dish</summary>
     [HttpPost("{id}/images")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> AddDishImage(int id, [FromBody] AddDishImageDto dto)
@@ -218,7 +213,6 @@ public class DishController : ControllerBase
         return Ok(new { id = image.Id, imageUrl = image.ImageUrl, isMain = image.IsMain });
     }
 
-    /// <summary>Delete an image from a dish</summary>
     [HttpDelete("{dishId}/images/{imageId}")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> DeleteDishImage(int dishId, int imageId)
@@ -231,7 +225,6 @@ public class DishController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Set main image</summary>
     [HttpPut("{dishId}/images/{imageId}/set-main")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> SetMainImage(int dishId, int imageId)

@@ -1,26 +1,10 @@
 'use client';
 
-/**
- * DeliveryMap — mapa de seguimiento en vivo (Google Maps) para la app del repartidor.
- *
- * "Key-ready": si NEXT_PUBLIC_GOOGLE_MAPS_API_KEY está vacía, renderiza un
- * placeholder y NUNCA carga el script ni rompe la app.
- *
- * Puntos que dibuja:
- *   A = restaurante  (invoice.restaurantLat/Lng; fallback Santo Domingo, RD)
- *   B = casa del cliente (geocodifica invoice.deliveryAddress en el navegador)
- *   🛵 = repartidor (livePosition del dispositivo, o invoice.driverLat/Lng reportada)
- *
- * La posición en vivo (watchPosition) y el reporte al backend viven en el
- * componente padre (app/page.tsx); aquí solo se dibuja lo que llega por props.
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { GoogleMap, DirectionsRenderer, Marker, useLoadScript } from '@react-google-maps/api';
 import { useTranslations } from 'next-intl';
 import { MapPin } from 'lucide-react';
 
-// Fallback razonable si el restaurante no tiene coordenadas: Santo Domingo, RD.
 const FALLBACK_A: google.maps.LatLngLiteral = { lat: 18.4861, lng: -69.9312 };
 
 const CONTAINER_STYLE: CSSProperties = {
@@ -29,7 +13,6 @@ const CONTAINER_STYLE: CSSProperties = {
   borderRadius: '0.5rem',
 };
 
-// Estilo oscuro compacto para combinar con el tema slate/teal de la app.
 const DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#0f172a' }] },
@@ -52,7 +35,7 @@ export interface DeliveryMapInvoice {
 
 interface DeliveryMapProps {
   invoice: DeliveryMapInvoice;
-  /** Posición en vivo del dispositivo (tiene prioridad sobre driverLat/Lng). */
+
   livePosition?: google.maps.LatLngLiteral | null;
 }
 
@@ -60,7 +43,6 @@ function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
-/** Card de placeholder — se usa sin key, o si el script falla al cargar. */
 function MapPlaceholder({ message }: { message: string }) {
   return (
     <div
@@ -73,11 +55,6 @@ function MapPlaceholder({ message }: { message: string }) {
   );
 }
 
-/**
- * Entrada pública. Lee la env pública ANTES de tocar ningún hook de mapa, para
- * poder devolver el placeholder sin cargar el script de Google.
- * (Los hooks de mapa viven en <MapInner>, que solo se monta cuando hay key.)
- */
 export default function DeliveryMap({ invoice, livePosition }: DeliveryMapProps) {
   const t = useTranslations('delivery');
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -111,7 +88,6 @@ function MapInner({
     [hasRestaurant, invoice.restaurantLat, invoice.restaurantLng],
   );
 
-  // Posición del repartidor: en vivo (dispositivo) o la última reportada.
   const driverPos = useMemo<google.maps.LatLngLiteral | null>(() => {
     if (livePosition && isNum(livePosition.lat) && isNum(livePosition.lng)) return livePosition;
     if (isNum(invoice.driverLat) && isNum(invoice.driverLng)) {
@@ -120,7 +96,6 @@ function MapInner({
     return null;
   }, [livePosition, invoice.driverLat, invoice.driverLng]);
 
-  // Geocodifica la dirección del cliente (PUNTO B) una vez cargado el script.
   useEffect(() => {
     if (!isLoaded) return;
     const address = invoice.deliveryAddress?.trim();
@@ -145,7 +120,6 @@ function MapInner({
     };
   }, [isLoaded, invoice.deliveryAddress]);
 
-  // Ruta A -> B. Si falla, dejamos directions en null y mostramos solo marcadores.
   useEffect(() => {
     if (!isLoaded || !pointB) return;
     let cancelled = false;
@@ -162,22 +136,16 @@ function MapInner({
     };
   }, [isLoaded, pointA, pointB]);
 
-  // Centro INICIAL fijo (capturado una sola vez): el prop `center` de GoogleMap compara por
-  // referencia y llama map.setCenter() en cada objeto nuevo — con driverPos cambiando en cada
-  // tick del GPS, el mapa saltaría constantemente y pisaría el pan/zoom del repartidor.
   const initialCenterRef = useRef<google.maps.LatLngLiteral | null>(null);
   if (initialCenterRef.current === null) initialCenterRef.current = driverPos ?? pointA;
 
-  // Encuadre A + B (+ repartidor si ya se conoce): helper reutilizado por el effect (cuando B
-  // se resuelve) y por onMapLoad (cubre el caso geocode-resuelto-antes-de-cargar-el-mapa,
-  // donde mapRef aún era null y el effect no volvía a correr).
   const fitAll = useCallback((map: google.maps.Map) => {
     const bounds = new google.maps.LatLngBounds();
     bounds.extend(pointA);
     if (pointB) bounds.extend(pointB);
     if (driverPos) bounds.extend(driverPos);
     map.fitBounds(bounds, 64);
-    // driverPos entra solo en el encuadre puntual; NO re-encuadramos en cada tick del GPS.
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pointA, pointB]);
 
@@ -195,7 +163,6 @@ function MapInner({
     mapRef.current = null;
   }, []);
 
-  // Icono emoji sobre un pin circular (data-URI SVG, sin requests externos).
   const makeIcon = useCallback((emoji: string, ring: string): google.maps.Icon => {
     const svg =
       `<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 46 46">` +

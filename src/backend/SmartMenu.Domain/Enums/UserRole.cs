@@ -6,10 +6,10 @@ public enum UserRole
     KitchenStaff = 1,
     Chef = 2,
     Waiter = 3,
-    Host = 4,          // Hostess/Recepcionista (entrada)
-    Cashier = 5,       // Cajero
+    Host = 4,
+    Cashier = 5,
     Manager = 6,
     Admin = 7,
-    Bartender = 8,     // Personal de bar / KDS del bar
-    Delivery = 9       // Repartidor (delivery-app): recoge y entrega pedidos del portal
+    Bartender = 8,
+    Delivery = 9
 }

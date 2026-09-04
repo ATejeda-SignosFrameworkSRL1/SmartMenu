@@ -8,16 +8,12 @@ import { useTranslations } from 'next-intl';
 import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-// F3 — auth-client centralizado reemplaza el interceptor JWT inline.
 const { api } = createAuthApi('kds');
 
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  // Match por PALABRA completa (con plurales), no por substring: 'agua' no debe
-  // matchear 'aguacate', ni 'ron' a 'macarrones', ni 'coca' a 'cocada' — un falso
-  // positivo desaparece del KDS del chef y el plato se queda sin cocinar.
-  // includes() se mantiene solo para keywords multi-palabra ('piña colada').
+
   const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
   return DRINK_KEYWORDS.some((k) =>
     k.includes(' ')
@@ -26,29 +22,23 @@ function isDrinkItem(dishName: string): boolean {
   );
 }
 
-// FASE 2 RUTEO — el flag isDrink que calcula el backend (zona del plato asignada
-// en el admin) MANDA; el matcher por nombre queda solo como fallback para
-// payloads viejos sin el campo. Resuelve casos imposibles por texto ("Copa de helado").
 function itemIsDrink(item: any): boolean {
   const flag = item?.isDrink ?? item?.IsDrink;
   return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
 }
 
-// Mapa de DrinkTiming (0=Before/1=During/2=After) → CourseTiming string
 const DRINK_TIMING_TO_COURSE: Record<number, string> = {
   0: 'Entrada',
   1: 'PlatoFuerte',
   2: 'Postre',
 };
 
-// icon/color/badge estables; el texto se traduce vía kds.course.<tk>.
 const COURSE_META: Record<string, { tk: string; icon: string; order: number; color: string; badge: string }> = {
   Entrada:     { tk: 'starter', icon: '🥗', order: 0, color: 'border-green-500',  badge: 'bg-green-800/60 text-green-200' },
   PlatoFuerte: { tk: 'main',    icon: '🍖', order: 1, color: 'border-orange-500', badge: 'bg-orange-800/60 text-orange-200' },
   Postre:      { tk: 'dessert', icon: '🍰', order: 2, color: 'border-pink-500',   badge: 'bg-pink-800/60 text-pink-200' },
 };
 
-// icon/badge estables; el texto se traduce vía kds.drinkTiming.<tk>.
 const DRINK_TIMING_META: Record<string, { tk: string; icon: string; badge: string }> = {
   Before: { tk: 'before', icon: '🥂', badge: 'bg-blue-800/60 text-blue-200' },
   During: { tk: 'during', icon: '🍷', badge: 'bg-purple-800/60 text-purple-200' },
@@ -85,7 +75,7 @@ interface OrderItem {
   dishName: string;
   quantity: number;
   notes?: string;
-  customerName?: string; // comensal que pidió este ítem (varios comensales por mesa)
+  customerName?: string;
   customizations?: string;
   allergies?: string;
   sideDish?: string;
@@ -99,9 +89,9 @@ interface Order {
   tableNumber?: string;
   status: string;
   createdAt: string;
-  /** DineIn (mesa) | Pickup | Delivery. Los del portal NO tienen mesero. */
+
   fulfillmentType?: string;
-  /** PARA LLEVAR desde la mesa: la cocina debe empacar el pedido. */
+
   isTakeaway?: boolean;
   items: OrderItem[];
   kitchenPreparing?: boolean;
@@ -121,9 +111,7 @@ export default function KDSPage() {
   const t = useTranslations('kds');
   const [user, setUser] = useState<any>(null);
   const userRef = useRef<any>(null);
-  // Guard de secuencia: loadOrders se dispara concurrente (poll 5s + SignalR +
-  // acciones manuales); solo la llamada MÁS RECIENTE puede pintar, para que una
-  // respuesta lenta/vieja no pise datos frescos. mountedRef evita setOrders tras unmount.
+
   const seqRef = useRef(0);
   const mountedRef = useRef(true);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -132,7 +120,7 @@ export default function KDSPage() {
   const [drinkTimingFilter, setDrinkTimingFilter] = useState<DrinkTimingFilter>('all');
 
   useEffect(() => {
-    mountedRef.current = true; // re-armar en re-mount (StrictMode dev ejecuta cleanup+effect dos veces)
+    mountedRef.current = true;
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get('token');
     const userFromUrl = urlParams.get('user');
@@ -156,7 +144,6 @@ export default function KDSPage() {
     userRef.current = parsedUser;
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-    // Refresh user profile from server to get latest assignedZoneId
     const userId = parsedUser.id ?? parsedUser.Id;
     if (userId) {
       api.get(`/api/user/${userId}`).then(res => {
@@ -174,11 +161,8 @@ export default function KDSPage() {
       }).catch(() => {});
     }
 
-    // Esperar la primera carga antes de quitar el loading — llamar setLoading(false)
-    // en síncrono provocaba un flash del empty state "¡Todo listo!" al montar.
     loadOrders().finally(() => setLoading(false));
 
-    // SignalR: escuchar nuevas órdenes para cocina (cuando el mesero confirma la orden)
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(`${wsBaseUrl}/hubs/kitchen`, { accessTokenFactory: () => ensureFreshToken('kds') })
       .withAutomaticReconnect()
@@ -193,7 +177,7 @@ export default function KDSPage() {
 
     const interval = setInterval(loadOrders, 5000);
     return () => {
-      mountedRef.current = false; // invalida respuestas en vuelo: no setOrders tras unmount
+      mountedRef.current = false;
       clearInterval(interval);
       connection.stop().catch(() => {});
     };
@@ -201,8 +185,7 @@ export default function KDSPage() {
   }, []);
 
   const loadOrders = async () => {
-    // Captura el número de secuencia de ESTA llamada; si al volver la respuesta
-    // ya entró otra más reciente, se descarta (evita pintar datos viejos sobre frescos).
+
     const seq = ++seqRef.current;
     const isStale = () => seq !== seqRef.current || !mountedRef.current;
     try {
@@ -217,10 +200,10 @@ export default function KDSPage() {
         setOrders([]);
         return;
       }
-      // Solo órdenes ya confirmadas por el mesero (Confirmed) o en preparación/listas. Pending = no confirmada.
+
       const activeOrders = data.filter((order: Order & { status?: string | number }) => {
         const s = order.status;
-        if (typeof s === 'number') return s >= 1 && s <= 3; // Confirmed=1, Preparing=2, Ready=3
+        if (typeof s === 'number') return s >= 1 && s <= 3;
         return ['Confirmed', 'Preparing', 'Ready'].includes(String(s));
       });
 
@@ -230,8 +213,7 @@ export default function KDSPage() {
 
       const kitchenOrders = activeOrders
         .filter((order: Order) => {
-          // No mostrar si la sección correspondiente ya fue servida
-          // (evita que reaparezca al agregar ítems a una orden ya servida)
+
           if (isBar) return !(order.barServed ?? false);
           return !(order.kitchenServed ?? false);
         })
@@ -239,23 +221,22 @@ export default function KDSPage() {
           const items = order.items || [];
           let myItems: any[];
           if (isBar) {
-            // Bar: solo items que son bebidas
+
             myItems = items.filter((item: any) => itemIsDrink(item));
           } else if (chefZoneId) {
-            // Chef con zona asignada: solo items de esa zona (excluyendo bebidas)
+
             myItems = items.filter((item: any) => {
               const itemZone = item.kitchenZoneId ?? item.KitchenZoneId;
               return itemZone === chefZoneId && !itemIsDrink(item);
             });
           } else {
-            // Chef sin zona: todos los items de comida (sin bebidas)
+
             myItems = items.filter((item: any) => !itemIsDrink(item));
           }
           return { ...order, items: myItems };
         })
         .filter((order: Order) => order.items.length > 0);
 
-      // Ordenar: primero por curso mínimo (Entrada→PlatoFuerte→Postre), luego por hora
       const courseOrder = (order: Order) => {
         const items = order.items || [];
         if (items.length === 0) return 1;
@@ -275,14 +256,12 @@ export default function KDSPage() {
       setOrders(kitchenOrders);
     } catch (error) {
       console.error('Error loading orders:', error);
-      // Fallo transitorio (red/timeout/backend reiniciando): CONSERVAR el tablero
-      // actual — vaciarlo renderiza el falso "¡Todo listo!" y cocina deja de ver
-      // comandas reales. El proximo poll (5s) reconcilia.
+
     }
   };
 
   const getTimeElapsed = (createdAt: string) => {
-    // Asegurar que se interprete como UTC (el servidor devuelve sin 'Z')
+
     const utcStr = createdAt && !createdAt.endsWith('Z') ? createdAt + 'Z' : createdAt;
     const minutes = Math.floor(
       (new Date().getTime() - new Date(utcStr).getTime()) / 60000
@@ -320,8 +299,6 @@ export default function KDSPage() {
     }
   };
 
-  // Pedidos del portal/para-llevar (sin mesero): el chef/bartender DESPACHA su parte
-  // (la coloca en la zona de recogida) y así sale del tablero. No aplica a pedidos de mesa.
   const handleDispatch = async (orderId: number) => {
     const isBar = isBarUser(userRef.current);
     const endpoint = isBar ? `bar-dispatch` : `kitchen-dispatch`;
@@ -346,7 +323,7 @@ export default function KDSPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
+
       <div className="border-b border-gray-800 bg-gray-950">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-wrap justify-between items-center gap-3">
@@ -381,11 +358,10 @@ export default function KDSPage() {
         </div>
       </div>
 
-      {/* Filter tabs — Cocina: por curso | Bar: por momento de servicio */}
       <div className="border-b border-gray-800 bg-gray-900">
         <div className="max-w-7xl mx-auto px-6 py-3 flex gap-2 flex-wrap">
           {isBar ? (
-            // Bar: Todos / Antes / Durante / Después
+
             ([
               { key: 'all',    icon: '🍹' },
               { key: 'Before', icon: '🥂' },
@@ -415,7 +391,7 @@ export default function KDSPage() {
               );
             })
           ) : (
-            // Cocina: Todos / Entrada / Plato Fuerte / Postre
+
             ([
               { key: 'all',         icon: '📋' },
               { key: 'Entrada',     icon: '🥗' },
@@ -447,7 +423,6 @@ export default function KDSPage() {
         </div>
       </div>
 
-      {/* Orders Grid */}
       <div className="max-w-7xl mx-auto px-6 py-6">
         {orders.length === 0 ? (
           <div className="text-center py-20">
@@ -455,7 +430,7 @@ export default function KDSPage() {
             <p className="text-2xl text-gray-400">{t('allDone')}</p>
           </div>
         ) : (() => {
-          // KDS-NAV.1 — empty state claro por tab vacío (evita pantalla en blanco).
+
           const matchingItemsTotal = orders.reduce((acc, o) => {
             const all = o.items || [];
             const filtered = isBar
@@ -494,7 +469,7 @@ export default function KDSPage() {
             {orders.map((order) => {
               const elapsed = getTimeElapsed(order.createdAt);
               const alertColor = getAlertColor(elapsed);
-              // Filtrar ítems según el tab seleccionado (curso para cocina, timing para bar)
+
               const allItems = order.items || [];
               const items = isBar
                 ? (drinkTimingFilter === 'all' ? allItems : allItems.filter((i: any) => resolveDrinkTiming(i) === drinkTimingFilter))
@@ -511,18 +486,18 @@ export default function KDSPage() {
                   key={order.id}
                   className="bg-gray-800 rounded-lg border-2 border-gray-700 overflow-hidden hover:border-primary-600 transition-colors"
                 >
-                  {/* Header: Mesa + ALERGIA badge + tiempo */}
+
                   <div className={`${alertColor} p-4`}>
                     <div className="flex flex-wrap justify-between items-center gap-2 text-white">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {/* FULFILLMENT — pedidos del portal (sin mesa): badge en vez de "Mesa -" */}
+
                         {(() => {
                           const ft = (order as any).fulfillmentType ?? (order as any).FulfillmentType;
                           if (ft === 'Delivery') return <p className="text-2xl font-bold">🛵 DELIVERY</p>;
                           if (ft === 'Pickup')   return <p className="text-2xl font-bold">🛍️ PICKUP</p>;
                           return <p className="text-2xl font-bold">{t('table', { number: order.tableId ?? (order as any).tableNumber ?? '-' })}</p>;
                         })()}
-                        {/* PARA LLEVAR desde la mesa: la cocina debe EMPACAR este pedido */}
+
                         {(order as any).isTakeaway && (
                           <span className="px-2 py-0.5 rounded-md bg-amber-500 text-white text-sm font-extrabold">🥡 PARA LLEVAR</span>
                         )}
@@ -535,7 +510,6 @@ export default function KDSPage() {
                     <p className="text-sm opacity-90 mt-1">{t('orderNumber', { code: (order.orderNumber ?? '').split('-').pop()?.toUpperCase() ?? '' })}</p>
                   </div>
 
-                  {/* Bloque de alergias destacado */}
                   {hasAllergies && allergiesText && (
                     <div className="mx-4 mt-3 rounded-lg bg-red-900/40 border border-red-500 p-3 flex items-center gap-2">
                       <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0" />
@@ -543,10 +517,9 @@ export default function KDSPage() {
                     </div>
                   )}
 
-                  {/* Items con preferencias por plato */}
                   <div className="p-4 space-y-3">
                     {items.map((item: any, idx: number) => {
-                      // Bar: mostrar timing de bebida; Cocina: mostrar curso
+
                       const badgeMeta = isBar
                         ? (() => { const tm = DRINK_TIMING_META[resolveDrinkTiming(item)] ?? DRINK_TIMING_META['During']; return { icon: tm.icon, label: t(`drinkTiming.${tm.tk}`), badge: tm.badge }; })()
                         : (() => { const cm = COURSE_META[resolveItemCourse(item)] ?? COURSE_META['PlatoFuerte']; return { icon: cm.icon, label: t(`course.${cm.tk}`), badge: cm.badge }; })();
@@ -599,7 +572,6 @@ export default function KDSPage() {
                     })}
                   </div>
 
-                  {/* Acciones: Preparando → Listo. El mesero confirma en su app. */}
                   <div className="p-4 border-t border-gray-700 bg-gray-900/50">
                     {(() => {
                       const isPreparing = isBar ? order.barPreparing : order.kitchenPreparing;
@@ -614,8 +586,7 @@ export default function KDSPage() {
                         return <div className="text-center py-2 text-teal-400 font-medium">{t('served')}</div>;
                       }
                       if (isReady) {
-                        // Portal/para-llevar: no hay mesero → el chef despacha (lo coloca para
-                        // recogida) y saca la tarjeta del tablero.
+
                         if (isPortal) {
                           return (
                             <div className="space-y-2">

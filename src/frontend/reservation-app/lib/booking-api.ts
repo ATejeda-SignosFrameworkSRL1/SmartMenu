@@ -1,20 +1,19 @@
 import axios from 'axios';
 
-// Cliente anónimo: el portal público de reservas no requiere login. Next reescribe /api → backend.
 const api = axios.create({ baseURL: '' });
 
 export type SlotStatus = 'available' | 'limited' | 'full';
 
 export interface Slot {
-  time: string;        // HH:mm
+  time: string;
   status: SlotStatus;
   remaining: number;
 }
 
 export interface ServiceWindow {
-  label: string;       // "Almuerzo", "Cena"
-  start: string;       // HH:mm
-  end: string;         // HH:mm
+  label: string;
+  start: string;
+  end: string;
 }
 
 export interface Availability {
@@ -81,11 +80,9 @@ export async function getZones(): Promise<ZoneOption[]> {
   }
 }
 
-// ─────────────── Reserva de ÁREA/ZONA completa (exclusiva) + seguimiento ───────────────
-
 export interface ZoneRequestBody {
-  date: string;        // yyyy-MM-dd
-  time: string;        // HH:mm
+  date: string;
+  time: string;
   guests: number;
   zoneId: number;
   customerName: string;
@@ -109,7 +106,7 @@ export interface ReservationTrack {
   status: string;
   isZoneExclusive: boolean;
   zoneName?: string | null;
-  reservationDateTime: string;   // yyyy-MM-ddTHH:mm:ss
+  reservationDateTime: string;
   numberOfGuests: number;
   occasionType: number;
   hostResponseMessage?: string | null;
@@ -122,14 +119,12 @@ export async function getTrack(code: string): Promise<ReservationTrack | null> {
     const { data } = await api.get<ReservationTrack>(`/api/tablereservation/track/${encodeURIComponent(code)}`);
     return data;
   } catch (e) {
-    // Solo un 404 real significa "reserva no encontrada". Fallos de red/timeout/5xx se
-    // propagan para que la UI conserve la última vista buena y el polling reintente.
+
     if (axios.isAxiosError(e) && e.response?.status === 404) return null;
     throw e;
   }
 }
 
-// Las etiquetas se traducen en la UI vía t(`occasions.${key}`); el value va al backend.
 export const OCCASIONS: { value: number; key: string }[] = [
   { value: 0, key: 'none' },
   { value: 1, key: 'birthday' },

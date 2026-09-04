@@ -11,9 +11,8 @@ const api = axios.create({
   baseURL: '',
 });
 
-type CourseTiming = 0 | 1 | 2; // 0=Entrada, 1=PlatoFuerte, 2=Postre
+type CourseTiming = 0 | 1 | 2;
 
-// Labels are resolved per-render via t(); keep icons/colors here as non-translatable data.
 const COURSE_OPTIONS_BASE: { value: CourseTiming; icon: string; color: string; key: string }[] = [
   { value: 0, icon: '🥗', color: 'bg-green-100 text-green-800', key: 'courseEntrada' },
   { value: 1, icon: '🍖', color: 'bg-orange-100 text-orange-800', key: 'coursePlatoFuerte' },
@@ -60,7 +59,7 @@ export default function MenuManagementPage() {
   const [editingDish, setEditingDish] = useState<Dish | null>(null);
 
   useEffect(() => {
-    // Si llegamos con token/user en la URL (redirect desde login), guardarlos primero
+
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tokenFromUrl = params.get('token');
@@ -145,7 +144,7 @@ export default function MenuManagementPage() {
   return (
     <MainLayout title={t('pageTitle')} subtitle={t('subtitleTotal', { count: dishes.length })}>
     <div className="space-y-6">
-      {/* Acciones y filtros */}
+
       <div className="bg-white rounded-lg border p-4">
           <div className="flex justify-between items-center mb-4">
             <div />
@@ -161,7 +160,6 @@ export default function MenuManagementPage() {
             </button>
           </div>
 
-          {/* Filters */}
           <div className="flex gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -190,7 +188,6 @@ export default function MenuManagementPage() {
           </div>
       </div>
 
-      {/* Dishes Grid */}
       <div className="py-4">
         {filteredDishes.length === 0 ? (
           <div className="text-center py-12">
@@ -203,7 +200,7 @@ export default function MenuManagementPage() {
                 key={dish.id}
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
               >
-                {/* Image */}
+
                 {dish.imageUrl && (
                   <div className="h-48 bg-gray-200">
                     <img
@@ -215,7 +212,7 @@ export default function MenuManagementPage() {
                 )}
 
                 <div className="p-4">
-                  {/* Name & Price */}
+
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-lg font-bold text-gray-900">{dish.name}</h3>
                     <span className="text-lg font-bold text-primary-600">
@@ -223,15 +220,12 @@ export default function MenuManagementPage() {
                     </span>
                   </div>
 
-                  {/* Category */}
                   <p className="text-sm text-gray-500 mb-2">{dish.categoryName}</p>
 
-                  {/* Description */}
                   <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                     {dish.description}
                   </p>
 
-                  {/* Tags */}
                   <div className="flex gap-2 mb-3 flex-wrap">
                     {(dish as Dish).tags?.map((tag) => (
                       <span key={tag.id} className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
@@ -249,7 +243,6 @@ export default function MenuManagementPage() {
                     )}
                   </div>
 
-                  {/* Course + Status */}
                   <div className="mb-3 flex items-center gap-2 flex-wrap">
                     {(() => {
                       const c = getCourseOptionBase(dish.defaultCourse ?? 1);
@@ -270,7 +263,6 @@ export default function MenuManagementPage() {
                     </span>
                   </div>
 
-                  {/* Actions */}
                   <div className="flex gap-2">
                     <button
                       onClick={() => toggleAvailability(dish.id)}
@@ -308,7 +300,6 @@ export default function MenuManagementPage() {
         )}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <DishFormModal
           dish={editingDish}
@@ -331,7 +322,6 @@ export default function MenuManagementPage() {
   );
 }
 
-// Modal Component
 function DishFormModal({
   dish,
   categories,
@@ -367,8 +357,6 @@ function DishFormModal({
   );
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // S5.2 — errores por campo, no solo toast. ASP.NET Core devuelve 400 con
-  // { errors: { Name: ["..."], Price: ["..."] } } cuando ModelState falla.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const fieldError = (name: string): string | undefined => {
@@ -392,9 +380,7 @@ function DishFormModal({
         toast.success(t('dishUpdated'));
       } else {
         const created = await api.post('/api/dish', payload);
-        // Asociar la galeria subida ANTES de crear el plato: hasta ahora esas
-        // imagenes solo vivian en estado local (ids falsos Date.now()) y se
-        // PERDIAN en silencio al guardar — solo sobrevivia imageUrl principal.
+
         const newId = created.data?.id ?? created.data?.Id;
         if (newId && dishImages.length > 0) {
           let failed = 0;
@@ -410,7 +396,7 @@ function DishFormModal({
       onSuccess();
     } catch (error: any) {
       const resp = error?.response?.data;
-      // ASP.NET ModelState validation: { errors: { Field: ["msg"] } }
+
       if (resp?.errors && typeof resp.errors === 'object') {
         const flat: Record<string, string> = {};
         for (const [k, v] of Object.entries(resp.errors)) {
@@ -563,7 +549,7 @@ function DishFormModal({
                 {t('fieldImages')}
               </label>
               <div className="flex flex-col gap-3">
-                {/* Gallery of existing images */}
+
                 {dishImages.length > 0 && (
                   <div className="flex gap-2 flex-wrap">
                     {dishImages.map((img, idx) => (
@@ -600,7 +586,7 @@ function DishFormModal({
                     ))}
                   </div>
                 )}
-                {/* Upload button */}
+
                 <label className={`flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 w-fit ${uploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
                   <input
                     type="file"

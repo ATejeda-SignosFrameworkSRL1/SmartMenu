@@ -20,6 +20,7 @@
 	# Caddy genera su propio CA local; se persiste en el volumen caddy-data.
 	# Si quisieras emitir certs reales (Let's Encrypt) tendrÃ­as que cambiar a global email + hosts pÃºblicos.
 	auto_https disable_redirects
+	default_sni {$QA_LAN_IP}
 	admin off
 }
 
@@ -69,9 +70,20 @@ http://localhost http://*.qa.smartmenu.local {
 # â”€â”€â”€ HTTP plano vÃ­a LAN IP (legado â€” se queda como fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 http://{$QA_LAN_IP} {
 	encode gzip
-	@apipath path /api/* /uploads/* /hubs/*
-	reverse_proxy @apipath backend:8080
-	reverse_proxy client-app:3000
+	# CA raiz por HTTP PLANO (sin TLS) -> resuelve el problema del huevo y la
+	# gallina: el device no confia en el sitio hasta instalar la CA, pero la CA
+	# se descarga del propio sitio. Sirviendola sin TLS no hay advertencia.
+	# Necesario para instalarla en un smartwatch/telefono Android o en iOS.
+	handle /caddy-root-ca.crt {
+		root * /srv/hub
+		header Content-Type "application/x-x509-ca-cert"
+		file_server
+	}
+	handle {
+		@apipath path /api/* /uploads/* /hubs/*
+		reverse_proxy @apipath backend:8080
+		reverse_proxy client-app:3000
+	}
 }
 
 # â”€â”€â”€ nip.io HTTPS â€” URLs limpias, accesibles desde cualquier device LAN â”€â”€â”€
@@ -224,7 +236,7 @@ HTML 200
 # Tres maneras de acceder al PWA del cliente:
 #   - qa.smartmenu.local:8443   (con hosts file en la PC)
 #   - localhost:8451            (acceso local sin hosts file / MCP)
-#   - {$QA_LAN_IP}:8443         (LAN IP â€” QR scannable desde el cell)
+#   - {$QA_LAN_IP}:8451         (LAN IP â€” QR scannable desde el cell)
 qa.smartmenu.local, localhost:8451, {$QA_LAN_IP}:8451 {
 	import tls-long
 	import security-headers
@@ -356,8 +368,17 @@ delivery.qa.smartmenu.local {
 # ─── Staff hub — landing con QR de cada panel (LAN, scannable desde el cell) ─
 # Pagina estatica servida desde /srv/hub (bind-mount docker/qa/staff-hub).
 # Lista todos los paneles de rol con su URL nip.io + QR + credenciales seed.
-# Accesible desde cualquier device de la LAN: https://hub.{$QA_LAN_NIP}.nip.io:8443
-hub.{$QA_LAN_NIP}.nip.io {
+# Accesible desde cualquier device de la LAN de DOS formas:
+#   https://hub.{$QA_LAN_NIP}.nip.io:8443   (requiere que el device resuelva nip.io)
+#   https://{$QA_LAN_IP}:8443               (IP cruda, sin DNS — muchos routers bloquean nip.io)
+#
+# OJO con el puerto: el compose mapea "8443:443", o sea el :8443 del HOST entra al
+# :443 del CONTENEDOR. Por eso el site address se escribe :443 (no :8443) — Caddy
+# escucha dentro del contenedor. Un `{$QA_LAN_IP}:8443` aqui abriria un listener
+# en el 8443 del contenedor, que NO esta publicado, y no responderia nada.
+# No colisiona con el bloque `localhost` (mismo puerto 443, host distinto) ni con
+# {$QA_LAN_IP}:8451 (client-app, otro puerto): Caddy separa sitios por Host.
+hub.{$QA_LAN_NIP}.nip.io, {$QA_LAN_IP}:443 {
 	import tls-long
 	import security-headers
 	encode gzip zstd
@@ -365,5 +386,15 @@ hub.{$QA_LAN_NIP}.nip.io {
 	# iOS/Android: forzar el Content-Type para que el .crt se reconozca como CA instalable
 	@cacert path /caddy-root-ca.crt
 	header @cacert Content-Type "application/x-x509-ca-cert"
+	# ANDROID 7+: el tipo x-x509-ca-cert dejo de abrir el instalador (eso era
+	# Android <=6). Chrome entrega el archivo al sistema, nadie lo reclama y el
+	# gestor de descargas responde "this file doesn't exist anymore" — aunque la
+	# descarga si fue correcta. Sirviendo la MISMA CA como descarga normal, el
+	# archivo queda en Descargas y el selector de Ajustes lo encuentra.
+	# La ruta de arriba se conserva intacta porque iOS si necesita ese tipo
+	# para el flujo de perfiles.
+	@cacert_android path /smartmenu-ca.crt
+	header @cacert_android Content-Type "application/octet-stream"
+	header @cacert_android Content-Disposition "attachment; filename=\"smartmenu-ca.crt\""
 	file_server
 }

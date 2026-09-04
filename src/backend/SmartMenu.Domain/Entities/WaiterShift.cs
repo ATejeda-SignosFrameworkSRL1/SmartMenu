@@ -7,7 +7,6 @@ public class WaiterShift : BaseEntity
     public DateTime? EndTime { get; set; }
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
-    
-    // Navigation
+
     public User Waiter { get; set; } = null!;
 }

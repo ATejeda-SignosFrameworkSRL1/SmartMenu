@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Instalar certificado — SmartMenu</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: #0f172a; color: #e2e8f0; padding: .6rem;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px; line-height: 1.35;
+  }
+  h1 { font-size: 1.05rem; margin: 0 0 .5rem; color: #fff; }
+  .btn {
+    display: block; width: 100%; min-height: 3rem; margin: .5rem 0;
+    display: flex; align-items: center; justify-content: center; gap: .4rem;
+    background: #16a34a; color: #fff; border: 0; border-radius: .6rem;
+    font: inherit; font-weight: 700; text-decoration: none; cursor: pointer;
+  }
+  .btn.alt { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; }
+  ol { margin: .5rem 0; padding-left: 1.3rem; }
+  li { margin-bottom: .45rem; }
+  b { color: #fff; }
+  .warn { background: #78350f; border-left: 3px solid #f59e0b; padding: .45rem .6rem;
+    border-radius: .3rem; margin: .5rem 0; font-size: .85rem; }
+  .ok   { background: #064e3b; border-left: 3px solid #22c55e; }
+  .bad  { background: #7f1d1d; border-left: 3px solid #ef4444; }
+  #res { margin: .5rem 0; font-size: .9rem; padding: .5rem .6rem; border-radius: .3rem;
+    background: #1e293b; }
+  small { color: #94a3b8; }
+</style>
+</head>
+<body>
+  <h1>🔐 Instalar el certificado</h1>
+
+  <a class="btn" id="dl" href="smartmenu-ca.crt" download="smartmenu-ca.crt">⬇️ Descargar (631 B)</a>
+
+  <div class="warn">
+    Tras tocar el botón, <b>NO uses "abrir"</b> en la notificación de descarga.
+    Android 7 y posteriores ya no instalan certificados así: Chrome dirá
+    <i>"this file doesn't exist anymore"</i> aunque el archivo esté perfecto.
+  </div>
+
+  <ol>
+    <li>El equipo necesita <b>PIN o patrón</b>. Sin bloqueo de pantalla, Android no instala certificados.</li>
+    <li>Ve a <b>Ajustes → Seguridad → Cifrado y credenciales → Instalar un certificado → Certificado de CA</b>.</li>
+    <li>Acepta la advertencia roja y busca <b>smartmenu-ca.crt</b> en la carpeta <b>Descargas</b>.</li>
+    <li>Nómbralo <b>SmartMenu</b>. Verás un aviso de "red supervisada": es normal con cualquier CA privada.</li>
+  </ol>
+
+  <button class="btn alt" id="chk" type="button">✅ Comprobar si quedó instalada</button>
+  <div id="res">Sin comprobar todavía.</div>
+
+  <p><small>La comprobación carga una imagen desde el panel del mesero
+  (otro puerto, mismo certificado). Si el navegador confía en la CA, carga; si no, falla.
+  Es exactamente lo que necesita el modo app para funcionar.</small></p>
+
+  <a class="btn alt" href="./">← Volver a los accesos</a>
+
+<script>
+(function () {
+  var res = document.getElementById('res');
+  function set(msg, cls) { res.textContent = msg; res.className = cls || ''; }
+
+  document.getElementById('chk').addEventListener('click', function () {
+    set('Comprobando…');
+    // El puerto del panel del mesero se deriva del host actual, asi que esto
+    // sigue funcionando aunque cambie la IP de la PC.
+    var origin = 'https://' + location.hostname + ':8446';
+    var img = new Image();
+    var done = false;
+    var t = setTimeout(function () {
+      if (done) return;
+      done = true;
+      set('Sin respuesta. Revisa que sigues en el Wi-Fi del local.', 'bad');
+    }, 8000);
+
+    img.onload = function () {
+      if (done) return; done = true; clearTimeout(t);
+      set('Certificado CONFIABLE. Ya puedes instalar la app: Chrome → ⋮ → Instalar aplicación.', 'ok');
+    };
+    img.onerror = function () {
+      if (done) return; done = true; clearTimeout(t);
+      set('Todavia NO confia en el certificado. Repite los pasos 1 a 4 (lo mas comun: falta el PIN, o se instalo en el sitio equivocado).', 'bad');
+    };
+    // Parametro variable para que no responda una copia en cache.
+    img.src = origin + '/icon-192.png?t=' + String(new Date().getTime());
+  });
+})();
+</script>
+</body>
+</html>

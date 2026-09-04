@@ -6,8 +6,6 @@ import { ArrowLeft, UtensilsCrossed } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-// Client-only: BookingEngineWarm calcula fechas con `new Date()` en el render inicial
-// (mismo motivo que en el landing) → evitar mismatch de hidratación.
 const BookingEngineWarm = dynamic(() => import('@/components/BookingEngineWarm'), { ssr: false });
 
 export default function AreaCompletaPage() {
@@ -15,7 +13,7 @@ export default function AreaCompletaPage() {
 
   return (
     <main className="min-h-screen bg-warm-950">
-      {/* Header simple con vuelta al inicio */}
+
       <header className="border-b border-warm-800">
         <div className="container-narrow flex h-20 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">

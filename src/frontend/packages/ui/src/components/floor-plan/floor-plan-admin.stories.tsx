@@ -27,30 +27,28 @@ import { type Reservation } from "./floor-plan-dashboard";
 import { MULTI_ZONE_FLOOR_PLAN } from "./multi-zone-mock";
 import type { FloorPlanData } from "./types";
 
-/** Reservaciones mock por zona (mismas que el dashboard). */
 const RESERVATIONS: Reservation[] = [
-  // Terraza (zoneId 1, mesas 1-8)
+
   { id: "r5", zoneId: "1", time: "11:30 AM", customerName: "Heidi-Marie", partySize: 6, status: "Confirmado", tableId: 3, phone: "809-555-0231", tags: ["Aniversario"] },
   { id: "r6", zoneId: "1", time: "12:30 PM", customerName: "Ana Belén", partySize: 2, status: "Sentado", tableId: 6, phone: "829-555-0274" },
   { id: "r7", zoneId: "1", time: "1:00 PM", customerName: "Grupo Sánchez", partySize: 4, status: "Confirmado", tableId: 8, phone: "809-555-0319", tags: ["Grupo"] },
-  // Salón Principal (zoneId 2, mesas 9-16)
+
   { id: "r1", zoneId: "2", time: "11:30 AM", customerName: "Donald Duck", partySize: 4, status: "Confirmado", tableId: 12, phone: "809-555-0142", tags: ["VIP"] },
   { id: "r2", zoneId: "2", time: "11:30 AM", customerName: "Larry Letmore", partySize: 2, status: "Sentado", tableId: 10, phone: "809-555-0198", tags: ["Ventana"] },
   { id: "r3", zoneId: "2", time: "12:00 PM", customerName: "George Lancie", partySize: 4, status: "Confirmado", tableId: 15, phone: "829-555-0110", tags: ["Cumpleaños"] },
   { id: "r4", zoneId: "2", time: "1:00 PM", customerName: "Carlos Mota", partySize: 2, status: "Esperando", tableId: 9, phone: "809-555-0167" },
-  // VIP (zoneId 3, mesas 17-24)
+
   { id: "r8", zoneId: "3", time: "12:00 PM", customerName: "Mauricio Peña", partySize: 5, status: "Confirmado", tableId: 17, phone: "809-555-0401", tags: ["VIP"] },
   { id: "r9", zoneId: "3", time: "1:00 PM", customerName: "Sr. Holt (VIP)", partySize: 4, status: "Sentado", tableId: 19, phone: "829-555-0420", tags: ["VIP", "Alergia: gluten"] },
   { id: "r10", zoneId: "3", time: "1:30 PM", customerName: "Embajada Nórdica", partySize: 4, status: "Esperando", tableId: 21, phone: "809-555-0455", tags: ["Protocolo"] },
-  // Terraza Norte (zoneId 4, mesas 25-27)
+
   { id: "r11", zoneId: "4", time: "12:30 PM", customerName: "Familia Ramírez", partySize: 8, status: "Esperando", tableId: 27, phone: "809-555-0512", tags: ["Niños"] },
   { id: "r12", zoneId: "4", time: "12:30 PM", customerName: "Lucía Fermín", partySize: 2, status: "Confirmado", tableId: 25, phone: "829-555-0566" },
   { id: "r13", zoneId: "4", time: "1:00 PM", customerName: "Pedro Castillo", partySize: 4, status: "Sentado", tableId: 26, phone: "809-555-0598", tags: ["Cumpleaños"] },
 ];
 
-// ── Paleta del shell admin (de admin-panel/app/globals.css) ──
-const SIDEBAR_BG = "#2b2b2b"; //  hsl(0 0% 17%)
-const BRAND = "#8a0000"; //       hsl(0 100% 27%) — primary / item activo
+const SIDEBAR_BG = "#2b2b2b";
+const BRAND = "#8a0000";
 
 interface NavItem {
   label: string;
@@ -73,11 +71,10 @@ const NAV: NavItem[] = [
   { label: "Reportes", Icon: BarChart3 },
 ];
 
-/** Réplica presentacional del sidebar + topbar del admin-panel. */
 function AdminShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex w-full overflow-hidden text-slate-900" style={{ height: 950 }}>
-      {/* ── Sidebar ── */}
+
       <aside className="flex w-64 flex-shrink-0 flex-col" style={{ backgroundColor: SIDEBAR_BG, color: "#f5f5f5" }}>
         <div className="flex items-center gap-3 border-b border-white/10 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: BRAND }}>
@@ -127,7 +124,6 @@ function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* ── Columna principal ── */}
       <div className="flex flex-1 flex-col overflow-hidden bg-white">
         <header className="flex h-16 flex-shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6">
           <PanelLeft className="h-5 w-5 flex-shrink-0 text-slate-500" />
@@ -194,14 +190,6 @@ export default meta;
 
 type Story = StoryObj<typeof FloorPlanModule>;
 
-/**
- * El módulo "Gestión de Salón" (plano de planta) maquetado DENTRO del shell del admin-panel:
- * - Sidebar charcoal con la navegación real (Operaciones), "Gestión de Salón" activo (ítem propio, no "Mesas").
- * - Topbar con título, reloj y campana.
- * - Barra de publicación: exportar la distribución a Host / Mesero / a todos
- *   (los botones reflejan el estado de sincronización).
- * - Dashboard multi-zona: toggle En Vivo/Diseñador + reservaciones por zona.
- */
 export const DentroDelAdmin: Story = {
   render: () => {
     const Demo = () => {

@@ -2,10 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace SmartMenu.Application.DTOs;
 
-/// <summary>
-/// Envelope estándar para endpoints paginados.
-/// El cliente recibe { items, page, pageSize, total, totalPages }.
-/// </summary>
 public class PagedResult<T>
 {
     public IReadOnlyList<T> Items { get; init; } = Array.Empty<T>();
@@ -20,10 +16,6 @@ public class PagedResult<T>
         new() { Items = Array.Empty<T>(), Page = page, PageSize = pageSize, Total = 0 };
 }
 
-/// <summary>
-/// Query string standard para endpoints paginados: <c>?page=1&pageSize=50</c>.
-/// Capped a 200 para evitar DoS, default 50.
-/// </summary>
 public record PagedQuery
 {
     [Range(1, int.MaxValue)]

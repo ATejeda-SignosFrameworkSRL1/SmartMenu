@@ -8,7 +8,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Default: protegido. GET es público (catálogo visible en menu).
+[Authorize]
 public class DishTagController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -19,7 +19,7 @@ public class DishTagController : ControllerBase
     }
 
     [HttpGet]
-    [AllowAnonymous] // Customer-app muestra los tags (vegan/picante/etc) en el menú.
+    [AllowAnonymous]
     public async Task<IActionResult> GetAll()
     {
         var tags = await _context.DishTags

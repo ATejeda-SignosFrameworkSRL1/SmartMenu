@@ -1,30 +1,5 @@
 'use client';
 
-/**
- * LoginScreen parametrizable — reemplaza los ~126 LOC duplicados en cada uno
- * de los 6 login/page.tsx (admin, kds, waiter, host, cashier, reservation).
- *
- * Uso:
- *   export default function Page() {
- *     return (
- *       <LoginScreen
- *         appKey="admin"
- *         appTitle="Panel de Administración"
- *         acceptedRoles={['Admin', 'Manager']}
- *         accent="from-blue-600 to-indigo-600"
- *         quickUsers={[
- *           { email: 'admin@smartmenu.com', password: 'Admin123!', label: 'Admin', emoji: '👨‍💼', hint: 'OK' },
- *           ...
- *         ]}
- *       />
- *     );
- *   }
- *
- * Convención: hint='OK' marca quick-users con rol permitido (estilo verde),
- * el resto se renderiza en gris para que el QA vea claramente cuáles serán
- * rechazados por role validation.
- */
-
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -40,10 +15,10 @@ export interface LoginScreenProps {
   appKey: string;
   appTitle: string;
   acceptedRoles: string[];
-  /** Tailwind gradient classes, ej. 'from-blue-600 to-indigo-600' */
+
   accent?: string;
   quickUsers?: QuickUser[];
-  /** Path al cual redirigir tras login OK. Default '/'. */
+
   homePath?: string;
 }
 

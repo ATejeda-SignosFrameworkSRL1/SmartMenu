@@ -10,7 +10,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]  // class-level: solo requiere autenticación; role check va por endpoint
+[Authorize]
 public class UserController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -22,9 +22,6 @@ public class UserController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Obtener todos los usuarios (admin)
-    /// </summary>
     [HttpGet]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(List<UserDto>), StatusCodes.Status200OK)]
@@ -63,9 +60,6 @@ public class UserController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener usuario por ID
-    /// </summary>
     [HttpGet("{id}")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
@@ -93,9 +87,6 @@ public class UserController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Crear usuario (admin)
-    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(UserDto), StatusCodes.Status201Created)]
@@ -141,9 +132,6 @@ public class UserController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Actualizar usuario (admin)
-    /// </summary>
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -188,7 +176,6 @@ public class UserController : ControllerBase
         });
     }
 
-    // USER-CRUD.1 — helper: detecta el ID del admin actual desde el JWT.
     private int? GetActorIdFromJwt()
     {
         var sub = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
@@ -196,11 +183,6 @@ public class UserController : ControllerBase
         return int.TryParse(sub, out var uid) && uid > 0 ? uid : (int?)null;
     }
 
-    /// <summary>
-    /// USER-CRUD.1 — Reporte previo: ¿qué pasa si elimino este usuario?
-    /// Devuelve qué dependencias tiene y si se puede borrar duro (hard) o solo desactivar (soft).
-    /// El admin-panel lo usa para mostrar una confirmación clara antes del DELETE real.
-    /// </summary>
     [HttpGet("{id}/deletion-impact")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -252,11 +234,7 @@ public class UserController : ControllerBase
 
     private async Task<UserDeps> CountUserDependenciesAsync(int userId)
     {
-        // USER-CRUD.1 — Contadores SECUENCIALES porque EF DbContext NO es thread-safe.
-        // Intentar Task.WhenAll con el mismo _context lanza:
-        //   "A second operation was started on this context instance before a previous
-        //    operation completed."
-        // Cada CountAsync abre/cierra su propia DataReader así que en serie es seguro.
+
         return new UserDeps(
             Orders:             await _context.Orders.CountAsync(o => o.AssignedWaiterId == userId),
             TableSessions:      await _context.TableSessions.CountAsync(s => s.AssignedWaiterId == userId || s.AssignedByHostId == userId),
@@ -269,23 +247,6 @@ public class UserController : ControllerBase
         );
     }
 
-    /// <summary>
-    /// USER-CRUD.1 — Eliminar usuario inteligente (Admin/Manager).
-    ///
-    /// Estrategia:
-    ///   • Si el usuario NO tiene dependencias (sin órdenes, sesiones, audit, etc.)
-    ///     → hard delete (borrado físico).
-    ///   • Si SÍ tiene dependencias → soft delete:
-    ///       - IsActive = false (no puede loguearse)
-    ///       - Email renombrado a `deleted-{id}-{timestamp}+{email}` para liberar el original
-    ///       - PIN removido
-    ///       - RefreshTokens revocados
-    ///     De esta forma órdenes/audit/payments mantienen su FK y la historia fiscal sobrevive.
-    ///   • Bloqueos: no se puede eliminar al usuario logueado ni al último Admin activo.
-    ///
-    /// Antes: `_context.Users.Remove(user)` lanzaba 500 por FK Restrict/NoAction y el
-    /// admin-panel mostraba un toast genérico sin saber por qué fallaba.
-    /// </summary>
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -300,13 +261,11 @@ public class UserController : ControllerBase
             if (user == null)
                 return NotFound(new { error = "Usuario no encontrado" });
 
-            // Guard 1: no eliminarse a sí mismo (incluso si force=true).
             var actorId = GetActorIdFromJwt();
             if (actorId.HasValue && actorId.Value == id)
                 return StatusCode(StatusCodes.Status403Forbidden,
                     new { error = "No puedes eliminar tu propio usuario. Pide a otro admin que lo haga." });
 
-            // Guard 2: no eliminar al último Admin activo.
             if (user.Role == UserRole.Admin && user.IsActive)
             {
                 var otherActiveAdmins = await _context.Users
@@ -320,10 +279,9 @@ public class UserController : ControllerBase
             var totalDeps = deps.Orders + deps.TableSessions + deps.Reservations + deps.Payments
                             + deps.AuditEvents + deps.TableClaimRequests + deps.VirtualTables + deps.TableTransfers;
 
-            // Caso A — hard delete: usuario sin historial. Limpio para borrado físico.
             if (totalDeps == 0)
             {
-                // Revocar refresh tokens primero (cascade está OK pero explícito es más claro).
+
                 var rts = await _context.RefreshTokens.Where(rt => rt.UserId == id).ToListAsync();
                 if (rts.Count > 0) _context.RefreshTokens.RemoveRange(rts);
 
@@ -333,9 +291,6 @@ public class UserController : ControllerBase
                 return Ok(new { mode = "hard", message = "Usuario eliminado permanentemente." });
             }
 
-            // Caso B — soft delete: hay historial, desactivar y liberar email.
-            // Anonimizamos email con prefijo "deleted-{id}-{epoch}+" para que el original
-            // pueda ser reutilizado por un usuario nuevo.
             var epoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var originalEmail = user.Email;
             user.IsActive = false;
@@ -345,7 +300,6 @@ public class UserController : ControllerBase
             user.PinFailedAttempts = 0;
             user.PinLockedUntil = null;
 
-            // Revocar refresh tokens — el usuario no podrá renovar sesiones.
             var tokens = await _context.RefreshTokens.Where(rt => rt.UserId == id).ToListAsync();
             if (tokens.Count > 0) _context.RefreshTokens.RemoveRange(tokens);
 
@@ -384,14 +338,6 @@ public class UserController : ControllerBase
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // SPRINT 2 — Endpoints PIN del Waiter
-    // ────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Admin/Manager establece o cambia el PIN de un usuario (típicamente waiter o cashier).
-    /// PIN: exactamente 6 dígitos numéricos. Se almacena como BCrypt hash.
-    /// </summary>
     [HttpPut("{id}/pin")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -408,9 +354,6 @@ public class UserController : ControllerBase
         if (user == null)
             return NotFound(new { error = "Usuario no encontrado" });
 
-        // Validar que no exista otro usuario del mismo restaurante con el mismo PIN
-        // (los PINs de 6 dígitos pueden colisionar; en restaurantes pequeños esto
-        // es muy raro pero importante para login por PIN no ambiguo)
         if (user.RestaurantId.HasValue)
         {
             var conflict = await _context.Users
@@ -438,10 +381,6 @@ public class UserController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Admin/Manager remueve el PIN de un usuario — útil cuando el waiter deja el restaurante
-    /// o se desactiva el modo PIN compartido.
-    /// </summary>
     [HttpDelete("{id}/pin")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -458,12 +397,8 @@ public class UserController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// El usuario logueado cambia su propio PIN. Requiere su password actual como prueba
-    /// de identidad — protege contra "alguien tomó mi token JWT" cambiando el PIN.
-    /// </summary>
     [HttpPut("me/pin")]
-    [Authorize]  // cualquier usuario logueado puede cambiar su propio PIN
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -485,7 +420,6 @@ public class UserController : ControllerBase
         if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
             return BadRequest(new { error = "Contraseña actual incorrecta" });
 
-        // Mismo guard de colisión que el endpoint admin
         if (user.RestaurantId.HasValue)
         {
             var others = await _context.Users
@@ -510,10 +444,6 @@ public class UserController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Devuelve si el usuario logueado tiene PIN configurado (sin exponer el hash).
-    /// El waiter-app puede usar esto para mostrar "Tu PIN no está configurado, créalo".
-    /// </summary>
     [HttpGet("me/pin/status")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -537,7 +467,7 @@ public class UserController : ControllerBase
 
 public class SetPinDto
 {
-    /// <summary>PIN de exactamente 6 dígitos numéricos.</summary>
+
     public string Pin { get; set; } = string.Empty;
 }
 

@@ -9,7 +9,7 @@ export function useMenu(restaurantId?: number) {
       restaurantId != null
         ? apiClient.getMenuByRestaurant(restaurantId)
         : apiClient.getMenu(),
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 5 * 60 * 1000,
   });
 }
 

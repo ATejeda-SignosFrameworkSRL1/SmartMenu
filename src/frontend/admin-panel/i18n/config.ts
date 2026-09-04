@@ -1,4 +1,4 @@
-// i18n/config.ts — Única fuente de verdad de los idiomas soportados (cookie, sin ruteo).
+
 export const locales = ['es', 'en', 'zh', 'fr', 'de', 'pt', 'it', 'ja', 'ko', 'ru'] as const;
 export type Locale = (typeof locales)[number];
 
@@ -19,7 +19,6 @@ export function isLocale(value: unknown): value is Locale {
   return typeof value === 'string' && (locales as readonly string[]).includes(value);
 }
 
-// Mapa locale → etiqueta BCP-47 para formateo de fechas/horas/números.
 const BCP47: Record<Locale, string> = {
   es: 'es-DO', en: 'en-US', zh: 'zh-CN', fr: 'fr-FR', de: 'de-DE',
   pt: 'pt-BR', it: 'it-IT', ja: 'ja-JP', ko: 'ko-KR', ru: 'ru-RU',

@@ -3,10 +3,6 @@ using SmartMenu.Application.Services;
 
 namespace SmartMenu.Infrastructure.Services;
 
-/// <summary>
-/// Implementación stub de <see cref="INotificationService"/> — solo registra en el log.
-/// Sustituir el registro DI por un proveedor real (SendGrid/Twilio) en una fase posterior.
-/// </summary>
 public class LoggingNotificationService : INotificationService
 {
     private readonly ILogger<LoggingNotificationService> _logger;

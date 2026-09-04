@@ -54,7 +54,7 @@
     "noConnection": "Нет соединения"
   },
   "nav": {
-    "generalTables": "Общие столы ({count})",
+    "generalTables": "Общие столы",
     "myTables": "Мои столы ({count})",
     "floorPlan": "План зала",
     "createVirtualTable": "Создать виртуальный стол",

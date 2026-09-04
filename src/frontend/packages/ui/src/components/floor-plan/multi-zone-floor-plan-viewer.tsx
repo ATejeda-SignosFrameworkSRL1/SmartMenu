@@ -11,26 +11,21 @@ export interface MultiZoneFloorPlanViewerProps {
   data: FloorPlanData;
   width?: number;
   height?: number;
-  /** Ocupa el 100% del contenedor (responsive). */
+
   fill?: boolean;
-  /** Escala/centra el plano para llenar el área (zoom-to-fit). */
+
   fitToContent?: boolean;
-  /** Zona activa inicial (zoneId). Default: la primera. */
+
   defaultZoneId?: string;
   onZoneChange?: (zoneId: string) => void;
-  /** Mesa resaltada. */
+
   selectedTableId?: string | number;
-  /** Click sobre una mesa (para seleccionarla). */
+
   onTableClick?: (id: string | number) => void;
-  /** Override de la paleta de estados. */
+
   palette?: StatusPaletteOverride;
 }
 
-/**
- * Visor multi-zona (host/waiter): pestañas para cambiar de zona; el lienzo
- * muestra solo las mesas y estructuras de la zona activa, read-only. Las mesas
- * son clicables (selección).
- */
 export function MultiZoneFloorPlanViewer({
   data,
   width = 800,

@@ -7,7 +7,7 @@ namespace SmartMenu.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[AllowAnonymous] // Cliente escanea QR sin login — necesita leer el menú anónimo.
+[AllowAnonymous]
 public class MenuController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -19,9 +19,6 @@ public class MenuController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Obtener menú completo con categorías y platillos
-    /// </summary>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMenu()
@@ -64,9 +61,6 @@ public class MenuController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener menú por restaurante
-    /// </summary>
     [HttpGet("restaurant/{restaurantId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMenuByRestaurant(int restaurantId)

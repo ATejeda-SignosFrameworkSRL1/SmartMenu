@@ -5,7 +5,7 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Transpila el design system compartido (TS/TSX sin build step).
+
   transpilePackages: ["@smartmenu/ui"],
   async headers() {
     return [
@@ -27,7 +27,7 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || '',
   },
-  // Konva (react-konva del plano) referencia 'canvas' (solo Node); stub en el bundle del browser.
+
   webpack: (config) => {
     config.resolve = config.resolve || {};
     config.resolve.alias = { ...(config.resolve.alias || {}), canvas: false };

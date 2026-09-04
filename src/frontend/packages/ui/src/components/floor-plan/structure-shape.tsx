@@ -5,23 +5,19 @@ import type { KonvaEventObject } from "konva/lib/Node";
 
 import type { StructureData } from "./types";
 
-const WALL_FILL = "#E2E8F0"; // gris claro (paredes/divisorias)
-const BAR_FILL = "#94A3B8"; // gris azulado (barra)
+const WALL_FILL = "#E2E8F0";
+const BAR_FILL = "#94A3B8";
 const BAR_TEXT = "#FFFFFF";
-const COLUMN_FILL = "#94A3B8"; // columna de soporte
+const COLUMN_FILL = "#94A3B8";
 const ENTRANCE_STROKE = "#94A3B8";
 const ENTRANCE_TEXT = "#64748B";
 
 export interface StructureShapeProps extends StructureData {
-  /** Si true, la estructura se puede arrastrar (modo editor). */
+
   isDraggable?: boolean;
   onDragEnd?: (id: string, x: number, y: number) => void;
 }
 
-/**
- * Elemento fijo del plano (pared, barra, columna, entrada), dibujado con react-konva.
- * Origen = esquina superior izquierda. Va dentro de un `<Layer>`, DEBAJO de las mesas.
- */
 export function StructureShape({
   id,
   type,
@@ -33,7 +29,7 @@ export function StructureShape({
   isDraggable = false,
   onDragEnd,
 }: StructureShapeProps) {
-  // Defaults sensatos por tipo.
+
   const w = width ?? (type === "column" ? 18 : type === "wall" ? 120 : 200);
   const h = height ?? (type === "column" ? 18 : type === "wall" ? 8 : 60);
 
@@ -90,7 +86,7 @@ export function StructureShape({
       x={x}
       y={y}
       draggable={isDraggable}
-      // En modo viewer no escucha eventos: decorativo y no bloquea las mesas.
+
       listening={isDraggable}
       onDragEnd={(e: KonvaEventObject<DragEvent>) => onDragEnd?.(id, e.target.x(), e.target.y())}
     >

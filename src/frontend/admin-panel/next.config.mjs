@@ -4,11 +4,10 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Design system compartido: se distribuye como TS/TSX, Next lo transpila.
+
   transpilePackages: ["@smartmenu/ui"],
   reactStrictMode: true,
-  // Konva referencia el módulo opcional `canvas` (node-canvas) solo en Node;
-  // lo stubeamos para el bundle del navegador y evitar "Can't resolve 'canvas'".
+
   webpack: (config) => {
     config.resolve.alias = { ...config.resolve.alias, canvas: false };
     return config;

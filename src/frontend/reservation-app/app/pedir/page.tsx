@@ -16,29 +16,24 @@ import { composePhone, DEFAULT_COUNTRY_ISO } from '@/lib/countryCodes';
 import PhonePrefixSelect from '@/components/PhonePrefixSelect';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-/* ───────── Helpers ───────── */
 function formatPrice(n: number) {
   return `RD$ ${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
 }
 
-// Desglose solo informativo — el backend calcula y manda la verdad fiscal server-side.
 const ITBIS_RATE = 0.18;
 const LEGAL_TIP_RATE = 0.1;
 
 export default function PedirPage() {
   const t = useTranslations('pedidos');
 
-  // ── Catálogo ──
   const [dishes, setDishes] = useState<MenuDish[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [category, setCategory] = useState<string | null>(null); // null = todas
+  const [category, setCategory] = useState<string | null>(null);
 
-  // ── Carrito (dishId → cantidad). Local, sin persistencia. ──
   const [cart, setCart] = useState<Record<number, number>>({});
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
-  // ── Checkout ──
   const [fulfillment, setFulfillment] = useState<FulfillmentType>('Pickup');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -65,7 +60,6 @@ export default function PedirPage() {
     loadMenu();
   }, []);
 
-  // Categorías derivadas de los platos (en orden de aparición).
   const categories = useMemo(() => {
     const out: string[] = [];
     for (const d of dishes) {
@@ -141,7 +135,6 @@ export default function PedirPage() {
     setEmail(''); setAddress(''); setNotes('');
   }
 
-  /* ─── Pantalla de ÉXITO ─── */
   if (invoice) {
     return (
       <main className="min-h-screen bg-warm-950 px-4 py-16">
@@ -180,10 +173,9 @@ export default function PedirPage() {
     );
   }
 
-  /* ─── Catálogo + checkout ─── */
   return (
     <main className="min-h-screen bg-warm-950 pb-32">
-      {/* Header */}
+
       <header className="sticky top-0 z-40 border-b border-warm-800 bg-warm-950/95 backdrop-blur-md">
         <div className="container-narrow flex h-16 items-center justify-between px-4 sm:px-6">
           <Link
@@ -203,7 +195,6 @@ export default function PedirPage() {
       <div className="container-narrow px-4 pt-8 sm:px-6">
         <p className="text-center text-sm text-warm-400">{t('subtitle')}</p>
 
-        {/* Chips de categoría */}
         {!loading && !loadError && categories.length > 0 && (
           <div className="mt-6 flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label={t('categoriesAria')}>
             <CategoryChip selected={category === null} onClick={() => setCategory(null)} label={t('allCategories')} />
@@ -213,7 +204,6 @@ export default function PedirPage() {
           </div>
         )}
 
-        {/* Loading skeleton */}
         {loading && (
           <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -229,7 +219,6 @@ export default function PedirPage() {
           </div>
         )}
 
-        {/* Error de carga */}
         {loadError && !loading && (
           <div className="py-16 text-center">
             <p className="mb-4 text-warm-400">{t('loadFailed')}</p>
@@ -237,12 +226,10 @@ export default function PedirPage() {
           </div>
         )}
 
-        {/* Sin platos */}
         {!loading && !loadError && dishes.length === 0 && (
           <p className="py-16 text-center text-warm-400">{t('emptyMenu')}</p>
         )}
 
-        {/* Cards de platos */}
         {!loading && !loadError && visibleDishes.length > 0 && (
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {visibleDishes.map((dish) => {
@@ -317,7 +304,6 @@ export default function PedirPage() {
         )}
       </div>
 
-      {/* Barra flotante del carrito */}
       {cartCount > 0 && !checkoutOpen && (
         <div className="fixed inset-x-0 bottom-0 z-40 p-4">
           <div className="container-narrow">
@@ -337,7 +323,6 @@ export default function PedirPage() {
         </div>
       )}
 
-      {/* ─── CHECKOUT (drawer inferior) ─── */}
       {checkoutOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t('checkoutTitle')}>
           <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl border border-warm-800 bg-warm-950 p-6 shadow-2xl sm:p-8">
@@ -352,7 +337,6 @@ export default function PedirPage() {
               </button>
             </div>
 
-            {/* Toggle Pickup / Delivery */}
             <div className="grid grid-cols-2 gap-2 rounded-xl border border-warm-700 bg-warm-800/40 p-1">
               <button
                 type="button"
@@ -376,7 +360,6 @@ export default function PedirPage() {
               </button>
             </div>
 
-            {/* Resumen del carrito */}
             <div className="mt-6 space-y-2 rounded-xl border border-warm-800 bg-warm-900/50 p-4">
               {cartLines.map((l) => (
                 <div key={l.dish.id} className="flex items-center gap-3 text-sm">
@@ -404,7 +387,6 @@ export default function PedirPage() {
               </div>
             </div>
 
-            {/* Datos del cliente */}
             <div className="mt-6 space-y-5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <WarmField icon={<UserIcon className="h-4 w-4" />} label={t('nameLabel')} required>
@@ -442,7 +424,6 @@ export default function PedirPage() {
         </div>
       )}
 
-      {/* estilos locales para los inputs warm/gold (mismo look que BookingEngineWarm) */}
       <style>{`
         .warm-inp { width: 100%; border-radius: 0.75rem; border: 1px solid #44403c; background: rgba(41, 37, 36, 0.5); padding: 0.75rem 1rem; color: #ffffff; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
         .warm-inp::placeholder { color: #78716c; }
@@ -451,8 +432,6 @@ export default function PedirPage() {
     </main>
   );
 }
-
-/* ───────── Subcomponentes ───────── */
 
 function CategoryChip({ selected, onClick, label }: { selected: boolean; onClick: () => void; label: string }) {
   return (

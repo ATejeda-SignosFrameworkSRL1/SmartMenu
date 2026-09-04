@@ -15,10 +15,6 @@ export default meta;
 
 type Story = StoryObj<typeof FloorPlanEditor>;
 
-/**
- * Editor interactivo: arrastrá una mesa y soltá. El panel de la derecha muestra
- * las coordenadas en vivo (simula el estado que luego se persistiría en SQL).
- */
 export const Default: Story = {
   render: () => {
     const Demo = () => {

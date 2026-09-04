@@ -32,39 +32,21 @@ const MESA_CART = [
   { dish: MOCK_QR_MENU.find((d) => d.dishId === 3)!, quantity: 1, takeaway: false, courseTiming: "Entrada" as const },
 ];
 
-/**
- * Flujo completo: se arma el pedido de la mesa, se abre el carrito y ahí conviven
- * "Confirmar Orden" y "🥡 Para llevar". El botón "Para llevar" cambia el menú a modo
- * llevar y regresa al catálogo para un pedido aparte.
- */
 export const FlujoCompleto: Story = {
   args: {},
 };
 
-/**
- * El carrito de MESA abierto con platos: se ve el botón "🥡 Para llevar" al lado de
- * "Confirmar Orden" (el punto de entrada al proceso para llevar).
- */
 export const CarritoDeMesa: Story = {
   args: { initialCartOpen: true, initialCart: MESA_CART },
 };
 
-/**
- * MODO PARA LLEVAR activo: el banner "Estás armando un pedido PARA LLEVAR" sobre el
- * catálogo general; cada "Agregar" va al pedido para llevar (separado del de mesa).
- * Se puede volver al pedido de mesa desde el banner.
- */
 export const ModoParaLlevar: Story = {
   args: {
     initialMode: "takeaway",
-    initialCart: MESA_CART, // el pedido de mesa sigue existiendo aparte
+    initialCart: MESA_CART,
   },
 };
 
-/**
- * El carrito del pedido PARA LLEVAR abierto: su propia confirmación ("Confirmar para
- * llevar") y el botón para volver al pedido de mesa. Proceso independiente.
- */
 export const CarritoParaLlevar: Story = {
   args: {
     initialMode: "takeaway",

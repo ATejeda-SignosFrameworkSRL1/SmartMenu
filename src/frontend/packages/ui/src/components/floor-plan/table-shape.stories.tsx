@@ -7,7 +7,7 @@ const meta: Meta<typeof TableShape> = {
   title: "Floor Plan/TableShape",
   component: TableShape,
   tags: ["autodocs"],
-  // Los componentes Konva deben vivir dentro de un Stage>Layer.
+
   decorators: [
     (Story) => (
       <Stage width={540} height={180}>
@@ -40,7 +40,6 @@ export const Libre: Story = { args: { status: "empty", number: "D-9", shape: "sq
 export const ConMozo: Story = { args: { status: "occupied", number: "D-3", waiter: "RO", capacity: 4 } };
 export const Arrastrable: Story = { args: { status: "available", number: 4, isDraggable: true, capacity: 4 } };
 
-/** Todas las formas con sus sillas (capacity) y un badge de mozo. */
 export const Formas: Story = {
   render: () => (
     <>

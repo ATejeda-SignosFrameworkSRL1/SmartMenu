@@ -6,10 +6,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.API.Controllers;
 
-/// <summary>
-/// CRUD de turnos de servicio (ServicePeriod). Define la rejilla de slots, duraciones,
-/// colchón y topes de pacing por intervalo. Solo Admin/Manager.
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin,Manager")]

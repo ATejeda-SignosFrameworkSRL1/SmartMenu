@@ -32,7 +32,6 @@ function StatusLegend() {
 
 const SLOTS = ["12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM"];
 
-/** Tarjeta de mesa fiel a la pantalla actual del host (estado Disponible). */
 function MesaCard({ n, zone, capacity }: { n: string; zone: string; capacity: number }) {
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
@@ -77,7 +76,6 @@ function MesaCard({ n, zone, capacity }: { n: string; zone: string; capacity: nu
   );
 }
 
-/** Tarjeta de filtros fiel + slot a la derecha para el botón "Ver plano". */
 function FiltersCard({ rightSlot }: { rightSlot: React.ReactNode }) {
   const zoneChip = (label: string, count: string, active = false) => (
     <button
@@ -103,7 +101,7 @@ function FiltersCard({ rightSlot }: { rightSlot: React.ReactNode }) {
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-      {/* Fila superior: ZONA + botón Ver plano (a la derecha) */}
+
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Zona</p>
         {rightSlot}
@@ -158,7 +156,6 @@ function FiltersCard({ rightSlot }: { rightSlot: React.ReactNode }) {
   );
 }
 
-/** Réplica presentacional del shell del host-app (header oscuro + tabs + KPIs). */
 function HostShell({ children }: { children: React.ReactNode }) {
   const tab = (active: boolean) =>
     `flex items-center gap-2 px-4 py-2 text-sm font-medium transition ${active ? "bg-white/15 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`;
@@ -204,12 +201,6 @@ const ALL_TABLES = MULTI_ZONE_FLOOR_PLAN.zones.flatMap((z) =>
   z.tables.map((t) => ({ n: String(t.number ?? t.id), zone: z.zoneName, capacity: t.capacity ?? 4 })),
 );
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Acciones del host al tocar una mesa en el plano (presentacional / mock).
-   En el host-app real, el click reusa los handlers existentes: libre →
-   openAssignModal (POST /api/tablesession) / Reservar (wizard); reservada →
-   sentar reserva (PUT /api/tablereservation/{id}/seat); ocupada → sesión.
-   ────────────────────────────────────────────────────────────────────────── */
 type HostTable = { id: string | number; number: string; status: TableStatus; zoneName: string; capacity: number };
 
 function findHostTable(id: string | number | null): HostTable | null {
@@ -225,7 +216,6 @@ const RES_NAMES = ["José Mártir", "Ana Gómez", "Carlos Reyes", "Lucía Peña"
 const HOST_WAITERS = ["Kiara", "Franklin", "Rosa", "María", "Pedro"];
 const RD = (n: number) => "RD$ " + n.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Modal de acciones del host, según el estado de la mesa tocada en el plano. */
 function HostTableModal({ table, onClose }: { table: HostTable | null; onClose: () => void }) {
   if (!table) return null;
   const seed = Number(table.id) || 1;
@@ -295,7 +285,7 @@ function HostTableModal({ table, onClose }: { table: HostTable | null; onClose: 
       </div>
     );
   } else {
-    // disponible / libre / limpieza → menú de acciones del host
+
     body = (
       <div className="space-y-2 p-5">
         <p className="mb-1 text-xs text-slate-500">Mesa libre — elige una acción:</p>
@@ -336,11 +326,6 @@ export default meta;
 
 type Story = StoryObj;
 
-/**
- * Host-app: la pantalla de Mesas REAL (lista de tarjetas + filtros) con un botón
- * "Ver plano" arriba a la derecha que cambia a la vista del plano de salón
- * (MultiZoneFloorPlanViewer, SOLO-LECTURA). "Volver a la lista" regresa.
- */
 export const ListaConBotonPlano: Story = {
   render: () => {
     const Demo = () => {

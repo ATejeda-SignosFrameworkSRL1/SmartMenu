@@ -1,6 +1,5 @@
 namespace SmartMenu.Application.DTOs;
 
-// Request DTOs
 public record RegisterDto
 {
     public string Email { get; init; } = string.Empty;
@@ -21,7 +20,6 @@ public record RefreshTokenDto
     public string RefreshToken { get; init; } = string.Empty;
 }
 
-// Response DTOs
 public record AuthResultDto
 {
     public string AccessToken { get; init; } = string.Empty;
@@ -41,7 +39,7 @@ public record UserDto
     public DateTime CreatedAt { get; init; }
     public int? AssignedZoneId { get; init; }
     public string? AssignedZoneName { get; init; }
-    // Sprint 5 — info de PIN para admin UI (sin exponer el hash)
+
     public bool HasPin { get; init; }
     public DateTime? PinSetAt { get; init; }
 }

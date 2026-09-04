@@ -13,13 +13,8 @@ import { createAuthApi, ensureFreshToken } from '@/lib/auth-client';
 import { dateLocale } from '@/i18n/config';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
-// F3 — auth-client centralizado reemplaza el interceptor JWT inline
-// (refresh transparente con singleton lock, mismo prefijo cashier_*).
 const { api } = createAuthApi('cashier');
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-// Color por método; la etiqueta se traduce vía cashier.method.<lower>.
 const METHOD_COLORS: Record<string, string> = {
   Cash: 'bg-green-100 text-green-700',
   Card: 'bg-blue-100 text-blue-700',
@@ -29,8 +24,6 @@ const METHOD_COLORS: Record<string, string> = {
 function fmt(n: number) {
   return n.toLocaleString('es-DO', { minimumFractionDigits: 2 });
 }
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Summary {
   totalAmount: number; totalTips: number; totalWithTips: number; count: number;
@@ -50,8 +43,6 @@ interface CartItem {
   dish: Dish; quantity: number; notes: string;
 }
 
-// ─── Caja del Día ────────────────────────────────────────────────────────────
-
 function CajaTab({ user }: { user: any }) {
   const t = useTranslations('cashier');
   const dl = dateLocale(useLocale());
@@ -63,7 +54,6 @@ function CajaTab({ user }: { user: any }) {
   const reloadRef = useRef<(() => void) | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fiscal modal
   const [showFiscalModal, setShowFiscalModal] = useState(false);
   const [fiscalPaymentId, setFiscalPaymentId] = useState<number | null>(null);
   const [fiscalRnc, setFiscalRnc] = useState('');
@@ -91,11 +81,8 @@ function CajaTab({ user }: { user: any }) {
 
   useEffect(() => { loadPayments(); }, [loadPayments]);
 
-  // Mantén una referencia mutable al último loadPayments para que el listener
-  // de SignalR (registrado una sola vez) siempre llame la versión más reciente.
   useEffect(() => { reloadRef.current = loadPayments; }, [loadPayments]);
 
-  // S5.1 — SignalR: refresca caja en vivo sin polling.
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('cashier_token') : null;
     if (!token) return;
@@ -103,7 +90,7 @@ function CajaTab({ user }: { user: any }) {
     const hubUrl = typeof window !== 'undefined' ? `${window.location.origin}/hubs/orders` : '/hubs/orders';
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        // Token fresco por llamada (resiliencia ante rotación de token con la pestaña abierta).
+
         accessTokenFactory: () => ensureFreshToken('cashier'),
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
@@ -193,7 +180,7 @@ function CajaTab({ user }: { user: any }) {
         </div>
       ) : (
         <>
-          {/* Resumen */}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 col-span-2 md:col-span-1">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{t('totalDay')}</p>
@@ -217,7 +204,6 @@ function CajaTab({ user }: { user: any }) {
             </div>
           </div>
 
-          {/* Desglose por método */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
             <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">{t('byMethod')}</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -243,7 +229,6 @@ function CajaTab({ user }: { user: any }) {
             </div>
           </div>
 
-          {/* Tabla */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="font-bold text-gray-900">{t('dayMovements')}</h2>
@@ -299,7 +284,6 @@ function CajaTab({ user }: { user: any }) {
         </>
       )}
 
-      {/* Modal NCF */}
       {showFiscalModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -356,8 +340,6 @@ function CajaTab({ user }: { user: any }) {
   );
 }
 
-// ─── Nueva Venta (POS) ────────────────────────────────────────────────────────
-
 function NuevaVentaTab({ user }: { user: any }) {
   const t = useTranslations('cashier');
   const [dishes, setDishes] = useState<Dish[]>([]);
@@ -367,7 +349,6 @@ function NuevaVentaTab({ user }: { user: any }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState('');
 
-  // Pago
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [tipAmount, setTipAmount] = useState(0);
   const [tipPct, setTipPct] = useState(0);
@@ -378,7 +359,6 @@ function NuevaVentaTab({ user }: { user: any }) {
   const [fiscalValidating, setFiscalValidating] = useState(false);
   const [fiscalError, setFiscalError] = useState('');
 
-  // Mixto
   const [subPayments, setSubPayments] = useState([
     { method: 'Cash', amount: 0, tipAmount: 0 },
     { method: 'Card', amount: 0, tipAmount: 0 },
@@ -485,7 +465,7 @@ function NuevaVentaTab({ user }: { user: any }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* ── Menú ── */}
+
       <div className="lg:col-span-2 space-y-4">
         <div className="flex gap-3">
           <div className="relative flex-1">
@@ -496,7 +476,6 @@ function NuevaVentaTab({ user }: { user: any }) {
           </div>
         </div>
 
-        {/* Categorías */}
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setSelectedCategory('')}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${selectedCategory === '' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -537,9 +516,8 @@ function NuevaVentaTab({ user }: { user: any }) {
         )}
       </div>
 
-      {/* ── Carrito + Pago ── */}
       <div className="space-y-4">
-        {/* Carrito */}
+
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="bg-gray-900 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-white font-semibold text-sm">
@@ -552,7 +530,7 @@ function NuevaVentaTab({ user }: { user: any }) {
             )}
           </div>
           <div className="p-3">
-            {/* Cliente */}
+
             <div className="flex items-center gap-2 mb-3">
               <User className="w-4 h-4 text-gray-400 shrink-0" />
               <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
@@ -589,7 +567,6 @@ function NuevaVentaTab({ user }: { user: any }) {
           </div>
         </div>
 
-        {/* Totales */}
         {cart.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-4">
             <div className="space-y-1.5 text-sm">
@@ -599,7 +576,6 @@ function NuevaVentaTab({ user }: { user: any }) {
               <div className="flex justify-between font-bold text-gray-900 text-base border-t pt-1.5"><span>{t('total')}</span><span>RD$ {fmt(orderTotal)}</span></div>
             </div>
 
-            {/* Propina extra */}
             <div>
               <p className="text-xs font-semibold text-gray-600 mb-2">{t('additionalTip')}</p>
               <div className="flex gap-2 flex-wrap">
@@ -613,7 +589,6 @@ function NuevaVentaTab({ user }: { user: any }) {
               {tipAmount > 0 && <p className="text-xs text-blue-600 mt-1">{t('tipAdded', { amount: fmt(tipAmount) })}</p>}
             </div>
 
-            {/* Método de pago */}
             <div>
               <p className="text-xs font-semibold text-gray-600 mb-2">{t('paymentMethod')}</p>
               <div className="grid grid-cols-2 gap-2">
@@ -626,7 +601,6 @@ function NuevaVentaTab({ user }: { user: any }) {
               </div>
             </div>
 
-            {/* Subpagos si es Mixto */}
             {paymentMethod === 'Mixed' && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-600">{t('mixedBreakdown')}</p>
@@ -644,7 +618,6 @@ function NuevaVentaTab({ user }: { user: any }) {
               </div>
             )}
 
-            {/* Comprobante fiscal */}
             <div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={requiresFiscal} onChange={e => setRequiresFiscal(e.target.checked)}
@@ -674,7 +647,6 @@ function NuevaVentaTab({ user }: { user: any }) {
               )}
             </div>
 
-            {/* Total final */}
             <div className="bg-gray-900 rounded-xl p-3 text-center">
               <p className="text-xs text-gray-400">{t('totalToCharge')}</p>
               <p className="text-2xl font-bold text-white">RD$ {fmt(orderTotal + tipAmount)}</p>
@@ -702,15 +674,13 @@ function NuevaVentaTab({ user }: { user: any }) {
   );
 }
 
-// ─── App principal ────────────────────────────────────────────────────────────
-
 function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
   const t = useTranslations('cashier');
   const [activeTab, setActiveTab] = useState<'caja' | 'pos'>('caja');
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+
       <div className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -720,7 +690,7 @@ function CashierView({ user, onLogout }: { user: any; onLogout: () => void }) {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Tabs */}
+
             <div className="flex bg-gray-100 rounded-xl p-1">
               <button onClick={() => setActiveTab('caja')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'caja' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>

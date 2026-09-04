@@ -1,16 +1,5 @@
 import type { FloorPlanData } from "./types";
 
-/**
- * Mock multi-zona alineado EXACTAMENTE con las mesas reales de la app: 27 mesas con
- * números globales 1-27 y los conteos reales por zona, pero con el diseño a mano
- * (posiciones, formas, estructuras BAR/ENTRADA/paredes, badges de mozo). El mapeo
- * diseño↔BD es 1:1 por número de mesa (`number`/`id` = número real; `zoneId` = id real de la zona).
- *
- *   Terraza (1): 1-8 · Salón Principal (2): 9-16 · VIP (3): 17-24 · Terraza Norte (4): 25-27
- *
- * Los `status` aquí son ilustrativos para el Storybook; en producción el estado real
- * (ocupada/reservada/…) lo superpone `useFloorPlanLive` vía /api/floorplan + /hubs/tables.
- */
 export const MULTI_ZONE_FLOOR_PLAN: FloorPlanData = {
   zones: [
     {

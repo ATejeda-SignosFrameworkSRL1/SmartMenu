@@ -3,14 +3,14 @@ import preset from "@smartmenu/ui/preset";
 
 export default {
   darkMode: ["class"],
-  // Estructura de tokens, radios y animaciones base vienen del design system.
+
   presets: [preset],
   content: [
     "./pages/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
     "./app/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
-    // Escanear los primitivos compartidos para que Tailwind genere sus clases.
+
     "../packages/ui/src/**/*.{ts,tsx}",
   ],
   prefix: "",
@@ -27,7 +27,7 @@ export default {
         sans: ["var(--font-inter)", "Inter", "system-ui", "-apple-system", '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', '"Noto Sans CJK SC"', '"Malgun Gothic"', '"Noto Sans JP"', '"Noto Sans KR"', "sans-serif"],
         display: ["Space Grotesk", "system-ui", "sans-serif"],
       },
-      // Tokens específicos de admin que NO están en el preset compartido.
+
       colors: {
         table: {
           available: "hsl(var(--table-available))",

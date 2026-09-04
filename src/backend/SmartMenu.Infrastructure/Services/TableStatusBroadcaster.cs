@@ -6,12 +6,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.Infrastructure.Services;
 
-/// <summary>
-/// Implementación del punto único de difusión de estado de mesa. Lee el estado base de la(s)
-/// mesa(s) + sus reservas activas, calcula el estado EFECTIVO con <see cref="TableStatusEvaluator"/>
-/// y emite TableStatusChanged (PascalCase, igual que la API de mesas). Aditivo: ante cualquier
-/// fallo solo se loguea, nunca se propaga (no debe romper la operación que lo invocó).
-/// </summary>
 public class TableStatusBroadcaster : ITableStatusBroadcaster
 {
     private readonly ApplicationDbContext _context;

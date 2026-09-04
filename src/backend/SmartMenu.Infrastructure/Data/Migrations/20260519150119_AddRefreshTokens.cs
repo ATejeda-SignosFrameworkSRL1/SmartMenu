@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <inheritdoc />
+
     public partial class AddRefreshTokens : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -49,7 +49,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 column: "UserId");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

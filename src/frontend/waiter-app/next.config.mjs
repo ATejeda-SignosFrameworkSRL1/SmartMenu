@@ -5,7 +5,7 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Transpila el design system compartido (TS/TSX sin build step).
+
   transpilePackages: ["@smartmenu/ui"],
   async headers() {
     return [
@@ -20,8 +20,7 @@ const nextConfig = {
     return [
       { source: '/api/:path*',    destination: `${backendHttp}/api/:path*` },
       { source: '/uploads/:path*',destination: `${backendHttp}/uploads/:path*` },
-      // Proxy de SignalR: el browser conecta a su propio origen (sin cert issues)
-      // y Next.js lo reenvía a localhost:5041 via HTTP
+
       { source: '/hubs/:path*',   destination: `${backendHttp}/hubs/:path*` },
     ];
   },
@@ -29,7 +28,7 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || '',
   },
-  // Optimización para evitar chunk errors con html5-qrcode en HTTPS
+
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.optimization = {
@@ -48,7 +47,7 @@ const nextConfig = {
         },
       };
     }
-    // Konva (react-konva del plano) referencia 'canvas' (solo Node); stub en el bundle del browser.
+
     config.resolve = config.resolve || {};
     config.resolve.alias = { ...(config.resolve.alias || {}), canvas: false };
     return config;

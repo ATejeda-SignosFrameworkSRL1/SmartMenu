@@ -4,10 +4,10 @@
 
 namespace SmartMenu.Infrastructure.Data.Migrations
 {
-    /// <inheritdoc />
+
     public partial class SyncOrderAndOrderItemColumns : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
@@ -23,7 +23,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 onDelete: ReferentialAction.Restrict);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(

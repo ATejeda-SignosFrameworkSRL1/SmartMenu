@@ -1,17 +1,5 @@
 "use client";
 
-// QR-MENU (PROTOTIPO) — menu digital del cliente al escanear el QR de su mesa.
-// Senal "PARA LLEVAR" como PROCESO APARTE (no marcado por plato):
-//   - Se arma el pedido de MESA normal y en el carrito, junto a "Confirmar Orden",
-//     hay un boton "🥡 Para llevar".
-//   - Ese boton NO abre una lista de seleccion: cambia el menu a MODO PARA LLEVAR y
-//     el cliente vuelve al CATALOGO GENERAL a armar un pedido para llevar SEPARADO.
-//   - Dos procesos independientes, un pedido cada uno: el de mesa y el para llevar,
-//     cada cual con su propia confirmacion.
-// PRESENTACIONAL: estado local + mocks; sin APIs ni BD.
-// Mapeo futuro: cada proceso = una Order (Order.IsPickup=true para la de llevar);
-// no hace falta flag por item.
-
 import { useMemo, useState } from "react";
 import {
   ArrowLeft, Clock, Globe, Minus, Plus, Search, ShoppingCart, UtensilsCrossed, X,
@@ -27,7 +15,6 @@ import {
   type CourseTiming, type MenuCategory, type MenuTag, type QrMenuCartLine, type QrMenuDish,
 } from "./types";
 
-// En la implementacion real las tasas vienen de BillingSettings (nunca hardcodeadas).
 const TAX_RATE = 0.18;
 const TIP_RATE = 0.10;
 
@@ -53,11 +40,11 @@ interface DishModalState {
 }
 
 export interface QrMenuProps {
-  /** Modo inicial: 'dinein' (pedido de mesa) | 'takeaway' (proceso para llevar). */
+
   initialMode?: OrderMode;
-  /** Pedido de mesa precargado. */
+
   initialCart?: QrMenuCartLine[];
-  /** Pedido para llevar precargado. */
+
   initialTakeawayCart?: QrMenuCartLine[];
   initialCartOpen?: boolean;
   dishes?: QrMenuDish[];
@@ -80,9 +67,9 @@ export function QrMenu({
   const [takeawayCart, setTakeawayCart] = useState<QrMenuCartLine[]>(initialTakeawayCart);
   const [cartOpen, setCartOpen] = useState(initialCartOpen);
   const [modal, setModal] = useState<DishModalState | null>(null);
-  // Modal "¿Estás seguro?" antes de confirmar (guarda qué proceso se confirma).
+
   const [confirmMode, setConfirmMode] = useState<OrderMode | null>(null);
-  // Resultado: la comanda "impresa" dividida por estación (Cocina/Bar), como el ruteo real.
+
   const [comanda, setComanda] = useState<{ mode: OrderMode; cocina: number; bar: number } | null>(null);
 
   const isTakeaway = mode === "takeaway";
@@ -112,7 +99,6 @@ export function QrMenu({
       return next;
     });
 
-  /** Inserta la linea en el carrito ACTIVO (mesa o llevar segun el modo). */
   const pushLine = (line: QrMenuCartLine) =>
     setCart((prev) => {
       const simple = !line.customizations && !line.allergies && !line.notes && !line.garnish;
@@ -156,14 +142,12 @@ export function QrMenu({
       garnish: "", customizations: "", allergies: "", notes: "",
     });
 
-  /** El boton estrella: inicia el PROCESO para llevar → vuelve al catalogo en modo llevar. */
   const startTakeaway = () => {
     setMode("takeaway");
     setCartOpen(false);
     setComanda(null);
   };
 
-  // División Cocina/Bar de un carrito (prototipo: por categoría; el backend usa Zone.Type).
   const splitStations = (lines: QrMenuCartLine[]) => {
     const bar = lines.filter((l) => l.dish.category === "Bebidas").reduce((s, l) => s + l.quantity, 0);
     const cocina = lines.reduce((s, l) => s + l.quantity, 0) - bar;
@@ -175,10 +159,8 @@ export function QrMenu({
     setCartOpen(false);
   };
 
-  // "Confirmar" ya no confirma directo: abre el modal "¿Estás seguro?".
   const confirmOrder = () => setConfirmMode(mode);
 
-  // Al dar "Sí": se "imprime" la comanda a Cocina y al Bar (dividida por estación).
   const doConfirm = () => {
     if (!confirmMode) return;
     const targetCart = confirmMode === "takeaway" ? takeawayCart : dineInCart;
@@ -193,7 +175,7 @@ export function QrMenu({
 
   return (
     <div className={cn("space-y-5", className)}>
-      {/* ── Header ── */}
+
       <div className="flex items-center justify-between gap-3 border-b pb-3">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">SmartMenu</h1>
@@ -215,7 +197,6 @@ export function QrMenu({
         </div>
       </div>
 
-      {/* ── Banner de MODO PARA LLEVAR (proceso aparte sobre el catalogo general) ── */}
       {isTakeaway && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-primary/40 bg-primary/5 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -233,7 +214,6 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Resultado: comanda "impresa" a Cocina/Bar (una por proceso confirmado) ── */}
       {comanda && (
         <div className="flex items-start justify-between gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
           <div>
@@ -252,7 +232,6 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Buscador + filtros por etiqueta ── */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input className="rounded-xl pl-9" placeholder="Buscar platos…" value={search}
@@ -270,7 +249,6 @@ export function QrMenu({
         ))}
       </div>
 
-      {/* ── Tabs de categoria ── */}
       <div className="flex flex-wrap gap-2 border-y py-3">
         {categories.map((c) => (
           <Button key={c} size="sm" variant={activeCategory === c ? "default" : "outline"}
@@ -280,7 +258,6 @@ export function QrMenu({
         ))}
       </div>
 
-      {/* ── Secciones por categoria ── */}
       {MENU_CATEGORIES.filter((c) => activeCategory === "Todos" || c.key === activeCategory).map((c) => {
         const sectionDishes = visible.filter((d) => d.category === c.key);
         if (sectionDishes.length === 0) return null;
@@ -334,7 +311,6 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Modal de personalizacion del plato (igual en ambos modos) ── */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-8"
              onClick={() => setModal(null)}>
@@ -363,7 +339,6 @@ export function QrMenu({
                 <p className="mt-2 text-2xl font-extrabold text-primary">{money(modal.dish.price)}</p>
               </div>
 
-              {/* Cantidad */}
               <div className="space-y-1.5">
                 <p className="text-sm font-medium">Cantidad</p>
                 <div className="flex items-center gap-3">
@@ -381,7 +356,6 @@ export function QrMenu({
                 </div>
               </div>
 
-              {/* Momento de servicio */}
               <div className="space-y-1.5">
                 <p className="text-sm font-medium">¿Cuándo lo quieres servir?</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -405,7 +379,6 @@ export function QrMenu({
                 </div>
               </div>
 
-              {/* Guarnicion */}
               {modal.dish.garnishes && (
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium" htmlFor="qr-garnish">Guarnición</label>
@@ -419,7 +392,6 @@ export function QrMenu({
                 </div>
               )}
 
-              {/* Personalizaciones / Alergias / Notas */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="qr-custom">Personalizaciones (opcional)</label>
                 <Input id="qr-custom" placeholder="Ej: sin cebolla, extra queso" value={modal.customizations}
@@ -439,7 +411,6 @@ export function QrMenu({
                           className="w-full resize-none rounded-xl border bg-card px-3 py-2 text-sm" />
               </div>
 
-              {/* Footer */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
                 <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => addFromModal(modal)}>
@@ -451,7 +422,6 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Carrito (drawer) — muestra el pedido del modo activo ── */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={() => setCartOpen(false)}>
           <div className="flex h-full w-full max-w-md flex-col bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -511,7 +481,7 @@ export function QrMenu({
                 <div className="flex justify-between text-base font-extrabold"><span>Total</span><span>{money(total)}</span></div>
 
                 {isTakeaway ? (
-                  // Proceso para llevar: su propia confirmacion + volver al de mesa.
+
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="lg" onClick={backToDineIn}>
                       <ArrowLeft className="mr-1 h-4 w-4" /> Pedido de mesa
@@ -519,7 +489,7 @@ export function QrMenu({
                     <Button size="lg" onClick={confirmOrder}>Confirmar para llevar</Button>
                   </div>
                 ) : (
-                  // Pedido de mesa: Confirmar Orden + el boton "Para llevar" AL LADO.
+
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="lg" onClick={startTakeaway}>
                        Para llevar
@@ -539,7 +509,6 @@ export function QrMenu({
         </div>
       )}
 
-      {/* ── Modal "¿Estás seguro?" antes de confirmar (imprime comanda a Cocina/Bar) ── */}
       {confirmMode && (() => {
         const targetCart = confirmMode === "takeaway" ? takeawayCart : dineInCart;
         const { cocina, bar } = splitStations(targetCart);
@@ -553,7 +522,7 @@ export function QrMenu({
                   ? "Confirmaremos tu pedido PARA LLEVAR y enviaremos la comanda a cocina/bar."
                   : "Confirmaremos tu pedido y enviaremos la comanda a cocina/bar."}
               </p>
-              {/* Desglose de a dónde va la comanda */}
+
               <div className="mt-4 space-y-1.5 rounded-xl border bg-muted/30 p-3 text-left text-sm">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5">🍳 Cocina</span>

@@ -20,10 +20,7 @@ public class OrderService : IOrderService
     {
         if (string.IsNullOrWhiteSpace(dishName)) return false;
         var name = dishName.Trim().ToLowerInvariant();
-        // Match por PALABRA completa (con plurales), no substring: 'agua' no debe
-        // matchear 'aguacate' ni 'ron' a 'macarrones' — un falso positivo enciende
-        // los flags Bar* y la orden queda esperando un bartender que nunca la vera.
-        // Mantener en sync con isDrinkItem de los frontends y Comanda.IsDrink del print-agent.
+
         var words = System.Text.RegularExpressions.Regex
             .Split(name, "[^a-záéíóúüñ]+")
             .Where(w => w.Length > 0)
@@ -33,13 +30,6 @@ public class OrderService : IOrderService
             : words.Contains(k) || words.Contains(k + "s") || words.Contains(k + "es"));
     }
 
-    /// <summary>
-    /// FASE 2 RUTEO — Cocina/Bar de un item: la ZONA del plato manda
-    /// (Dish.KitchenZone.Type == "Bar" => bebida; "Kitchen" => comida; se asigna
-    /// desde el admin en el form del plato). Las keywords por nombre quedan SOLO
-    /// como fallback para platos sin zona asignada. Casos que el texto nunca
-    /// resuelve ("Copa de helado" es postre) se corrigen asignando la zona.
-    /// </summary>
     internal static bool IsDrinkItem(string? kitchenZoneType, string? dishName) => kitchenZoneType switch
     {
         "Bar" => true,
@@ -76,7 +66,7 @@ public class OrderService : IOrderService
 
     public async Task<OrderDto> CreateOrderAsync(CreateOrderDto dto)
     {
-        // Validar que la mesa existe (solo si se especificó mesa; null = para llevar/POS)
+
         if (dto.TableId.HasValue)
         {
             var tableExists = await _context.Tables.AnyAsync(t => t.Id == dto.TableId.Value);
@@ -84,8 +74,6 @@ public class OrderService : IOrderService
                 throw new ArgumentException($"La mesa con Id {dto.TableId} no existe.");
         }
 
-        // Validar que todos los platos existen y cargar DefaultCourse.
-        // KitchenZone se incluye para rutear el item (Destination Cocina/Bar) al crearlo.
         var dishIds = dto.Items.Select(i => i.DishId).Distinct().ToList();
         var existingDishes = await _context.Dishes
             .Include(d => d.KitchenZone)
@@ -96,11 +84,8 @@ public class OrderService : IOrderService
         if (missing.Count > 0)
             throw new ArgumentException($"Platos no encontrados: {string.Join(", ", missing)}");
 
-        // Generar número de orden único
         var orderNumber = $"ORD-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
 
-        // ⚠️ Server-side pricing: UnitPrice viene del catálogo, NUNCA del cliente.
-        // Evita over-posting / manipulación de precios. dishMap fue cargado de la DB arriba.
         var items = dto.Items.Select(i =>
         {
             if (!dishMap.TryGetValue(i.DishId, out var dish))
@@ -121,12 +106,11 @@ public class OrderService : IOrderService
                 CustomerName = dto.CustomerName,
                 IsReady = false,
                 CourseTiming = i.CourseTiming ?? dish.DefaultCourse,
-                // FASE 2 RUTEO — persistir la estacion decidida al momento de ordenar.
+
                 Destination = IsDrinkItem(dish.KitchenZone?.Type, dish.Name) ? "Bar" : "Kitchen"
             };
         }).ToList();
 
-        // Totales calculados sobre precios del servidor.
         var subtotal = items.Sum(i => i.Subtotal);
         var tax = decimal.Round(subtotal * _billing.TaxRate, 2, MidpointRounding.AwayFromZero);
         var tip = decimal.Round(subtotal * _billing.TipRate, 2, MidpointRounding.AwayFromZero);
@@ -150,7 +134,6 @@ public class OrderService : IOrderService
             Items = items
         };
 
-        // Si la mesa pertenece a una mesa virtual activa, asignar la orden al mesero que la creó
         var vtt = await _context.VirtualTableTables
             .Include(v => v.VirtualTable)
             .FirstOrDefaultAsync(v => v.TableId == dto.TableId && v.VirtualTable.IsActive);
@@ -161,7 +144,7 @@ public class OrderService : IOrderService
         }
         else
         {
-            // Si la sesión de mesa tiene un mesero asignado (se quedó con la mesa), auto-asignar
+
             var activeSession = await _context.TableSessions
                 .FirstOrDefaultAsync(ts => ts.TableId == dto.TableId && ts.IsActive && ts.AssignedWaiterId != null);
             if (activeSession?.AssignedWaiterId != null)
@@ -173,8 +156,6 @@ public class OrderService : IOrderService
 
         var createdOrder = await _orderRepository.AddAsync(order);
 
-        // Marcar la mesa como Ocupada apenas se crea la orden (ocupación física real),
-        // sin pisar un cobro en curso (Billing). Difundir para que el plano cambie al instante.
         if (dto.TableId.HasValue)
         {
             var table = await _context.Tables.FirstOrDefaultAsync(t => t.Id == dto.TableId.Value);
@@ -185,20 +166,15 @@ public class OrderService : IOrderService
                 await _broadcaster.BroadcastAsync(table.Id);
             }
         }
-        
-        // Obtener orden con includes para el DTO
+
         var orderWithIncludes = await _orderRepository.GetByIdWithItemsAsync(createdOrder.Id);
-        
+
         return MapToOrderDto(orderWithIncludes!);
     }
 
     public async Task<int?> GetActiveOrderIdForTableAsync(int tableId)
     {
-        // Orden "viva" de la mesa: cualquiera que no esté pagada/cancelada. Si hay varias
-        // (no debería), se toma la más reciente. Permite que varios comensales del mismo QR
-        // agreguen sus pedidos a una sola comanda por mesa en vez de crear órdenes separadas.
-        // Se EXCLUYEN las órdenes PARA LLEVAR: son cuentas separadas y no deben capturar los
-        // pedidos normales posteriores de la mesa (si no, se corrompería la cuenta separada).
+
         return await _context.Orders
             .Where(o => o.TableId == tableId
                      && !o.IsTakeaway
@@ -235,7 +211,7 @@ public class OrderService : IOrderService
             .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.KitchenZone)
             .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.Category)
             .Include(o => o.Table)
-            .Include(o => o.Invoice) // modalidad Pickup/Delivery del portal (FulfillmentType)
+            .Include(o => o.Invoice)
             .AsSplitQuery()
             .OrderBy(o => o.CreatedAt)
             .Skip((page - 1) * pageSize).Take(pageSize)
@@ -253,7 +229,7 @@ public class OrderService : IOrderService
         var orders = await _context.Orders
             .AsNoTracking()
             .Include(o => o.Table)
-            .Include(o => o.Invoice) // modalidad Pickup/Delivery (FulfillmentType correcto tambien aqui)
+            .Include(o => o.Invoice)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
             .OrderByDescending(o => o.CreatedAt)
@@ -265,13 +241,13 @@ public class OrderService : IOrderService
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
-        if (pageSize > 200) pageSize = 200; // cap defensivo
+        if (pageSize > 200) pageSize = 200;
 
         var baseQuery = _context.Orders.AsNoTracking();
         var total = await baseQuery.CountAsync();
         var orders = await baseQuery
             .Include(o => o.Table)
-            .Include(o => o.Invoice) // modalidad Pickup/Delivery (FulfillmentType correcto tambien aqui)
+            .Include(o => o.Invoice)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
             .OrderByDescending(o => o.CreatedAt)
@@ -288,9 +264,6 @@ public class OrderService : IOrderService
         };
     }
 
-    // S4.5 — State machine flexible. Cancelled siempre permitido; Admin override
-    // permite cualquier transición (intervención manual auditable).
-    // Pending→Confirmed→Preparing→Ready→Served→Completed es el flujo normal.
     private static readonly Dictionary<OrderStatus, OrderStatus[]> AllowedTransitions = new()
     {
         [OrderStatus.Pending]    = new[] { OrderStatus.Confirmed, OrderStatus.Cancelled },
@@ -298,15 +271,15 @@ public class OrderService : IOrderService
         [OrderStatus.Preparing]  = new[] { OrderStatus.Ready, OrderStatus.Cancelled },
         [OrderStatus.Ready]      = new[] { OrderStatus.Served, OrderStatus.Cancelled },
         [OrderStatus.Served]     = new[] { OrderStatus.Completed, OrderStatus.Cancelled },
-        [OrderStatus.Completed]  = Array.Empty<OrderStatus>(), // terminal
-        [OrderStatus.Cancelled]  = Array.Empty<OrderStatus>(), // terminal
+        [OrderStatus.Completed]  = Array.Empty<OrderStatus>(),
+        [OrderStatus.Cancelled]  = Array.Empty<OrderStatus>(),
     };
 
     private static void ValidateStateTransition(OrderStatus current, OrderStatus target, bool isAdminOverride)
     {
-        if (current == target) return; // no-op
-        if (isAdminOverride) return; // Admin/Manager bypass
-        if (target == OrderStatus.Cancelled) return; // siempre permitido
+        if (current == target) return;
+        if (isAdminOverride) return;
+        if (target == OrderStatus.Cancelled) return;
         if (!AllowedTransitions.TryGetValue(current, out var allowed) || !allowed.Contains(target))
             throw new InvalidOperationException(
                 $"Transición de estado inválida: {current} → {target}. " +
@@ -329,8 +302,6 @@ public class OrderService : IOrderService
         {
             ValidateStateTransition(order.Status, status, isAdminOverride);
 
-            // P0.2 — Guard fiscal: no se puede marcar Completed sin Payment row que cubra el total,
-            // salvo que un Admin/Manager pase un OverrideReason explícito (queda auditado).
             if (status == OrderStatus.Completed && order.Status != OrderStatus.Completed)
             {
                 var paidSum = await _context.Payments
@@ -357,10 +328,10 @@ public class OrderService : IOrderService
             if (status == OrderStatus.Completed)
             {
                 order.CompletedAt = DateTime.UtcNow;
-                // Liberar la mesa al completar el pedido (tras el pago)
+
                 if (order.Table != null)
                 {
-                    // Solo liberar si no hay otras órdenes activas en la misma mesa
+
                     var hasOtherActiveOrders = await _context.Orders.AnyAsync(o =>
                         o.TableId == order.TableId &&
                         o.Id != order.Id &&
@@ -371,8 +342,7 @@ public class OrderService : IOrderService
                     {
                         order.Table.Status = TableStatus.Available;
                         freedTableId = order.Table.Id;
-                        // Cerrar la sesión activa de la mesa: evita que un nuevo comensal por QR
-                        // reuse la sesión y herede al mesero anterior. Mirror de CloseSession.
+
                         var activeSession = await _context.TableSessions
                             .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
                         if (activeSession != null)
@@ -404,8 +374,6 @@ public class OrderService : IOrderService
             .FirstOrDefaultAsync(o => o.Id == id);
         if (order == null) throw new KeyNotFoundException($"Order {id} not found");
 
-        // Solo se puede cancelar antes de que la cocina la empiece a preparar.
-        // Pending y Confirmed son los únicos estados cancelables sin perjudicar la cocina.
         if (order.Status != OrderStatus.Pending && order.Status != OrderStatus.Confirmed)
             throw new InvalidOperationException(
                 $"No se puede cancelar una orden en estado {order.Status}. Solo Pending y Confirmed son cancelables.");
@@ -416,7 +384,6 @@ public class OrderService : IOrderService
             ? order.SpecialInstructions
             : $"[CANCELADA: {reason}] {order.SpecialInstructions}".Trim();
 
-        // Liberar la mesa si no hay otras órdenes activas en ella.
         int? freedTableId = null;
         if (order.Table != null)
         {
@@ -429,7 +396,7 @@ public class OrderService : IOrderService
             {
                 order.Table.Status = TableStatus.Available;
                 freedTableId = order.Table.Id;
-                // Cerrar la sesión activa de la mesa (evita sesiones huérfanas tras cancelar).
+
                 var activeSession = await _context.TableSessions
                     .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
                 if (activeSession != null)
@@ -476,7 +443,6 @@ public class OrderService : IOrderService
         order.AssignedWaiterId = waiterId;
         order.Status = Domain.Enums.OrderStatus.Confirmed;
 
-        // Marcar la mesa como Occupied al confirmar el pedido
         int? nowOccupiedTableId = null;
         if (order.Table != null && order.Table.Status != TableStatus.Occupied)
         {
@@ -491,7 +457,6 @@ public class OrderService : IOrderService
             await NotifyTableWaiterAsync(order.TableId.Value, waiterId);
     }
 
-    /// <summary>Difunde el mesero a cargo de una mesa para el badge del plano (waiterId null = limpia).</summary>
     private async Task NotifyTableWaiterAsync(int tableId, int? waiterId)
     {
         if (waiterId == null)
@@ -513,9 +478,6 @@ public class OrderService : IOrderService
         var order = await _context.Orders.FindAsync(orderId);
         if (order == null) throw new KeyNotFoundException($"Orden {orderId} no encontrada.");
 
-        // Solo quitar al mesero de la SESIÓN de la mesa para que futuros pedidos no le lleguen.
-        // El pedido activo (order.AssignedWaiterId) se mantiene intacto: sigue en "Mis Mesas"
-        // hasta que complete su flujo natural.
         var activeSession = await _context.TableSessions
             .FirstOrDefaultAsync(ts => ts.TableId == order.TableId && ts.IsActive);
         if (activeSession != null)
@@ -527,8 +489,7 @@ public class OrderService : IOrderService
 
     public async Task<IEnumerable<OrderDto>> GetUnassignedOrdersAsync()
     {
-        // Devolver TODAS las órdenes sin asignar, incluyendo las de mesas que pertenecen a una mesa virtual.
-        // Así el Waiter App puede mostrarlas en la vista de la mesa virtual (son "mis órdenes" del mesero que creó la VT).
+
         var allUnassignedOrders = await _context.Orders
             .Include(o => o.Table)
             .Include(o => o.Items)
@@ -606,19 +567,16 @@ public class OrderService : IOrderService
                 .ThenInclude(i => i.Dish)
             .Where(o => o.AssignedWaiterId == waiterId
                 && (
-                    // Activas (ni Completed ni Cancelled): siempre en "Mis Mesas".
+
                     (o.Status != Domain.Enums.OrderStatus.Completed && o.Status != Domain.Enums.OrderStatus.Cancelled)
-                    // Completadas: solo si la mesa aún está por limpiar.
+
                     || (o.Status == Domain.Enums.OrderStatus.Completed && o.Table != null && o.Table.Status == Domain.Enums.TableStatus.Cleaning)
-                    // Canceladas: solo MIENTRAS su mesa siga sin liberar (el mesero debe confirmar y
-                    // liberarla). Si la mesa ya está Available (o no tiene mesa), no hay nada que
-                    // hacer → no debe seguir contando/apareciendo en "Mis Mesas".
+
                     || (o.Status == Domain.Enums.OrderStatus.Cancelled && o.Table != null && o.Table.Status != Domain.Enums.TableStatus.Available)
                 ))
             .OrderBy(o => o.CreatedAt)
             .ToListAsync();
 
-        // Por cada mesa solo mostrar una orden Completed (la más reciente), para no listar todo el historial
         var activeOrders = orders.Where(o => o.Status != Domain.Enums.OrderStatus.Completed);
         var completedDeduped = orders
             .Where(o => o.Status == Domain.Enums.OrderStatus.Completed)
@@ -643,7 +601,7 @@ public class OrderService : IOrderService
                 .Where(p => completedOrderIds.Contains(p.OrderId))
                 .Select(p => new { p.OrderId, p.TipAmount })
                 .ToListAsync();
-            // Usar GroupBy para manejar múltiples pagos por orden (pago mixto/split)
+
             tipLookup = paymentTips
                 .GroupBy(x => x.OrderId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.TipAmount));
@@ -683,12 +641,6 @@ public class OrderService : IOrderService
         return MapToOrderDto(updated!, false, 0);
     }
 
-    /// <summary>
-    /// FULFILLMENT — auto-avance del tracking del portal: cuando TODAS las ordenes de una
-    /// Invoice (pedido Pickup/Delivery) tienen su parte de cocina y bar lista, la Invoice
-    /// pasa a ReadyForPickup sin intervencion del admin (el repartidor la ve al instante).
-    /// Nunca regresa estados posteriores (OutForDelivery/Delivered/Cancelled) y es fail-safe.
-    /// </summary>
     private async Task AdvanceInvoiceIfReadyAsync(Order order)
     {
         if (order.InvoiceId == null) return;
@@ -720,7 +672,7 @@ public class OrderService : IOrderService
         }
         catch (Exception ex)
         {
-            // El auto-avance nunca debe romper el flujo del KDS.
+
             _logger.LogWarning(ex, "No se pudo auto-avanzar la invoice de la orden {OrderId}", order.Id);
         }
     }
@@ -796,15 +748,14 @@ public class OrderService : IOrderService
 
         var oldTable = await _context.Tables.FindAsync(oldTableId);
         if (oldTable != null)
-            oldTable.Status = TableStatus.Available; // Mesa de origen queda libre
-        newTable.Status = TableStatus.Occupied;      // Mesa destino queda ocupada
+            oldTable.Status = TableStatus.Available;
+        newTable.Status = TableStatus.Occupied;
 
         order.TableId = newTableId;
         order.Table = null!;
         await _orderRepository.UpdateAsync(order);
         await _context.SaveChangesAsync();
 
-        // Difundir el cambio de ambas mesas al plano en vivo (aditivo: solo notifica).
         if (oldTableId != null)
         {
             await _broadcaster.BroadcastAsync(oldTableId.Value);
@@ -830,7 +781,7 @@ public class OrderService : IOrderService
                 throw new ArgumentException($"Cantidad inválida para plato {dto.DishId}: {dto.Quantity}");
 
             var dish = await _context.Dishes
-                .Include(d => d.KitchenZone)   // ruteo Cocina/Bar por zona (fallback keywords)
+                .Include(d => d.KitchenZone)
                 .FirstOrDefaultAsync(d => d.Id == dto.DishId)
                 ?? throw new ArgumentException($"Plato {dto.DishId} no encontrado");
 
@@ -842,7 +793,7 @@ public class OrderService : IOrderService
             {
                 DishId         = dto.DishId,
                 Quantity       = dto.Quantity,
-                UnitPrice      = dish.Price,            // server-side price, no client trust
+                UnitPrice      = dish.Price,
                 Subtotal       = dish.Price * dto.Quantity,
                 Notes          = dto.Notes,
                 Customizations = dto.Customizations,
@@ -850,12 +801,11 @@ public class OrderService : IOrderService
                 SideDish       = dto.SideDish,
                 CustomerName   = customerName,
                 CourseTiming   = dto.CourseTiming ?? (CourseTiming?)dish.DefaultCourse,
-                // FASE 2 RUTEO — persistir la estacion decidida al momento de ordenar.
+
                 Destination    = isDrink ? "Bar" : "Kitchen",
             });
         }
 
-        // Recalcular totales incluyendo todos los ítems (precios siempre desde el catálogo)
         var subtotal = order.Items.Sum(i => i.UnitPrice * i.Quantity);
         var tax  = decimal.Round(subtotal * _billing.TaxRate, 2, MidpointRounding.AwayFromZero);
         var tip  = decimal.Round(subtotal * _billing.TipRate, 2, MidpointRounding.AwayFromZero);
@@ -864,8 +814,6 @@ public class OrderService : IOrderService
         order.Tip      = tip;
         order.Total    = subtotal + tax + tip;
 
-        // Solo resetear los flags de la sección que tiene ítems nuevos.
-        // Si solo se agregaron bebidas, la cocina ya sirvió su parte → no tocar KitchenServed.
         if (newFoodAdded)
         {
             order.KitchenPreparing = false;
@@ -879,14 +827,11 @@ public class OrderService : IOrderService
             order.BarServed    = false;
         }
 
-        // Si la orden ya estaba Served/Completed, volver a Confirmed
-        // para que el KDS la muestre de nuevo con los nuevos ítems.
         if (order.Status == OrderStatus.Served || order.Status == OrderStatus.Completed)
             order.Status = OrderStatus.Confirmed;
 
         await _context.SaveChangesAsync();
 
-        // Recargar con relaciones completas para el DTO
         var updated = await _context.Orders
             .Include(o => o.Table)
             .Include(o => o.Items).ThenInclude(i => i.Dish).ThenInclude(d => d!.Category)
@@ -905,8 +850,7 @@ public class OrderService : IOrderService
             TableId = order.TableId,
             IsPickup = order.IsPickup,
             IsTakeaway = order.IsTakeaway,
-            // Modalidad: la Invoice del portal manda (Pickup/Delivery); sin invoice, IsPickup
-            // distingue mostrador del POS; el resto es mesa (DineIn).
+
             FulfillmentType = order.Invoice != null
                 ? order.Invoice.FulfillmentType.ToString()
                 : (order.IsPickup ? "Pickup" : "DineIn"),
@@ -943,9 +887,7 @@ public class OrderService : IOrderService
                 CustomerName = i.CustomerName,
                 PreferenceText = i.PreferenceText,
                 IsReady = i.IsReady,
-                // FASE 2 RUTEO — flag autoritativo para frontends/print-agent: el
-                // Destination persistido manda; si falta (ordenes viejas), se deriva
-                // de la zona del plato con fallback a keywords.
+
                 IsDrink = i.Destination == "Bar"
                     || (i.Destination == null && IsDrinkItem(i.Dish?.KitchenZone?.Type, i.Dish?.Name)),
                 KitchenZoneId = i.Dish?.KitchenZoneId,

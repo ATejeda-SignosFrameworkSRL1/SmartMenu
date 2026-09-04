@@ -1,7 +1,5 @@
 import createNextIntlPlugin from 'next-intl/plugin';
 
-// next-intl en modo "sin ruteo por URL": el plugin sólo enlaza la config por-request.
-// rewrites/headers/env quedan intactos; no se agrega middleware ni segmento [locale].
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
 /** @type {import('next').NextConfig} */
@@ -12,8 +10,7 @@ const nextConfig = {
     unoptimized: process.env.NODE_ENV === 'development',
   },
   async headers() {
-    // Cache-Control only on dynamic routes (/api, /uploads). Static assets
-    // (_next/static, manifest, icons, etc.) get default cache → PWA-friendly.
+
     return [
       {
         source: '/api/:path*',

@@ -22,10 +22,8 @@ const GREEN = "#16a34a";
 const ORANGE = "#d97706";
 const VIOLET = "#7c3aed";
 
-/** Mesa con su zona, tal como la consume el visor. */
 type TableWithZone = TableData & { zoneName: string };
 
-/** Tab único "Plano" (la vista de lista se eliminó: el plano es la única vista). */
 function PlanoTab() {
   return (
     <div className="inline-flex rounded-lg bg-slate-100 p-1">
@@ -60,12 +58,6 @@ function StatusLegend() {
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Datos mock de pedido (solo presentacional, para revisar el UX del flujo
-   "click en mesa → ver el pedido"). En la waiter-app real esto se reemplaza por
-   la orden viva de la mesa (filtrando /api/order/active por tableId), reutilizando
-   el modal que YA usa la tarjeta de mesa del mesero — cero lógica nueva de negocio.
-   ────────────────────────────────────────────────────────────────────────── */
 const MOCK_DISHES = [
   { name: "Bruschetta Italiana", price: 245 },
   { name: "Churrasco a la parrilla", price: 690 },
@@ -90,18 +82,17 @@ interface MockOrder {
   orderStatus: string;
 }
 
-/** Construye una comanda creíble y estable a partir de la mesa (determinista por id). */
 function buildMockOrder(t: TableWithZone): MockOrder {
   const seed = Number(t.id) || 1;
-  const count = 2 + (seed % 3); // 2-4 ítems
+  const count = 2 + (seed % 3);
   const items = Array.from({ length: count }, (_, i) => {
     const d = MOCK_DISHES[(seed * 3 + i * 2) % MOCK_DISHES.length];
     const qty = 1 + ((seed + i) % 2);
     return { name: d.name, price: d.price, qty, note: i === 0 && seed % 2 === 0 ? "Sin cebolla" : undefined };
   });
   const subtotal = items.reduce((a, it) => a + it.price * it.qty, 0);
-  const tax = Math.round(subtotal * 0.18 * 100) / 100; // ITBIS 18%
-  const tip = Math.round(subtotal * 0.1 * 100) / 100; // propina legal 10%
+  const tax = Math.round(subtotal * 0.18 * 100) / 100;
+  const tip = Math.round(subtotal * 0.1 * 100) / 100;
   return {
     items,
     subtotal,
@@ -117,7 +108,6 @@ function buildMockOrder(t: TableWithZone): MockOrder {
 
 const RD = (n: number) => "RD$ " + n.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Cabecera del modal: número de mesa + zona + badge de estado + cerrar. */
 function ModalHeader({ t, onClose }: { t: TableWithZone; onClose: () => void }) {
   const c = STATUS_COLORS[t.status];
   return (
@@ -143,7 +133,6 @@ function ModalHeader({ t, onClose }: { t: TableWithZone; onClose: () => void }) 
   );
 }
 
-/** Modal de detalle de pedido (mesa ocupada / por cobrar). */
 function OrderDetailModal({ t, onClose }: { t: TableWithZone; onClose: () => void }) {
   const o = useMemo(() => buildMockOrder(t), [t]);
   const billing = t.status === "billing";
@@ -151,7 +140,6 @@ function OrderDetailModal({ t, onClose }: { t: TableWithZone; onClose: () => voi
     <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
       <ModalHeader t={t} onClose={onClose} />
 
-      {/* Meta — grid + centrado por estilo inline (robusto ante el CSS de Storybook). */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }} className="bg-slate-100 text-xs">
         {[
           { icon: <Users className="mb-1 h-4 w-4 text-slate-400" />, v: String(o.guests), l: "Comensales" },
@@ -166,13 +154,11 @@ function OrderDetailModal({ t, onClose }: { t: TableWithZone; onClose: () => voi
         ))}
       </div>
 
-      {/* Estado de la comanda */}
       <div className="flex items-center justify-between px-5 pt-4">
         <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Comanda</span>
         <span className="text-xs font-semibold" style={{ color: billing ? VIOLET : ORANGE }}>{o.orderStatus}</span>
       </div>
 
-      {/* Ítems */}
       <div className="max-h-56 overflow-auto px-5 py-2">
         {o.items.map((it, i) => (
           <div key={i} className="flex items-start justify-between gap-3 border-b border-slate-100 py-2 last:border-0">
@@ -188,7 +174,6 @@ function OrderDetailModal({ t, onClose }: { t: TableWithZone; onClose: () => voi
         ))}
       </div>
 
-      {/* Totales */}
       <div className="space-y-1 bg-slate-50 px-5 py-3 text-sm">
         <div className="flex justify-between text-slate-500"><span>Subtotal</span><span className="tabular-nums">{RD(o.subtotal)}</span></div>
         <div className="flex justify-between text-slate-500"><span>ITBIS (18%)</span><span className="tabular-nums">{RD(o.tax)}</span></div>
@@ -196,7 +181,6 @@ function OrderDetailModal({ t, onClose }: { t: TableWithZone; onClose: () => voi
         <div className="flex justify-between border-t border-slate-200 pt-1 text-base font-bold text-slate-900"><span>Total</span><span className="tabular-nums">{RD(o.total)}</span></div>
       </div>
 
-      {/* Acciones */}
       <div className="flex gap-2 px-5 py-4">
         {billing ? (
           <>
@@ -222,7 +206,6 @@ function OrderDetailModal({ t, onClose }: { t: TableWithZone; onClose: () => voi
   );
 }
 
-/** Modal compacto para mesa libre o reservada (sin orden activa). */
 function NoOrderModal({ t, onClose }: { t: TableWithZone; onClose: () => void }) {
   const reserved = t.status === "reserved";
   return (
@@ -264,7 +247,6 @@ function NoOrderModal({ t, onClose }: { t: TableWithZone; onClose: () => void })
   );
 }
 
-/** Overlay + dispatcher: decide qué modal mostrar según el estado de la mesa. */
 function TableModal({ table, onClose }: { table: TableWithZone | null; onClose: () => void }) {
   if (!table) return null;
   const hasOrder = table.status === "occupied" || table.status === "billing";
@@ -281,13 +263,12 @@ function TableModal({ table, onClose }: { table: TableWithZone | null; onClose: 
   );
 }
 
-/** Réplica presentacional del shell del waiter-app + slot para toggle y contenido. */
 function WaiterShell({ toggle, children }: { toggle: React.ReactNode; children: React.ReactNode }) {
   const tab = (active: boolean) =>
     `rounded-md px-6 py-2 text-sm font-medium transition ${active ? "text-white" : "text-gray-600 hover:bg-gray-100"}`;
   return (
     <div className="min-h-screen bg-gray-50 text-slate-900">
-      {/* Header claro */}
+
       <div className="bg-white shadow">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-4">
           <div className="flex flex-wrap items-center gap-3 sm:gap-5">
@@ -323,7 +304,6 @@ function WaiterShell({ toggle, children }: { toggle: React.ReactNode; children: 
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4">
         <div className="inline-flex rounded-lg bg-white p-1 shadow">
           <button type="button" className={tab(true)} style={{ backgroundColor: GREEN }}>Mesas General (27)</button>
@@ -338,7 +318,6 @@ function WaiterShell({ toggle, children }: { toggle: React.ReactNode; children: 
         </button>
       </div>
 
-      {/* Contenido */}
       <div className="mx-auto max-w-7xl px-4 pb-8">
         <h2 className="mb-1 text-xl font-bold text-gray-900">Todas las Mesas (27)</h2>
         {children}
@@ -355,7 +334,6 @@ export default meta;
 
 type Story = StoryObj;
 
-/** Resuelve la mesa (con su zona) a partir del id que emite el visor. */
 function findTable(id: string | number | null): TableWithZone | null {
   if (id == null) return null;
   for (const z of MULTI_ZONE_FLOOR_PLAN.zones) {
@@ -365,14 +343,6 @@ function findTable(id: string | number | null): TableWithZone | null {
   return null;
 }
 
-/**
- * Waiter-app con el plano de salón integrado en SOLO-LECTURA + interacción de negocio.
- * Vista única "Plano". Click en una mesa:
- *  - Ocupada / Por cobrar → abre el detalle del pedido (ítems, ITBIS 18%, propina 10%, total).
- *  - Libre → CTA "Identificar / Tomar pedido".  · Reservada → datos de la reserva.
- * El plano es otra VISTA de las mismas mesas: el click reutiliza el mismo flujo que la
- * tarjeta de mesa. (Mock presentacional para revisar UX; la app real consume la orden viva.)
- */
 export const ConPlano: Story = {
   render: () => {
     const Demo = () => {

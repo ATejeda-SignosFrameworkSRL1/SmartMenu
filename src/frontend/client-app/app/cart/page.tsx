@@ -34,17 +34,14 @@ function CartPageInner() {
     getTotal,
   } = useCartStore();
 
-  // Modal "¿Estás seguro?" antes de confirmar un pedido PARA LLEVAR.
   const [showTakeawayConfirm, setShowTakeawayConfirm] = useState(false);
 
-  // orderId puede venir por URL (?orderId=71) o por el store
   const urlOrderId = searchParams?.get('orderId') ? parseInt(searchParams.get('orderId')!) : null;
   const addToOrderId = urlOrderId ?? storeAddToOrderId;
   const isAddingToOrder = !!addToOrderId;
 
   const [specialInstructions, setSpecialInstructions] = useState('');
 
-  // Mutación para orden nueva
   const createOrderMutation = useMutation({
     mutationFn: (orderData: unknown) => apiClient.createOrder(orderData),
     onSuccess: (response: any) => {
@@ -62,13 +59,11 @@ function CartPageInner() {
     },
   });
 
-  // Mutación para agregar ítems a orden existente
   const addItemsMutation = useMutation({
     mutationFn: (items: any[]) => apiClient.addItemsToOrder(addToOrderId!, items),
     onSuccess: (response: any) => {
       toast.success(tt('itemsAdded'));
-      // Actualizar el cache de React Query con la respuesta actualizada del backend
-      // (que ya tiene status='Confirmed'), evitando que order-status redirija a order-served
+
       if (addToOrderId) {
         queryClient.setQueryData(['order', addToOrderId], response);
       }
@@ -90,10 +85,7 @@ function CartPageInner() {
       dishId: item.dishId,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      // PARA LLEVAR: la marca va POR ÍTEM (en notes). Así sobrevive tanto al CREAR la
-      // orden como al AGREGAR a una orden viva de la mesa (AddItemsToOrderAsync persiste
-      // notes pero NO specialInstructions), y el print-agent la imprime en la línea de
-      // cada plato para llevar. En mesa compartida solo se marcan los ítems para llevar.
+
       notes: [takeaway ? 'PARA LLEVAR' : '', item.notes || item.specialInstructions || '']
         .filter(Boolean).join(' · ') || undefined,
       drinkTiming: item.drinkTiming || undefined,
@@ -110,8 +102,6 @@ function CartPageInner() {
       return;
     }
 
-    // Nunca enviar a una mesa por defecto: sin mesa escaneada el pedido
-    // llegaria (y se cobraria) a la Mesa 1 fisica de otro comensal.
     if (!tableId) {
       toast.error(tt('noTableSelected'));
       router.push('/table');
@@ -124,8 +114,7 @@ function CartPageInner() {
       sessionId,
       customerName: customerName?.trim() || undefined,
       specialInstructions: specialInstructions || undefined,
-      // PARA LLEVAR: orden SEPARADA — el backend NO la fusiona con la orden viva de la mesa,
-      // así su comanda trae solo los ítems para llevar y tiene su propia cuenta.
+
       isTakeaway: takeaway,
       items: mappedItems,
     });
@@ -161,7 +150,7 @@ function CartPageInner() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4">
@@ -193,9 +182,8 @@ function CartPageInner() {
         </div>
       </header>
 
-      {/* Content */}
       <div className="container mx-auto px-4 py-6 max-w-4xl">
-        {/* Items List */}
+
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">{t('yourDishes')}</h2>
 
@@ -205,7 +193,7 @@ function CartPageInner() {
                 key={item.lineId ?? item.dishId}
                 className="flex items-center gap-4 pb-4 border-b last:border-b-0"
               >
-                {/* Item Info */}
+
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">{item.dishName}</h3>
                   <p className="text-sm text-gray-600">
@@ -218,7 +206,6 @@ function CartPageInner() {
                   )}
                 </div>
 
-                {/* Quantity Controls */}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => updateQuantity(item.lineId!, Math.max(1, item.quantity - 1))}
@@ -235,14 +222,12 @@ function CartPageInner() {
                   </button>
                 </div>
 
-                {/* Price */}
                 <div className="text-right min-w-[80px]">
                   <p className="font-bold text-gray-900">
                     RD${(item.unitPrice * item.quantity).toFixed(2)}
                   </p>
                 </div>
 
-                {/* Remove Button */}
                 <button
                   onClick={() => removeItem(item.lineId!)}
                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -254,7 +239,6 @@ function CartPageInner() {
           </div>
         </div>
 
-        {/* Special Instructions */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">
             {t('specialInstructions')}
@@ -268,7 +252,6 @@ function CartPageInner() {
           />
         </div>
 
-        {/* Tu orden detallada - Revisa antes de confirmar */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6 border-2 border-primary-100">
           <h2 className="text-xl font-bold text-gray-900 mb-1">{t('detailedOrder')}</h2>
           <p className="text-sm text-gray-500 mb-4">{t('reviewBeforeConfirm')}</p>
@@ -308,7 +291,6 @@ function CartPageInner() {
           </div>
         </div>
 
-        {/* Summary */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">{t('summary')}</h2>
 
@@ -341,18 +323,15 @@ function CartPageInner() {
           </div>
         </div>
 
-        {/* Checkout */}
         <div className="sticky bottom-0 bg-white p-6 rounded-t-xl shadow-lg space-y-3">
           {takeaway && (
             <div className="flex items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 py-2 text-sm font-semibold text-primary-700">
               🥡 {t('takeawayBanner')}
             </div>
           )}
-          {/* Móvil: apilados (CTA principal arriba, cada uno ancho completo → sin quiebre de
-              texto ni botones apretados). ≥sm: lado a lado. */}
+
           <div className="flex flex-col-reverse sm:flex-row gap-3">
-            {/* Secundario: entra al modo PARA LLEVAR (→ menú) o sigue agregando.
-                UX/UI: mismo alto/radio/tipografía que el primario; delineado = acción secundaria. */}
+
             <button
               type="button"
               onClick={() => { setTakeaway(true); setAddToOrderId(null); router.push('/menu'); }}
@@ -386,7 +365,6 @@ function CartPageInner() {
           </div>
         </div>
 
-        {/* Modal "¿Estás seguro?" del pedido PARA LLEVAR */}
         {showTakeawayConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">

@@ -6,15 +6,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.API.Controllers;
 
-/// <summary>
-/// Sprint 5.2 — gestión de configuración a nivel restaurante.
-///
-/// Endpoints:
-///   GET  /api/restaurant            — lista restaurantes activos (Admin)
-///   GET  /api/restaurant/{id}       — detalle (Admin/Manager)
-///   GET  /api/restaurant/current    — el restaurante del usuario logueado
-///   PUT  /api/restaurant/{id}/auth-mode — cambiar WaiterAuthMode
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -73,10 +64,6 @@ public class RestaurantController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Devuelve el restaurante actual (basado en el RestaurantId del user logueado).
-    /// Si el user no tiene restaurantId asignado, devuelve el primero activo.
-    /// </summary>
     [HttpGet("current")]
     [Authorize]
     public async Task<IActionResult> GetCurrent()
@@ -99,11 +86,6 @@ public class RestaurantController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Cambia el modo de autenticación del waiter para este restaurante.
-    /// Solo Admin/Manager. Valores válidos: 0=PrivateOnly, 1=PublicPin, 2=Hybrid.
-    /// Audita la acción para trazabilidad DGII.
-    /// </summary>
     [HttpPut("{id}/auth-mode")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> SetAuthMode(int id, [FromBody] SetAuthModeDto dto)
@@ -123,7 +105,6 @@ public class RestaurantController : ControllerBase
         r.WaiterAuthMode = newMode;
         await _context.SaveChangesAsync();
 
-        // Auditar
         var sub = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                   ?? User.FindFirst("sub")?.Value;
         int.TryParse(sub, out var actorId);
@@ -149,10 +130,6 @@ public class RestaurantController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Configura la ubicación del restaurante (PUNTO A de la ruta de delivery en Google Maps).
-    /// Solo Admin/Manager. Sin esto, el mapa del repartidor usa un fallback genérico.
-    /// </summary>
     [HttpPut("{id}/location")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> SetLocation(int id, [FromBody] SetLocationDto dto)
@@ -175,12 +152,10 @@ public class RestaurantController : ControllerBase
 
 public class SetAuthModeDto
 {
-    /// <summary>0=PrivateOnly, 1=PublicPin, 2=Hybrid</summary>
+
     public int Mode { get; set; }
 }
 
-/// <summary>Ubicación del restaurante (punto A de la ruta de delivery en Google Maps).
-/// Nullables para que un body {} no bindee a (0,0).</summary>
 public class SetLocationDto
 {
     public double? Latitude { get; set; }

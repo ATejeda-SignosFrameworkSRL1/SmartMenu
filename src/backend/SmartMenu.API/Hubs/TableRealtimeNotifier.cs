@@ -3,11 +3,6 @@ using SmartMenu.Application.Services;
 
 namespace SmartMenu.API.Hubs;
 
-/// <summary>
-/// Implementación de <see cref="ITableRealtimeNotifier"/> sobre SignalR. Emite el
-/// mismo evento que TableHub ("TableStatusChanged" con { tableId, status, timestamp })
-/// para que los clientes (admin Gestión de Salón, host, waiter) actualicen el plano al instante.
-/// </summary>
 public class TableRealtimeNotifier : ITableRealtimeNotifier
 {
     private readonly IHubContext<TableHub> _hub;

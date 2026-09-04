@@ -6,7 +6,6 @@ function getApiBaseUrl(): string {
 
 const API_URL = getApiBaseUrl();
 
-// El baseURL NO debe incluir /api porque las rutas en page.tsx ya lo incluyen
 export const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -15,7 +14,6 @@ export const api = axios.create({
   timeout: 15000,
 });
 
-// S3.2 — JWT refresh transparente (mismo patrón que admin-panel).
 let refreshPromise: Promise<string | null> | null = null;
 
 async function tryRefresh(): Promise<string | null> {
@@ -50,11 +48,6 @@ function tokenExpiringSoon(token: string, withinMs = 60_000): boolean {
   }
 }
 
-/**
- * Token válido para el accessTokenFactory de SignalR: refresca (vía el MISMO `tryRefresh`
- * + lock que el interceptor REST) si está vencido o por vencer. Evita los 401 de
- * reconexión del hub al expirar el token con la pestaña abierta.
- */
 export async function ensureFreshToken(): Promise<string> {
   if (typeof window === 'undefined') return '';
   const token = localStorage.getItem('waiter_token');

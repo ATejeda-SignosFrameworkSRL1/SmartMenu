@@ -12,24 +12,19 @@ export interface MultiZoneFloorPlanEditorProps {
   data: FloorPlanData;
   width?: number;
   height?: number;
-  /** Ocupa el 100% del contenedor (responsive). */
+
   fill?: boolean;
-  /** Escala/centra el plano para llenar el área (zoom-to-fit). */
+
   fitToContent?: boolean;
   defaultZoneId?: string;
-  /** Se dispara al cambiar de zona (zoneId activo). */
+
   onZoneChange?: (zoneId: string) => void;
-  /** Se dispara con el plano COMPLETO actualizado al mover/editar una mesa o estructura. */
+
   onChange?: (data: FloorPlanData) => void;
-  /** Override de la paleta de estados. */
+
   palette?: StatusPaletteOverride;
 }
 
-/**
- * Editor multi-zona (admin): pestañas por zona. Mesas y estructuras arrastrables;
- * al soltar se actualizan sus coordenadas. Al SELECCIONAR una mesa (click) se abre
- * un panel lateral para editar sus atributos (nombre, capacidad, forma, sección, color).
- */
 export function MultiZoneFloorPlanEditor({
   data,
   width = 800,
@@ -50,7 +45,7 @@ export function MultiZoneFloorPlanEditor({
 
   const handleZone = (id: string) => {
     setActiveZoneId(id);
-    setSelectedId(null); // la mesa seleccionada no pertenece a la nueva zona
+    setSelectedId(null);
     onZoneChange?.(id);
   };
 
@@ -59,7 +54,6 @@ export function MultiZoneFloorPlanEditor({
     onChange?.({ zones: nextZones });
   };
 
-  /** Aplica un cambio parcial (posición o atributos) a una mesa de la zona activa. */
   const patchTable = (id: string | number, patch: Partial<TableData>) => {
     if (!activeZone) return;
     commit(

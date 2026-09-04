@@ -68,13 +68,11 @@ export default function MaintenancePage() {
   const [editingZone, setEditingZone] = useState<Zone | null>(null);
   const [form, setForm] = useState({ name: '', description: '' });
 
-  // Tables state
   interface TableItem { id: number; tableNumber: number; capacity: number; zoneName: string; status: string; }
   const [allTables, setAllTables] = useState<TableItem[]>([]);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkingZone, setLinkingZone] = useState<Zone | null>(null);
 
-  // Tags state
   const [tags, setTags] = useState<DishTag[]>([]);
   const [showTagModal, setShowTagModal] = useState(false);
   const [editingTag, setEditingTag] = useState<DishTag | null>(null);
@@ -82,21 +80,21 @@ export default function MaintenancePage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const FOOD_EMOJIS = [
-    // Picante / calor
+
     '🌶️','🔥','💥','⚡','🫑','🧨',
-    // Dieta / saludable
+
     '🌱','🌾','🥬','🥑','🫘','🫛','🥦','🥕',
-    // Calidad / destacado
+
     '⭐','🌟','🏆','✨','👑','💎','❤️','🆕',
-    // Ingredientes / alérgenos
+
     '🥜','🥛','🐟','🧀','🥚','🍯','🧄','🧅',
-    // Cocina / chef
+
     '👨‍🍳','🍳','🫕','🥘','🍽️','🔪',
-    // Carnes
+
     '🍖','🥩','🍗','🥓','🍤','🦞',
-    // Varios comida
+
     '🫐','🍋','🫚','🌿','🍄','🧆',
-    // Etiqueta genérica
+
     '🏷️','📌','🔖','🎯','💚','💛','🧡',
   ];
 
@@ -137,7 +135,7 @@ export default function MaintenancePage() {
     try {
       const res = await api.get('/api/dishtag');
       const raw: any[] = Array.isArray(res.data) ? res.data : [];
-      // Normalizar PascalCase → camelCase para isActive y demás campos
+
       setTags(raw.map(t => ({
         id:        t.id        ?? t.Id,
         code:      t.code      ?? t.Code      ?? '',
@@ -320,7 +318,7 @@ export default function MaintenancePage() {
   return (
     <MainLayout title={t('pageTitle')} subtitle={t('pageSubtitle')}>
       <div className="space-y-6">
-        {/* Header */}
+
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
@@ -332,7 +330,6 @@ export default function MaintenancePage() {
           </Button>
         </div>
 
-        {/* Stats resumen */}
         <div className="grid gap-4 md:grid-cols-4">
           {TAB_CONFIG.map(tab => {
             const count = zones.filter(z => (g(z, 'type') || 'Dining') === tab.key).length;
@@ -360,7 +357,7 @@ export default function MaintenancePage() {
               </Card>
             );
           })}
-          {/* Card Tags */}
+
           <Card
             className={cn(
               'border-2 cursor-pointer transition-all hover:shadow-md',
@@ -382,7 +379,6 @@ export default function MaintenancePage() {
           </Card>
         </div>
 
-        {/* Contenido del tab activo */}
         {activeTab === 'Tags' ? null : <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -495,7 +491,6 @@ export default function MaintenancePage() {
           </CardContent>
         </Card>}
 
-        {/* Sección Tags de platos */}
         {activeTab === 'Tags' && <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -565,7 +560,6 @@ export default function MaintenancePage() {
         </Card>}
       </div>
 
-      {/* Modal Tags */}
       {showTagModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTagModal(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
@@ -576,7 +570,7 @@ export default function MaintenancePage() {
               </button>
             </div>
             <div className="space-y-4">
-              {/* Ícono con picker */}
+
               <div>
                 <label className="block text-sm font-medium mb-1">{t('form.icon')}</label>
                 <button
@@ -608,7 +602,6 @@ export default function MaintenancePage() {
                 )}
               </div>
 
-              {/* Nombre */}
               <div>
                 <label className="block text-sm font-medium mb-1">{t('form.nameRequired')}</label>
                 <input
@@ -621,7 +614,6 @@ export default function MaintenancePage() {
                 />
               </div>
 
-              {/* Orden */}
               <div>
                 <label className="block text-sm font-medium mb-1">{t('form.sortOrder')}</label>
                 <input
@@ -642,7 +634,6 @@ export default function MaintenancePage() {
         </div>
       )}
 
-      {/* Modal Linkear Mesas a Zona */}
       {showLinkModal && linkingZone && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -654,7 +645,7 @@ export default function MaintenancePage() {
             </div>
 
             <div className="overflow-y-auto flex-1 space-y-4">
-              {/* Mesas asignadas a esta zona */}
+
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">{t('modal.tablesInZone')}</h3>
                 {getTablesForZone(g(linkingZone, 'name')).length === 0 ? (
@@ -670,7 +661,6 @@ export default function MaintenancePage() {
                 )}
               </div>
 
-              {/* Mesas de otras zonas que se pueden reasignar */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">{t('modal.assignFromOtherZone')}</h3>
                 {getUnassignedOrOtherTables(g(linkingZone, 'name')).length === 0 ? (
@@ -703,7 +693,6 @@ export default function MaintenancePage() {
         </div>
       )}
 
-      {/* Modal Crear / Editar zonas */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>

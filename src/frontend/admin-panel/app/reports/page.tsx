@@ -228,7 +228,6 @@ export default function ReportsPage() {
     );
   }
 
-  // Derived data for charts
   const statusChartData = reportData.ordersByStatus.map(item => ({
     name: STATUS_KEYS[item.status] ? t(STATUS_KEYS[item.status]) : item.status,
     value: item.count,
@@ -255,7 +254,6 @@ export default function ReportsPage() {
     <MainLayout title={t('pageTitle')}>
       <div className="space-y-6">
 
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">{t('pageTitle')}</h1>
@@ -267,7 +265,6 @@ export default function ReportsPage() {
           </Button>
         </div>
 
-        {/* KPI Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -318,10 +315,8 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        {/* Row 1: Pie chart + Bar chart top dishes */}
         <div className="grid gap-6 lg:grid-cols-2">
 
-          {/* Pie — Órdenes por Estado */}
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <BarChart2 className="h-5 w-5 text-primary" />
@@ -356,7 +351,7 @@ export default function ReportsPage() {
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
-                  {/* Mini stats row */}
+
                   <div className="w-full grid grid-cols-2 gap-2">
                     {statusChartData.map(item => (
                       <div key={item.name} className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
@@ -371,7 +366,6 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          {/* Horizontal Bar — Top 5 por cantidad */}
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <Award className="h-5 w-5 text-primary" />
@@ -418,10 +412,8 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        {/* Row 2: Top dishes revenue bar + Waiter radar */}
         <div className="grid gap-6 lg:grid-cols-2">
 
-          {/* Vertical Bar — Top 5 por ingresos */}
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <TrendingUp className="h-5 w-5 text-primary" />
@@ -448,7 +440,6 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          {/* Radar — Rendimiento meseros */}
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <Users className="h-5 w-5 text-primary" />
@@ -475,7 +466,6 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        {/* Waiter grouped bar */}
         {waiterChartData.length > 0 && (
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
@@ -498,7 +488,6 @@ export default function ReportsPage() {
           </Card>
         )}
 
-        {/* Waiter Table */}
         <Card>
           <CardHeader>
             <CardTitle>{t('tableWaiterReportTitle')}</CardTitle>
@@ -547,7 +536,6 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        {/* Modal detalle mesero */}
         {waiterDetail != null && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setWaiterDetail(null)}>
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>

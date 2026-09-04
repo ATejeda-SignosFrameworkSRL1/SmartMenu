@@ -9,7 +9,7 @@ namespace SmartMenu.Infrastructure.Data.Migrations
     [Migration("20260209000000_AddOrderKitchenBarPreparing")]
     public partial class AddOrderKitchenBarPreparing : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<bool>(
@@ -41,7 +41,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 defaultValue: false);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(name: "KitchenPreparing", table: "Orders");

@@ -10,12 +10,6 @@ using SmartMenu.Infrastructure.Data;
 
 namespace SmartMenu.API.Controllers;
 
-/// <summary>
-/// Facturas globales del agregador multi-franquicia (delivery/pickup online): checkout del
-/// cliente (un pago, N órdenes por franquicia) + seguimiento (tracking) para el admin.
-/// El tracking está detrás de un switch por restaurante (DeliveryTrackingEnabled), igual que
-/// el switch del plano de planta.
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class InvoicesController : ControllerBase
@@ -33,8 +27,6 @@ public class InvoicesController : ControllerBase
         _kitchenHub = kitchenHub;
     }
 
-    // POST /api/invoices — checkout del cliente (carrito mixto → una Invoice + N Orders).
-    // Rate-limited: endpoint anónimo que genera comandas reales (anti-spam por IP).
     [HttpPost]
     [AllowAnonymous]
     [EnableRateLimiting("invoices")]
@@ -45,7 +37,7 @@ public class InvoicesController : ControllerBase
         {
             var result = await _invoices.CreateInvoiceAsync(dto);
             await NotifyKitchenAsync(result);
-            // 201 con el cuerpo (sin Location: el creador es anónimo y GetById es solo admin).
+
             return StatusCode(StatusCodes.Status201Created, result);
         }
         catch (ArgumentException ex)
@@ -59,8 +51,6 @@ public class InvoicesController : ControllerBase
         }
     }
 
-    /// <summary>Notifica a cada KDS las órdenes recién creadas (mismo evento que OrderController).
-    /// El KDS ya trae poll de respaldo de 5s; esto las hace aparecer al instante + con toast.</summary>
     private async Task NotifyKitchenAsync(InvoiceDto invoice)
     {
         foreach (var o in invoice.Orders)
@@ -71,7 +61,7 @@ public class InvoicesController : ControllerBase
                 {
                     orderId = o.OrderId,
                     orderNumber = o.OrderNumber,
-                    restaurantId = o.RestaurantId,   // para el ruteo por franquicia del KDS
+                    restaurantId = o.RestaurantId,
                     items = o.Items.Select(i => new { i.DishId, i.DishName, i.Quantity }).ToList<object>(),
                     timestamp = DateTime.UtcNow
                 });
@@ -83,7 +73,6 @@ public class InvoicesController : ControllerBase
         }
     }
 
-    // GET /api/invoices/{id}
     [HttpGet("{id:int}")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -93,8 +82,6 @@ public class InvoicesController : ControllerBase
         return invoice == null ? NotFound(new { error = "Factura no encontrada" }) : Ok(invoice);
     }
 
-    // GET /api/invoices/tracking?status=OutForDelivery — seguimiento del admin y del REPARTIDOR
-    // (delivery-app). Gate por el switch DeliveryTrackingEnabled (permiso del admin).
     [HttpGet("tracking")]
     [Authorize(Roles = "Admin,Manager,Delivery")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -107,16 +94,12 @@ public class InvoicesController : ControllerBase
         return Ok(await _invoices.GetTrackingAsync(status));
     }
 
-    /// <summary>Transiciones que puede hacer el ROL Delivery (repartidor): recoger y entregar.
-    /// Los estados tempranos (Confirmed/Preparing/ReadyForPickup) los maneja admin/manager.</summary>
     private static readonly Dictionary<string, string[]> DriverAllowedTransitions = new(StringComparer.OrdinalIgnoreCase)
     {
         ["OutForDelivery"] = new[] { "ReadyForPickup" },
         ["Delivered"]      = new[] { "OutForDelivery" },
     };
 
-    // PUT /api/invoices/{id}/delivery-status — avanzar el tracking (Confirmed, OutForDelivery, Delivered…).
-    // El repartidor (rol Delivery) solo puede ReadyForPickup→OutForDelivery y OutForDelivery→Delivered.
     [HttpPut("{id:int}/delivery-status")]
     [Authorize(Roles = "Admin,Manager,Delivery")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -134,8 +117,7 @@ public class InvoicesController : ControllerBase
                 if (!DriverAllowedTransitions.TryGetValue(newStatus, out var validFrom))
                     return StatusCode(StatusCodes.Status403Forbidden,
                         new { error = "El repartidor solo puede marcar 'En camino' o 'Entregado'." });
-                // El guard de estado-actual se aplica DENTRO del servicio, sobre la entidad
-                // trackeada (evita el TOCTOU de leer aquí y escribir después).
+
                 allowedCurrent = validFrom;
             }
 
@@ -147,15 +129,12 @@ public class InvoicesController : ControllerBase
         }
     }
 
-    // PUT /api/invoices/{id}/driver-location — el REPARTIDOR reporta su GPS en vivo (tracking).
-    // Se guarda en la Invoice; la vista del cliente (fase posterior) lo consume por polling/SignalR.
     [HttpPut("{id:int}/driver-location")]
     [Authorize(Roles = "Admin,Manager,Delivery")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateDriverLocation(int id, [FromBody] DriverLocationDto body)
     {
-        // Mismo gate del switch que tracking/delivery-status: con el tracking apagado por el
-        // admin, tampoco se aceptan reportes de GPS.
+
         if (!await IsTrackingEnabledAsync())
             return StatusCode(StatusCodes.Status403Forbidden,
                 new { error = "El seguimiento de órdenes está deshabilitado por el administrador." });
@@ -174,21 +153,18 @@ public class InvoicesController : ControllerBase
         }
     }
 
-    // GET /api/invoices/tracking-settings — estado del switch (para pintar el toggle del admin).
     [HttpGet("tracking-settings")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTrackingSettings()
         => Ok(new { deliveryTrackingEnabled = await IsTrackingEnabledAsync() });
 
-    // PUT /api/invoices/tracking-settings — el admin habilita/oculta el tracking (como el plano).
     [HttpPut("tracking-settings")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> SetTrackingSettings([FromBody] TrackingSettingsDto body)
     {
-        // OrderBy(Id): con 2+ restaurantes activos el GET y el PUT deben apuntar al MISMO
-        // (sin orden estable el toggle podia escribir en uno y leerse de otro).
+
         var restaurant = await _context.Restaurants.Where(r => r.IsActive).OrderBy(r => r.Id).FirstOrDefaultAsync()
                          ?? await _context.Restaurants.OrderBy(r => r.Id).FirstOrDefaultAsync();
         if (restaurant == null) return NotFound(new { error = "Restaurante no encontrado" });
@@ -199,10 +175,9 @@ public class InvoicesController : ControllerBase
         return Ok(new { deliveryTrackingEnabled = restaurant.DeliveryTrackingEnabled });
     }
 
-    /// <summary>Switch del dueño (nivel restaurante activo). Default true si no hay restaurante.</summary>
     private async Task<bool> IsTrackingEnabledAsync()
     {
-        // Mismo orden estable (Id) que SetTrackingSettings: GET y PUT ven el MISMO restaurante.
+
         var cfg = await _context.Restaurants
             .Where(r => r.IsActive)
             .OrderBy(r => r.Id)

@@ -1,11 +1,5 @@
 "use client";
 
-// DELIVERY-TRACKING (PROTOTIPO) — Panel de "Seguimiento de Delivery" multi-franquicia.
-// PRESENTACIONAL: no llama APIs; recibe datos y callbacks (el estado vive en el caller /
-// la story). Cuando se apruebe el rollout, cada app lo cablea a /api/invoices.
-// Incluye el SWITCH de permiso del admin (mismo criterio que el del plano de planta):
-// el toggle siempre visible; la lista solo cuando el tracking está habilitado.
-
 import { useMemo, useState } from "react";
 import {
   Truck, Package, PackageX, ChevronDown, ChevronUp, MapPin, Phone, Loader2, Store,
@@ -52,13 +46,13 @@ function StatusBadge({ status }: { status: DeliveryStatusKey }) {
 }
 
 export interface DeliveryTrackingPanelProps {
-  /** Switch de permiso del admin (null = cargando). */
+
   enabled: boolean | null;
   onToggleEnabled?: (next: boolean) => void;
   invoices: DeliveryInvoice[];
-  /** Avanzar el estado de entrega de una factura. */
+
   onAdvanceStatus?: (invoiceId: number, next: DeliveryStatusKey) => void;
-  /** Id de la factura cuyo cambio de estado está en vuelo (spinner). */
+
   updatingId?: number | null;
   className?: string;
 }
@@ -88,7 +82,7 @@ export function DeliveryTrackingPanel({
 
   return (
     <div className={cn("space-y-6", className)}>
-      {/* ── Encabezado ── */}
+
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Seguimiento de Delivery</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
@@ -96,7 +90,6 @@ export function DeliveryTrackingPanel({
         </p>
       </div>
 
-      {/* ── Switch de permiso (siempre visible, como el del plano) ── */}
       <div className="flex items-center justify-between gap-4 rounded-2xl border bg-card px-5 py-4 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10">
@@ -118,7 +111,6 @@ export function DeliveryTrackingPanel({
         />
       </div>
 
-      {/* ── Cuerpo ── */}
       {enabled !== true ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-muted/30 py-24 text-muted-foreground">
           <PackageX className="h-12 w-12 opacity-30" />
@@ -129,7 +121,7 @@ export function DeliveryTrackingPanel({
         </div>
       ) : (
         <>
-          {/* Filtro por estado */}
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">Filtrar por estado:</span>
             <div className="w-56">
@@ -147,7 +139,6 @@ export function DeliveryTrackingPanel({
             </div>
           </div>
 
-          {/* Lista de facturas */}
           {visible.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-muted/30 py-20 text-muted-foreground">
               <Package className="h-10 w-10 opacity-30" />
@@ -161,7 +152,7 @@ export function DeliveryTrackingPanel({
                 const busy = updatingId === inv.id;
                 return (
                   <div key={inv.id} className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                    {/* Fila principal */}
+
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -205,7 +196,6 @@ export function DeliveryTrackingPanel({
                       </div>
                     </div>
 
-                    {/* Órdenes por franquicia (expandible) */}
                     {isOpen && (
                       <div className="space-y-3 border-t bg-muted/20 px-5 py-4">
                         {inv.orders.map((o) => (
@@ -227,7 +217,7 @@ export function DeliveryTrackingPanel({
                                 </li>
                               ))}
                             </ul>
-                            {/* Verdad fiscal por franquicia (RNC propio) */}
+
                             <div className="mt-2 flex flex-wrap gap-x-4 border-t pt-2 text-[11px] text-muted-foreground">
                               <span>Subtotal {money(o.subtotal)}</span>
                               <span>ITBIS {money(o.tax)}</span>
@@ -235,7 +225,7 @@ export function DeliveryTrackingPanel({
                             </div>
                           </div>
                         ))}
-                        {/* Totales de la factura global (suma de las órdenes) */}
+
                         <div className="flex flex-wrap justify-end gap-x-6 px-1 text-xs text-muted-foreground">
                           <span>Subtotal {money(inv.subTotal)}</span>
                           <span>ITBIS {money(inv.taxITBIS)}</span>

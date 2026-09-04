@@ -7,7 +7,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 interface PinManagerModalProps {
-  /** Usuario al que se le gestiona el PIN. */
+
   user: {
     id: number;
     firstName?: string;
@@ -18,26 +18,12 @@ interface PinManagerModalProps {
     pinSetAt?: string | null;
   };
   onClose: () => void;
-  /** Callback tras éxito (cambio o remoción) para que el padre recargue. */
+
   onUpdated?: () => void;
 }
 
 const api = axios.create({ baseURL: '' });
 
-/**
- * Sprint 5.1 — Modal de gestión del PIN del waiter.
- *
- * Estados:
- *  - Si user.hasPin=false: vista "Crear PIN" con 2 inputs (pin + confirmación)
- *  - Si user.hasPin=true: muestra "PIN configurado el [fecha]" + acciones Cambiar / Remover
- *
- * Validaciones cliente:
- *  - PIN debe ser exactamente 6 dígitos numéricos
- *  - Confirmación debe coincidir
- *  - PIN no puede ser secuencial (123456, 654321) ni repetido (111111)
- *
- * Errores 409 del backend (PIN duplicado en restaurante) se muestran inline.
- */
 export function PinManagerModal({ user, onClose, onUpdated }: PinManagerModalProps) {
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -50,7 +36,7 @@ export function PinManagerModal({ user, onClose, onUpdated }: PinManagerModalPro
 
   const validatePinClient = (p: string): string | null => {
     if (!/^[0-9]{6}$/.test(p)) return 'El PIN debe ser exactamente 6 dígitos numéricos';
-    // Patrones débiles
+
     if (/^(\d)\1{5}$/.test(p)) return 'El PIN no puede ser todos los dígitos iguales (111111)';
     if (p === '123456' || p === '654321' || p === '012345' || p === '098765') {
       return 'El PIN no puede ser una secuencia obvia';
@@ -82,7 +68,7 @@ export function PinManagerModal({ user, onClose, onUpdated }: PinManagerModalPro
 
   const handleRemove = async () => {
     if (!confirm) {
-      // dummy — uso confirm() del browser para evitar shadowing
+
     }
     if (!window.confirm(`¿Remover el PIN de ${userName}?\n\nNo podrá ingresar al waiter-app vía numpad hasta que le asignes uno nuevo.`)) return;
     setLoading(true);
@@ -104,7 +90,7 @@ export function PinManagerModal({ user, onClose, onUpdated }: PinManagerModalPro
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Header */}
+
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
@@ -121,7 +107,7 @@ export function PinManagerModal({ user, onClose, onUpdated }: PinManagerModalPro
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Estado actual */}
+
           {user.hasPin ? (
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
               <p className="font-semibold text-emerald-900">PIN configurado</p>
@@ -142,7 +128,6 @@ export function PinManagerModal({ user, onClose, onUpdated }: PinManagerModalPro
             </div>
           )}
 
-          {/* Formulario crear/cambiar */}
           {(mode === 'create' || mode === 'change') && (
             <>
               <div>
@@ -199,7 +184,6 @@ export function PinManagerModal({ user, onClose, onUpdated }: PinManagerModalPro
             </>
           )}
 
-          {/* Acciones */}
           <div className="flex gap-2 pt-2">
             {user.hasPin && (
               <Button

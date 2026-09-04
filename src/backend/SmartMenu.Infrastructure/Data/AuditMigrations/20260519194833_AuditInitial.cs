@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SmartMenu.Infrastructure.Data.AuditMigrations
 {
-    /// <inheritdoc />
+
     public partial class AuditInitial : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -48,7 +48,6 @@ namespace SmartMenu.Infrastructure.Data.AuditMigrations
                 column: "UserId");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

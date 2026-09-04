@@ -27,7 +27,6 @@ export default function PaymentPage() {
   const [receipt, setReceipt] = useState<any>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Comprobante fiscal
   const [needsReceipt,    setNeedsReceipt]    = useState(false);
   const [rnc,             setRnc]             = useState('');
   const [rncBusiness,     setRncBusiness]     = useState('');
@@ -40,15 +39,11 @@ export default function PaymentPage() {
     enabled:  !!orderId,
   });
 
-  // Al abrir la página, la mesa pasa a "Por Cobrar"
   useEffect(() => {
     if (!orderId) return;
     apiClient.requestBilling(orderId).catch(() => {});
   }, [orderId]);
 
-  // Polling: revisar cada 3s si la orden ya fue completada por el mesero.
-  // S3.3 — al pasar a 'paid' cargamos el receipt y NO redirigimos automáticamente:
-  // el cliente debe ver y confirmar visualmente el comprobante antes de continuar.
   useEffect(() => {
     if (stage !== 'waiting' || !orderId) return;
     const check = async () => {
@@ -60,11 +55,11 @@ export default function PaymentPage() {
           try {
             const r = await apiClient.getReceiptByOrder(orderId);
             setReceipt(r.data);
-          } catch { /* si falla, mostramos receipt mínimo basado en order */ }
+          } catch {  }
           setStage('paid');
           localStorage.removeItem('current_order_id');
         }
-      } catch { /* ignorar errores de red */ }
+      } catch {  }
     };
     pollRef.current = setInterval(check, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
@@ -82,7 +77,6 @@ export default function PaymentPage() {
   };
   const totalWithTip = () => orderTotal + activeTipAmount();
 
-  // Validar RNC contra la DGII
   const validateRnc = async () => {
     const cleaned = rnc.replace(/-/g, '').trim();
     if (cleaned.length < 9) { setRncError('El RNC debe tener al menos 9 dígitos'); return; }
@@ -105,7 +99,6 @@ export default function PaymentPage() {
   const handleRequestBill = async () => {
     if (!order || orderTotal <= 0) return;
 
-    // Validar: si pide comprobante, el RNC debe estar validado
     if (needsReceipt && !rncBusiness) {
       toast.error('Valida el RNC antes de continuar');
       return;
@@ -137,7 +130,6 @@ export default function PaymentPage() {
     }
   };
 
-  /* ── cargando ── */
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center">
@@ -159,7 +151,6 @@ export default function PaymentPage() {
     );
   }
 
-  /* ── pago confirmado: receipt completo ── */
   if (stage === 'paid') {
     const r = receipt;
     const orderNum = r?.orderNumber ?? (order as any).orderNumber ?? (order as any).OrderNumber;
@@ -226,7 +217,6 @@ export default function PaymentPage() {
     );
   }
 
-  /* ── esperando al mesero ── */
   if (stage === 'waiting') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
@@ -273,18 +263,15 @@ export default function PaymentPage() {
     );
   }
 
-  /* ── pantalla principal ── */
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
 
-        {/* Header */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">Solicitar Cuenta</h1>
           <p className="text-gray-600 text-center">Pedido #{(String((order as any).orderNumber ?? (order as any).OrderNumber ?? '')).split('-').pop()?.toUpperCase()}</p>
         </div>
 
-        {/* Resumen */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Resumen</h2>
           <div className="space-y-3 mb-6">
@@ -308,7 +295,6 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* Propina */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">¿Deseas dejar propina?</h2>
           <div className="grid grid-cols-4 gap-3 mb-4">
@@ -336,7 +322,6 @@ export default function PaymentPage() {
           )}
         </div>
 
-        {/* Método de pago */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-2">Método de Pago</h2>
           <p className="text-sm text-gray-500 mb-4">El mesero realizará el cobro según el método que elijas</p>
@@ -356,7 +341,6 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* Comprobante fiscal */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -431,7 +415,6 @@ export default function PaymentPage() {
           )}
         </div>
 
-        {/* Acciones */}
         <div className="flex gap-4">
           <button onClick={() => router.back()}
             className="flex-1 px-6 py-4 bg-white text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors shadow-lg">

@@ -25,11 +25,6 @@ public class TableController : ControllerBase
         _broadcaster = broadcaster;
     }
 
-    /// <summary>
-    /// Obtener todas las mesas. AllowAnonymous porque el customer-app las usa
-    /// para mostrar el listado de QR codes (no devuelve PII — solo número,
-    /// zona, capacidad, status, qrCode).
-    /// </summary>
     [HttpGet]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -37,11 +32,7 @@ public class TableController : ControllerBase
     {
         try
         {
-            // Capacidad dinámica por intervalo: una mesa está Reserved solo si tiene una reserva
-            // ACTIVA asignada cuya VENTANA DE BLOQUEO ya empezó (ReservationDateTime - AdvanceBlockMinutes
-            // <= ahora < EndDateTime) — ya NO se bloquea el día completo. AdvanceBlockMinutes es POR reserva
-            // (default 60); se filtra en memoria porque EF Core no traduce AddMinutes(-columna).
-            // Hora local del restaurante (las reservas se guardan naive-local).
+
             var nowLocal = RestaurantClock.Now;
             var reservedTableIds = (await _context.TableReservations
                 .Where(r => ReservationMath.ActiveStatuses.Contains(r.Status)
@@ -54,9 +45,6 @@ public class TableController : ControllerBase
                 .Distinct()
                 .ToList();
 
-            // S2.2 (QA-fix) — read-only: un GET NO debe escribir Status. Se calcula el estado
-            // EFECTIVO en memoria (Reserved↔Available según la ventana de reserva), igual que
-            // FloorPlanController; la persistencia de Reserved la maneja el flujo de reservas.
             var tables = await _context.Tables
                 .AsNoTracking()
                 .Include(t => t.Zone)
@@ -84,9 +72,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener mesa por ID
-    /// </summary>
     [HttpGet("{id}")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -122,9 +107,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener mesa por código QR
-    /// </summary>
     [HttpGet("qr/{qrCode}")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -160,9 +142,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Crear mesa (genera QR automáticamente)
-    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status201Created)]
@@ -193,7 +172,6 @@ public class TableController : ControllerBase
 
             _logger.LogInformation("Table {TableId} created with QR {QR}", table.Id, table.QRCode);
 
-            // Difunde el estado efectivo de la nueva mesa (a prueba de fallos, vía el broadcaster único).
             await _broadcaster.BroadcastAsync(table.Id);
 
             return Created($"/api/table/{table.Id}", new
@@ -215,9 +193,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Editar mesa
-    /// </summary>
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -265,9 +240,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Eliminar mesa
-    /// </summary>
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -297,9 +269,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Regenerar QR de una mesa
-    /// </summary>
     [HttpPut("{id}/regenerate-qr")]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -324,9 +293,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Actualizar estado de mesa
-    /// </summary>
     [HttpPut("{id}/status")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -339,13 +305,11 @@ public class TableController : ControllerBase
             if (table == null)
                 return NotFound(new { message = "Mesa no encontrada" });
 
-            // Parsear y validar estado
             if (!Enum.TryParse<TableStatus>(dto.NewStatus, true, out var newStatus))
                 return BadRequest(new { error = "Estado inválido" });
 
             table.Status = newStatus;
 
-            // Al liberar mesa (Available), cerrar sesión activa si existe
             if (newStatus == TableStatus.Available)
             {
                 var activeSession = await _context.TableSessions
@@ -361,7 +325,6 @@ public class TableController : ControllerBase
 
             _logger.LogInformation("Table {TableId} status updated to {Status}", id, dto.NewStatus);
 
-            // Difunde el estado efectivo de la mesa (a prueba de fallos, vía el broadcaster único).
             await _broadcaster.BroadcastAsync(id);
 
             return Ok(new
@@ -378,9 +341,6 @@ public class TableController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener URL del menú para la mesa (para generar QR y pegar en mesa). El cliente escanea y va al menú con tableId asignado.
-    /// </summary>
     [HttpGet("{id}/menu-url")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTableMenuUrl(int id, [FromQuery] string? baseUrl)
@@ -393,9 +353,6 @@ public class TableController : ControllerBase
         return Ok(new { tableId = table.Id, tableNumber = table.TableNumber, menuPath = path, fullUrl = url });
     }
 
-    /// <summary>
-    /// Obtener mesas por zona
-    /// </summary>
     [HttpGet("zone/{zoneId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTablesByZone(int zoneId)
@@ -426,9 +383,6 @@ public class TableController : ControllerBase
     }
 }
 
-/// <summary>
-/// DTO para actualizar estado de mesa
-/// </summary>
 public class UpdateTableStatusDto
 {
     public string NewStatus { get; set; } = string.Empty;

@@ -2,12 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface CartItem {
-  /**
-   * Identificador de LINEA del carrito (lo genera el store al agregar; quien
-   * llama addItem no lo pasa). Distingue dos lineas del mismo plato con
-   * personalizaciones distintas — p.ej. "Filete termino medio" y "Filete bien
-   * cocido con alergia a mani" NO deben fusionarse.
-   */
+
   lineId?: string;
   dishId: number;
   dishName: string;
@@ -16,7 +11,7 @@ export interface CartItem {
   modifiers?: Array<{ modifierId: number; value: string }>;
   notes?: string;
   specialInstructions?: string;
-  /** Preferencias y detalles para mostrar en resumen y enviar al pedido */
+
   customizations?: string;
   allergies?: string;
   meatCooking?: string;
@@ -24,7 +19,7 @@ export interface CartItem {
   drinkTiming?: string;
   withAlcohol?: boolean;
   liga?: string;
-  /** 0=Entrada, 1=PlatoFuerte, 2=Postre */
+
   courseTiming?: number;
 }
 
@@ -32,12 +27,11 @@ interface CartState {
   items: CartItem[];
   tableId: number | null;
   restaurantId: number | null;
-  /** Nombre del comensal (se pide al entrar al menú tras escanear QR). */
+
   customerName: string | null;
-  /** Si se está agregando a una orden existente (ej. postres), guarda el orderId. */
+
   addToOrderId: number | null;
-  /** Modo PARA LLEVAR: el pedido en curso se confirma como para llevar (marca la
-   *  comanda de cocina/bar). Lo activa el botón "Para llevar" del carrito. */
+
   takeaway: boolean;
 
   setTableId: (_tableId: number) => void;
@@ -50,7 +44,7 @@ interface CartState {
   removeItem: (_lineId: string) => void;
   updateQuantity: (_lineId: string, _quantity: number) => void;
   clearCart: () => void;
-  
+
   getSubtotal: () => number;
   getTax: () => number;
   getTip: () => number;
@@ -58,14 +52,11 @@ interface CartState {
   getItemCount: () => number;
 }
 
-// crypto.randomUUID no existe en WebViews/Safari viejos (tablets Android del piso).
 const genLineId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : `line-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-/** Dos lineas solo se fusionan si TODA la personalizacion coincide (la alergia
- *  o el termino de un comensal no pueden pisarse con los de otro). */
 const sameLine = (a: CartItem, b: CartItem) =>
   a.dishId === b.dishId &&
   a.notes === b.notes &&
@@ -134,12 +125,12 @@ export const useCartStore = create<CartState>()(
 
       getTax: () => {
         const subtotal = get().getSubtotal();
-        return subtotal * 0.18; // 18% ITBIS
+        return subtotal * 0.18;
       },
 
       getTip: () => {
         const subtotal = get().getSubtotal();
-        return subtotal * 0.10; // 10% propina legal
+        return subtotal * 0.10;
       },
 
       getTotal: () => {
@@ -154,9 +145,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'smartmenu-cart',
-      // v1: los items ganan lineId. Carritos persistidos antes de esta version
-      // no lo traen — se les genera al rehidratar para que removeItem/updateQuantity
-      // (keyeados por lineId) sigan funcionando.
+
       version: 1,
       migrate: (persisted: unknown) => {
         const state = persisted as { items?: CartItem[] } | undefined;

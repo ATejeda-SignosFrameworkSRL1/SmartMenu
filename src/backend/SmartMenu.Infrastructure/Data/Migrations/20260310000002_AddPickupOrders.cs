@@ -12,7 +12,7 @@ namespace SmartMenu.Infrastructure.Data.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Make TableId nullable (para órdenes de mostrador sin mesa)
+
             migrationBuilder.AlterColumn<int>(
                 name: "TableId",
                 table: "Orders",
@@ -21,7 +21,6 @@ namespace SmartMenu.Infrastructure.Data.Migrations
                 oldClrType: typeof(int),
                 oldType: "int");
 
-            // Add IsPickup flag
             migrationBuilder.AddColumn<bool>(
                 name: "IsPickup",
                 table: "Orders",

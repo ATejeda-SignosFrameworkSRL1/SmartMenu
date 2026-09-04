@@ -54,7 +54,7 @@
     "noConnection": "No connection"
   },
   "nav": {
-    "generalTables": "All Tables ({count})",
+    "generalTables": "All Tables",
     "myTables": "My Tables ({count})",
     "floorPlan": "Floor Plan",
     "createVirtualTable": "Create virtual table",

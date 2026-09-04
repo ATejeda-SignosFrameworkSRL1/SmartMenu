@@ -9,10 +9,8 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import DeliveryMap from '@/components/DeliveryMap';
 import { dateLocale } from '@/i18n/config';
 
-// Auth centralizado — mismo factory genérico que el resto de las staff apps.
 const { api, logout } = createAuthApi('delivery');
 
-// ── Contrato backend (GET /api/invoices/tracking) ──────────────────────────
 interface InvoiceOrderItem {
   dishName: string;
   quantity: number;
@@ -46,18 +44,16 @@ interface Invoice {
   deliveryStatus: DeliveryStatus;
   createdAt: string;
   orders: InvoiceOrder[];
-  // Campos geo (nullable) del contrato /api/invoices/tracking.
-  restaurantLat?: number | null; // PUNTO A
+
+  restaurantLat?: number | null;
   restaurantLng?: number | null;
-  driverLat?: number | null; // última posición reportada del repartidor
+  driverLat?: number | null;
   driverLng?: number | null;
   driverLocationAt?: string | null;
 }
 
 const PREP_STATUSES: DeliveryStatus[] = ['Pending', 'Confirmed', 'Preparing'];
 
-// Estados con traducción en messages/*.json (delivery.status.*). Cualquier otro
-// valor del backend se muestra tal cual en vez de renderizar la key cruda.
 const KNOWN_STATUSES = new Set<string>([
   'Pending', 'Confirmed', 'Preparing', 'ReadyForPickup', 'OutForDelivery', 'Delivered', 'Cancelled',
 ]);
@@ -66,9 +62,7 @@ export default function DeliveryPage() {
   const t = useTranslations('delivery');
   const locale = useLocale();
   const [user, setUser] = useState<SessionUser | null>(null);
-  // Guard de secuencia: loadInvoices se dispara concurrente (poll 10s +
-  // acciones manuales); solo la llamada MÁS RECIENTE puede pintar, para que una
-  // respuesta lenta/vieja no pise datos frescos. mountedRef evita setState tras unmount.
+
   const seqRef = useRef(0);
   const mountedRef = useRef(true);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -77,17 +71,15 @@ export default function DeliveryPage() {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [showPrep, setShowPrep] = useState(false);
-  // Mapa: un solo pedido con el mapa abierto a la vez (mantiene el watch de GPS
-  // sin ambigüedad y es el foco natural del repartidor).
+
   const [mapOpenId, setMapOpenId] = useState<number | null>(null);
   const [livePosition, setLivePosition] = useState<{ lat: number; lng: number } | null>(null);
   const [geoDenied, setGeoDenied] = useState(false);
-  // Throttle del reporte de GPS al backend: máx ~1 request / 5s.
+
   const lastReportRef = useRef(0);
 
   const loadInvoices = useCallback(async () => {
-    // Captura el número de secuencia de ESTA llamada; si al volver la respuesta
-    // ya entró otra más reciente, se descarta (evita pintar datos viejos sobre frescos).
+
     const seq = ++seqRef.current;
     const isStale = () => seq !== seqRef.current || !mountedRef.current;
     try {
@@ -96,27 +88,24 @@ export default function DeliveryPage() {
       if (isStale()) return;
       if (!Array.isArray(data)) return;
       setTrackingDisabled(false);
-      // Solo pedidos a domicilio — Pickup lo maneja el cajero/host.
+
       setInvoices((data as Invoice[]).filter((inv) => inv.fulfillmentType === 'Delivery'));
     } catch (error: unknown) {
       if (isStale()) return;
       const resp = (error as { response?: { status?: number; data?: { error?: string } } })?.response;
-      // Distinguir los DOS 403: el del switch apagado trae body { error: "...deshabilitado..." };
-      // el 403 de ROL del [Authorize] (p.ej. token stale de otro rol) viene sin ese texto y
-      // NO debe pintarse como "tracking deshabilitado" (UX engañosa).
+
       if (resp?.status === 403 && /deshabilitad/i.test(resp?.data?.error ?? '')) {
         setTrackingDisabled(true);
         setInvoices([]);
         return;
       }
       console.error('Error loading deliveries:', error);
-      // Fallo transitorio (red/timeout/backend reiniciando) u otro 403: CONSERVAR el
-      // tablero actual — el próximo poll (10s) reconcilia.
+
     }
   }, []);
 
   useEffect(() => {
-    mountedRef.current = true; // re-armar en re-mount (StrictMode dev ejecuta cleanup+effect dos veces)
+    mountedRef.current = true;
     const userData = localStorage.getItem('delivery_user');
     const token = localStorage.getItem('delivery_token');
 
@@ -132,31 +121,25 @@ export default function DeliveryPage() {
       return;
     }
 
-    // Esperar la primera carga antes de quitar el loading — evita el flash del empty state.
     loadInvoices().finally(() => {
       if (mountedRef.current) setLoading(false);
     });
 
     const interval = setInterval(loadInvoices, 10000);
     return () => {
-      mountedRef.current = false; // invalida respuestas en vuelo
+      mountedRef.current = false;
       clearInterval(interval);
     };
   }, [loadInvoices]);
 
-  // Solo reportamos GPS cuando el pedido con el mapa abierto está EN CAMINO
-  // (OutForDelivery). Derivado (no estado) para que el poll de 10s no reinicie
-  // el watch: el effect solo se re-ejecuta si CAMBIA este id.
   const openInvoice = mapOpenId != null ? invoices.find((i) => i.id === mapOpenId) : undefined;
   const trackingInvoiceId =
     openInvoice && openInvoice.deliveryStatus === 'OutForDelivery' ? openInvoice.id : null;
 
-  // GPS en vivo del repartidor -> marcador + PUT throttled al backend.
   useEffect(() => {
     if (trackingInvoiceId == null) return;
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
-    // Reset por cada pedido rastreado: primer fix reporta de inmediato.
     setLivePosition(null);
     setGeoDenied(false);
     lastReportRef.current = 0;
@@ -165,11 +148,11 @@ export default function DeliveryPage() {
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        setLivePosition({ lat, lng }); // (a) mueve el marcador en cada update
+        setLivePosition({ lat, lng });
         const now = Date.now();
         if (now - lastReportRef.current >= 5000) {
           lastReportRef.current = now;
-          // (b) reporta al backend (rol Delivery). Silencioso: el próximo fix reintenta.
+
           api
             .put(`/api/invoices/${trackingInvoiceId}/driver-location`, { lat, lng })
             .catch(() => {});
@@ -183,8 +166,7 @@ export default function DeliveryPage() {
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
-      // Sin tracking activo no hay posición "en vivo": evita que el mapa de OTRO pedido
-      // muestre el 🛵 congelado en la última posición del pedido anterior (dato stale).
+
       setLivePosition(null);
     };
   }, [trackingInvoiceId]);
@@ -204,7 +186,7 @@ export default function DeliveryPage() {
   };
 
   const formatTime = (createdAt: string) => {
-    // Asegurar que se interprete como UTC (el servidor devuelve sin 'Z')
+
     const utcStr = createdAt && !createdAt.endsWith('Z') ? createdAt + 'Z' : createdAt;
     return new Date(utcStr).toLocaleTimeString(dateLocale(locale), {
       hour: '2-digit',
@@ -237,7 +219,7 @@ export default function DeliveryPage() {
 
     return (
       <div key={inv.id} className={`delivery-card ${borderClass} overflow-hidden`}>
-        {/* Header: nº pedido + hora */}
+
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
           <p className="text-xl font-bold text-white">{t('orderNumber', { id: inv.id })}</p>
           <div className="flex items-center gap-1.5 text-gray-300">
@@ -246,7 +228,6 @@ export default function DeliveryPage() {
           </div>
         </div>
 
-        {/* Cliente + teléfono */}
         <div className="px-4 pt-2 space-y-1.5">
           <p className="text-lg text-white">👤 {inv.customerName || '—'}</p>
           {inv.customerPhone ? (
@@ -260,7 +241,6 @@ export default function DeliveryPage() {
           ) : null}
         </div>
 
-        {/* DIRECCIÓN — lo más importante para el repartidor */}
         <div className="mx-4 mt-3 rounded-lg bg-primary-900/40 border border-primary-600 p-3 flex items-start gap-2">
           <MapPin className="w-5 h-5 text-primary-300 flex-shrink-0 mt-0.5" aria-hidden />
           <div>
@@ -269,7 +249,6 @@ export default function DeliveryPage() {
           </div>
         </div>
 
-        {/* Notas */}
         {inv.notes ? (
           <div className="mx-4 mt-2 rounded-lg bg-amber-900/30 border border-amber-600/50 p-2.5 flex items-start gap-2 text-sm">
             <StickyNote className="w-4 h-4 text-amber-300 flex-shrink-0 mt-0.5" aria-hidden />
@@ -277,7 +256,6 @@ export default function DeliveryPage() {
           </div>
         ) : null}
 
-        {/* Total + toggle de artículos */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 mt-3">
           <p className="text-lg font-bold text-emerald-400">{formatTotal(inv.total)}</p>
           <button
@@ -290,7 +268,6 @@ export default function DeliveryPage() {
           </button>
         </div>
 
-        {/* Items expandibles */}
         {isExpanded && (
           <div className="mx-4 mt-2 space-y-2">
             {(inv.orders || []).map((order, oIdx) => (
@@ -310,7 +287,6 @@ export default function DeliveryPage() {
           </div>
         )}
 
-        {/* Mapa de seguimiento (solo pedidos listos / en camino) */}
         {(variant === 'ready' || variant === 'enroute') && (
           <div className="mx-4 mt-3">
             <button
@@ -334,7 +310,6 @@ export default function DeliveryPage() {
           </div>
         )}
 
-        {/* Acción según estado */}
         <div className="p-4 mt-2 border-t border-slate-700 bg-slate-900/50">
           {variant === 'ready' && (
             <button
@@ -376,7 +351,6 @@ export default function DeliveryPage() {
     <div className="min-h-screen bg-slate-900 text-white">
       <Toaster position="top-right" />
 
-      {/* Header */}
       <div className="border-b border-slate-800 bg-slate-950">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-wrap justify-between items-center gap-3">
@@ -412,7 +386,7 @@ export default function DeliveryPage() {
           </div>
         ) : (
           <>
-            {/* Sección: Listos para recoger */}
+
             <section>
               <h2 className="text-xl font-bold mb-4 text-amber-400">
                 {t('readySection')}{' '}
@@ -429,7 +403,6 @@ export default function DeliveryPage() {
               )}
             </section>
 
-            {/* Sección: En camino */}
             <section>
               <h2 className="text-xl font-bold mb-4 text-primary-400">
                 {t('enRouteSection')}{' '}
@@ -446,7 +419,6 @@ export default function DeliveryPage() {
               )}
             </section>
 
-            {/* Empty state global */}
             {activeCount === 0 && inPrep.length === 0 && (
               <div className="text-center py-10">
                 <PackageCheck className="w-16 h-16 text-emerald-500 mx-auto mb-4" aria-hidden />
@@ -454,7 +426,6 @@ export default function DeliveryPage() {
               </div>
             )}
 
-            {/* Sección opcional (colapsada): En preparación — solo lectura */}
             {inPrep.length > 0 && (
               <section>
                 <button

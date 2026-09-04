@@ -1,9 +1,5 @@
 'use client';
 
-// Next.js 14 file-based Error Boundary. Captura runtime errors dentro del
-// segmento (excepto en el RootLayout — para eso está global-error.tsx).
-// Esto reemplaza el comportamiento por defecto "blank screen on throw".
-
 import { useEffect } from 'react';
 import { captureException } from '@/lib/sentry';
 

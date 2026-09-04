@@ -6,8 +6,7 @@ public class Menu : BaseEntity
     public string? Description { get; set; }
     public int RestaurantId { get; set; }
     public bool IsActive { get; set; } = true;
-    
-    // Navigation properties
+
     public Restaurant Restaurant { get; set; } = null!;
     public ICollection<Category> Categories { get; set; } = new List<Category>();
 }

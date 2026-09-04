@@ -24,9 +24,6 @@ public class OrderController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly SmartMenu.Application.Services.IAuditService _audit;
 
-    // Serializa la creación/agregación de órdenes POR MESA: varios comensales del mismo QR
-    // que ordenan casi a la vez no deben crear dos órdenes. Hay una sola instancia de backend,
-    // así que un lock en proceso por tableId basta.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim> _tableOrderLocks = new();
 
     public OrderController(IOrderService orderService, ILogger<OrderController> logger, IHubContext<KitchenHub> kitchenHub, IHubContext<OrderHub> orderHub, ApplicationDbContext context, SmartMenu.Application.Services.IAuditService audit)
@@ -39,7 +36,6 @@ public class OrderController : ControllerBase
         _audit = audit;
     }
 
-    // Sprint 4.2 — helper para extraer datos del JWT en endpoints autenticados
     private (int userId, string authMethod) GetActorFromJwt()
     {
         var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -82,25 +78,15 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Crear orden. Cliente final (QR + sessionId, sin JWT) o staff autenticado.
-    /// PEDIDO COMPARTIDO POR MESA: varios comensales del MISMO QR (misma mesa) comparten UNA
-    /// sola orden. Si la mesa ya tiene una orden viva, los ítems se agregan a ella (cada uno
-    /// sellado con el nombre del comensal) para que a cocina/bar/mesero les llegue como una
-    /// sola comanda; si no, se crea una nueva. Se serializa por mesa para que dos escaneos
-    /// casi simultáneos no creen dos órdenes. Pedidos sin mesa (POS/para llevar) crean siempre.
-    /// </summary>
     [HttpPost]
     [AllowAnonymous]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status201Created)]
     public async Task<ActionResult<OrderDto>> CreateOrder([FromBody] CreateOrderDto request)
     {
-        // Sin mesa (mostrador/para llevar): no aplica agregación por mesa.
+
         if (!request.TableId.HasValue)
             return await CreateFreshOrderAsync(request);
 
-        // PARA LLEVAR desde la mesa: orden SEPARADA — NO se fusiona con la orden viva de la
-        // mesa, así su comanda trae solo lo de llevar y tiene su propia cuenta.
         if (request.IsTakeaway)
             return await CreateFreshOrderAsync(request);
 
@@ -119,15 +105,12 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>Crea una orden nueva (no existe orden viva en la mesa, o es pedido sin mesa).</summary>
     private async Task<ActionResult<OrderDto>> CreateFreshOrderAsync(CreateOrderDto request)
     {
         try
         {
             var order = await _orderService.CreateOrderAsync(request);
-            // No notificar a cocina al crear: la orden va al KDS solo cuando el mesero la confirme (UpdateStatus → Confirmed).
 
-            // Sprint 4.2 — audit log (fail-safe, no aborta si falla)
             var (userId, authMethod) = GetActorFromJwt();
             await _audit.LogAsync(
                 userId: userId,
@@ -161,11 +144,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Agrega los ítems de un comensal a la orden viva de su mesa (mismo QR = misma comanda).
-    /// Cada ítem queda sellado con el nombre del comensal. Avisa al mesero siempre; a cocina
-    /// solo si la orden ya estaba en el KDS (confirmada), para no adelantarla antes de tiempo.
-    /// </summary>
     private async Task<ActionResult<OrderDto>> AppendToTableOrderAsync(int orderId, CreateOrderDto request)
     {
         try
@@ -173,7 +151,6 @@ public class OrderController : ControllerBase
             var order = await _orderService.AddItemsToOrderAsync(orderId, request.Items, request.CustomerName);
             var who = string.IsNullOrWhiteSpace(request.CustomerName) ? "Un comensal" : request.CustomerName!.Trim();
 
-            // Mesero: la mesa sumó ítems a la comanda compartida.
             await NotifyWaiterAsync(order, "ItemsAddedToOrder", new
             {
                 orderId      = order.Id,
@@ -185,8 +162,6 @@ public class OrderController : ControllerBase
                 timestamp    = DateTime.UtcNow
             });
 
-            // Cocina/KDS: solo si la orden ya está en el KDS (no Pendiente). Si sigue Pendiente,
-            // la comanda completa entrará cuando el mesero la confirme (igual que al crear).
             if (!string.Equals(order.Status, "Pending", StringComparison.OrdinalIgnoreCase))
             {
                 var newItemsPayload = request.Items.Select(i => new
@@ -235,7 +210,7 @@ public class OrderController : ControllerBase
         }
         catch (KeyNotFoundException)
         {
-            // La orden viva desapareció entre el lookup y el append (raro): crear una nueva.
+
             return await CreateFreshOrderAsync(request);
         }
         catch (ArgumentException ex)
@@ -249,11 +224,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener orden por ID. Anónimo permitido para que el cliente final tracking
-    /// el status de su orden tras escanear QR (no tiene JWT). IDOR para waiters
-    /// sigue aplicando vía CanAccessOrder.
-    /// </summary>
     [HttpGet("{id}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
@@ -269,12 +239,10 @@ public class OrderController : ControllerBase
         return Ok(order);
     }
 
-    // IDOR guard: waiters can only access their own assigned orders (or unassigned).
-    // Admin/Manager/Cashier/Chef/Bartender/Host see all orders by role function.
     private bool CanAccessOrder(OrderDto order)
     {
         var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-        if (role != "Waiter") return true; // other staff have legit reasons to see any order
+        if (role != "Waiter") return true;
 
         var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!int.TryParse(sub, out var userId)) return false;
@@ -282,11 +250,6 @@ public class OrderController : ControllerBase
         return order.AssignedWaiterId == null || order.AssignedWaiterId == userId;
     }
 
-    /// <summary>
-    /// Obtener todas las órdenes (admin). Soporta paginación opt-in: si se pasa
-    /// <c>?page=N</c> devuelve PagedResult; sin paginación devuelve lista
-    /// completa (legacy, no romper consumidores existentes).
-    /// </summary>
     [HttpGet("all")]
     [ProducesResponseType(typeof(List<OrderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PagedResult<OrderDto>), StatusCodes.Status200OK)]
@@ -303,9 +266,6 @@ public class OrderController : ControllerBase
         return Ok(paged);
     }
 
-    /// <summary>
-    /// Obtener órdenes activas. Paginación opt-in con ?page=N&pageSize=M.
-    /// </summary>
     [HttpGet("active")]
     [ProducesResponseType(typeof(List<OrderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PagedResult<OrderDto>), StatusCodes.Status200OK)]
@@ -321,13 +281,6 @@ public class OrderController : ControllerBase
         return Ok(paged);
     }
 
-    /// <summary>
-    /// Actualizar estado de orden
-    /// </summary>
-    /// <summary>
-    /// Cancelar orden (cliente o staff). Solo permitido en estados Pending o Confirmed.
-    /// Cliente anónimo (QR) puede cancelar su propia orden; staff con JWT, según rol.
-    /// </summary>
     [HttpPost("{id}/cancel")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -370,8 +323,6 @@ public class OrderController : ControllerBase
             if (!CanAccessOrder(current))
                 return Forbid();
 
-            // S4.5 — Admin/Manager pueden hacer override de transiciones inválidas.
-            // P0.2 — Para Completed sin pago, además se exige OverrideReason auditado.
             var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
             var isAdmin = role == "Admin" || role == "Manager";
 
@@ -395,9 +346,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cocina marca "Preparando". El cliente verá Preparando solo cuando cocina y bar estén en preparando (si aplica).
-    /// </summary>
     [HttpPut("{id}/kitchen-preparing")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
     [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
@@ -412,9 +360,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error kitchen preparing"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// Cocina marca "Listo". El cliente verá Listo solo cuando cocina y bar estén listos (si aplica).
-    /// </summary>
     [HttpPut("{id}/kitchen-ready")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
     [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
@@ -438,9 +383,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error kitchen ready"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// Bar marca "Preparando". El cliente verá Preparando solo cuando cocina y bar estén en preparando (si aplica).
-    /// </summary>
     [HttpPut("{id}/bar-preparing")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
     [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
@@ -455,9 +397,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error bar preparing"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// Bar marca "Listo". El cliente verá Listo solo cuando cocina y bar estén listos (si aplica).
-    /// </summary>
     [HttpPut("{id}/bar-ready")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
     [Authorize(Roles = "Admin,Manager,Waiter,Chef,KitchenStaff,Bartender")]
@@ -481,9 +420,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error bar ready"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// Mesero sirvió los platos de cocina (independiente del bar)
-    /// </summary>
     [HttpPut("{id}/kitchen-served")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> SetKitchenServed(int id)
@@ -497,9 +433,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error kitchen served"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// Mesero sirvió las bebidas del bar (independiente de la cocina)
-    /// </summary>
     [HttpPut("{id}/bar-served")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> SetBarServed(int id)
@@ -513,12 +446,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error bar served"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// DESPACHO del KDS para pedidos SIN mesa (portal Pickup/Delivery, mostrador): NO hay
-    /// mesero, así que el propio chef/bartender marca su parte como despachada (= servida) para
-    /// sacarla del tablero tras colocarla en la zona de recogida. Guard: solo IsPickup (los
-    /// pedidos de mesa DineIn siguen siendo servidos por el mesero vía kitchen-served/bar-served).
-    /// </summary>
     [HttpPut("{id}/kitchen-dispatch")]
     [Authorize(Roles = "Admin,Manager,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> KitchenDispatch(int id)
@@ -536,7 +463,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error kitchen dispatch"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>Despacho del bar para pedidos SIN mesa (ver KitchenDispatch).</summary>
     [HttpPut("{id}/bar-dispatch")]
     [Authorize(Roles = "Admin,Manager,Chef,KitchenStaff,Bartender")]
     public async Task<IActionResult> BarDispatch(int id)
@@ -554,9 +480,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { _logger.LogError(ex, "Error bar dispatch"); return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// Cliente marca que terminó de comer. Anónimo: lo dispara el customer-app desde su QR.
-    /// </summary>
     [HttpPut("{id}/customer-finished")]
     [AllowAnonymous]
     public async Task<IActionResult> MarkCustomerFinished(int id)
@@ -585,9 +508,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Asignar mesero a orden
-    /// </summary>
     [HttpPut("{id}/assign-waiter/{waiterId}")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> AssignWaiterToOrder(int id, int waiterId)
@@ -607,9 +527,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Mesero abandona una mesa (desasigna la orden)
-    /// </summary>
     [HttpPut("{id}/unassign-waiter")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> UnassignWaiterFromOrder(int id)
@@ -623,9 +540,6 @@ public class OrderController : ControllerBase
         catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    /// <summary>
-    /// Obtener órdenes no asignadas (para vista "Mesas General")
-    /// </summary>
     [HttpGet("unassigned")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetUnassignedOrders([FromQuery] int? page, [FromQuery] int pageSize = 50)
@@ -643,9 +557,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener órdenes por mesero (para vista "Mis Mesas")
-    /// </summary>
     [HttpGet("my-orders/{waiterId}")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> GetWaiterOrders(int waiterId, [FromQuery] int? page, [FromQuery] int pageSize = 50)
@@ -663,10 +574,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cliente agrega más ítems a una orden existente (ej. postres). Anónimo: lo dispara
-    /// el customer-app desde su QR, vinculado a la orden vía orderId+sessionId.
-    /// </summary>
     [HttpPost("{id}/add-items")]
     [AllowAnonymous]
     public async Task<IActionResult> AddItemsToOrder(int id, [FromBody] List<CreateOrderItemDto> items)
@@ -675,7 +582,6 @@ public class OrderController : ControllerBase
         {
             var order = await _orderService.AddItemsToOrderAsync(id, items);
 
-            // Notificar al mesero
             await NotifyWaiterAsync(order, "ItemsAddedToOrder", new
             {
                 orderId     = order.Id,
@@ -686,8 +592,6 @@ public class OrderController : ControllerBase
                 timestamp   = DateTime.UtcNow
             });
 
-            // Notificar a cocina/KDS con SOLO los nuevos ítems para que no
-            // reprocese los que ya fueron preparados anteriormente.
             var newItemsPayload = items.Select(i => new
             {
                 dishId   = i.DishId,
@@ -723,23 +627,17 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// POS del cajero: crear orden de mostrador (para llevar) y cobrar en un solo paso.
-    /// No requiere mesa. El cajero cobra, la orden va a cocina, el cliente espera en mostrador.
-    /// </summary>
     [HttpPost("pos")]
     [Authorize(Roles = "Admin,Manager,Cashier")]
     public async Task<IActionResult> CreatePosOrder([FromBody] CreatePosOrderDto dto)
     {
         try
         {
-            // IDOR: el cajero que procesa el cobro se toma del JWT. Admin/Manager pueden
-            // atribuirlo a otro vía dto.CashierId; un cajero normal siempre es él mismo.
+
             var (posActorId, _) = GetActorFromJwt();
             if (!(User.IsInRole("Admin") || User.IsInRole("Manager")))
                 dto.CashierId = posActorId;
 
-            // 1. Crear la orden (sin mesa, IsPickup = true)
             var createDto = new CreateOrderDto
             {
                 TableId = null,
@@ -750,17 +648,14 @@ public class OrderController : ControllerBase
             };
             var order = await _orderService.CreateOrderAsync(createDto);
 
-            // 2. Obtener la entidad de la BD para manipularla
             var orderEntity = await _context.Orders
                 .Include(o => o.Items)
                 .ThenInclude(i => i.Dish)
                 .FirstAsync(o => o.Id == order.Id);
 
-            // 3. Confirmar la orden → va a cocina/bar
             orderEntity.Status = SmartMenu.Domain.Enums.OrderStatus.Confirmed;
             orderEntity.UpdatedAt = DateTime.UtcNow;
 
-            // 4. Registrar el pago inmediatamente (el cliente paga en mostrador)
             decimal baseAmount = dto.Amount > 0 ? dto.Amount : orderEntity.Total;
             decimal tipAmt = dto.TipAmount;
 
@@ -810,7 +705,6 @@ public class OrderController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            // 5. Notificar a cocina
             try
             {
                 var items = orderEntity.Items.Select(i => new { i.Id, dishName = i.Dish?.Name ?? "Plato", i.Quantity, i.Notes }).ToList<object>();
@@ -829,7 +723,6 @@ public class OrderController : ControllerBase
                 _logger.LogWarning(ex, "No se pudo notificar a cocina para orden POS {OrderId}", orderEntity.Id);
             }
 
-            // S5.1 — push a cashier-app (caja del día) sin polling.
             try
             {
                 await _orderHub.Clients.All.SendAsync("PaymentRegistered", new
@@ -869,11 +762,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Mover comensal: cambiar la orden de mesa (de una mesa a otra disponible).
-    /// CHANGE-TABLE.1 — Permisos: waiter dueño de la orden, O Manager/Admin override.
-    /// Cross-zone permitido (cliente puede pedir cambio a otra zona).
-    /// </summary>
     [HttpPut("{orderId}/move-to-table/{newTableId}")]
     [Authorize(Roles = "Admin,Manager,Waiter")]
     public async Task<IActionResult> MoveOrderToTable(int orderId, int newTableId)
@@ -884,10 +772,6 @@ public class OrderController : ControllerBase
             if (order == null)
                 return NotFound(new { error = "Orden no encontrada" });
 
-            // CHANGE-TABLE.1 — autorización fina:
-            //   Waiter: solo puede mover SU propia orden (o sin asignar)
-            //   Manager/Admin: puede mover cualquier orden
-            //   Otros roles: prohibido
             var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
             if (role != "Admin" && role != "Manager")
             {
@@ -901,7 +785,6 @@ public class OrderController : ControllerBase
 
             await _orderService.MoveOrderToTableAsync(orderId, newTableId);
 
-            // Sprint 4.2 — audit DGII (fail-safe)
             var (actorUserId, authMethod) = GetActorFromJwt();
             await _audit.LogAsync(
                 userId: actorUserId,
@@ -935,20 +818,19 @@ public class OrderController : ControllerBase
     }
 }
 
-/// <summary>DTO para crear una venta en el POS del cajero (mostrador/para llevar).</summary>
 public class CreatePosOrderDto
 {
     public string? CustomerName { get; set; }
     public string? SpecialInstructions { get; set; }
     public List<CreateOrderItemDto> Items { get; set; } = new();
-    /// <summary>ID del cajero que procesa la venta.</summary>
+
     public int CashierId { get; set; }
-    /// <summary>Método de pago: Cash | Card | Transfer | Mixed.</summary>
+
     public string? PaymentMethod { get; set; }
-    /// <summary>Monto base a cobrar (si 0, se usa el total calculado de la orden).</summary>
+
     public decimal Amount { get; set; } = 0;
     public decimal TipAmount { get; set; } = 0;
-    /// <summary>Para pago mixto: lista de subpagos.</summary>
+
     public List<PosSubPaymentDto>? SubPayments { get; set; }
     public bool RequiresFiscalReceipt { get; set; } = false;
     public string? RNC { get; set; }

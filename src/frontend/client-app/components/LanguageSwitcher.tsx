@@ -1,6 +1,5 @@
 'use client';
-// LanguageSwitcher — selector de idioma. Cambia la cookie LOCALE vía Server Action,
-// sin tocar la URL. El árbol RSC se re-renderiza en el idioma elegido.
+
 import { useLocale } from 'next-intl';
 import { useTransition } from 'react';
 import { Globe } from 'lucide-react';

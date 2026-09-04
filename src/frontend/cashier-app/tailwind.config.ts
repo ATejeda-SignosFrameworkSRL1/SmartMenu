@@ -16,7 +16,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Sistema + fallbacks CJK (zh/ja/ko); la caja no usa una fuente web propia.
+
         sans: [
           'system-ui',
           '-apple-system',

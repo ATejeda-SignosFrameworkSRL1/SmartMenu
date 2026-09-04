@@ -8,38 +8,34 @@ import { MultiZoneFloorPlanEditor } from "./multi-zone-floor-plan-editor";
 import { resolveStatusColors, resolveStatusLabels, type StatusLabels, type StatusPaletteOverride } from "./status-colors";
 import type { FloorPlanData, TableStatus } from "./types";
 
-/**
- * All hardcoded Spanish UI strings rendered by FloorPlanDashboard.
- * Every field is optional — missing fields fall back to the Spanish default.
- */
 export interface FloorPlanDashboardMessages {
-  /** Header title of the canvas column. Default: "Plano de planta" */
+
   canvasTitle: string;
-  /** Toggle button: live mode. Default: "En Vivo" */
+
   modeLive: string;
-  /** Toggle button: designer mode. Default: "Diseñador" */
+
   modeDesigner: string;
-  /** Palette editor button label. Default: "Colores" */
+
   paletteButton: string;
-  /** Palette editor reset button. Default: "Restablecer" */
+
   paletteReset: string;
-  /** Right-panel heading. Default: "Reservaciones" */
+
   reservationsTitle: string;
-  /** Summary line: `(zoneName, count, guests) => string`. */
+
   reservationsSummary: (zoneName: string, count: number, guests: number) => string;
-  /** Search input placeholder. Default: "Buscar reserva…" */
+
   searchPlaceholder: string;
-  /** New reservation button. Default: "Nueva" */
+
   newButton: string;
-  /** Empty-state heading when zone has no reservations at all. Default: "Sin reservaciones en esta zona" */
+
   emptyZoneTitle: string;
-  /** Empty-state subtext when zone has no reservations at all. Default: "Las nuevas reservas aparecerán aquí" */
+
   emptyZoneSub: string;
-  /** Empty-state heading when search has no results. Default: "Sin resultados" */
+
   emptySearchTitle: string;
-  /** Empty-state subtext when search has no results. Default: "Probá con otro nombre o mesa" */
+
   emptySearchSub: string;
-  /** Prefix label on the table chip inside a reservation card. Default: "Mesa" */
+
   tablePrefix: string;
 }
 
@@ -61,7 +57,6 @@ const DEFAULT_DASHBOARD_MESSAGES: FloorPlanDashboardMessages = {
   tablePrefix: "Mesa",
 };
 
-/** Paleta para avatares de comensales (hash por nombre). */
 const AVATAR_COLORS = ["#5B61C9", "#3F88C5", "#2F9E78", "#D89A3C", "#D8565C", "#8B79C9", "#C56B9B", "#3E9A93"];
 
 function initials(name: string): string {
@@ -75,42 +70,41 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
-/** Estados mostrados en la leyenda del lienzo, en orden. */
 const LEGEND_STATUSES: TableStatus[] = ["available", "occupied", "reserved", "billing", "cleaning", "empty"];
 
 export type ReservationStatus = "Confirmado" | "Sentado" | "Esperando";
 
 export interface Reservation {
   id: string;
-  /** Zona a la que pertenece (debe coincidir con FloorPlanZone.zoneId). */
+
   zoneId: string;
-  /** Bloque de hora, ej. "11:30 AM". */
+
   time: string;
   customerName: string;
   partySize: number;
   status: ReservationStatus;
-  /** Mesa asignada — debe coincidir con un TableData.id (ej. "S-4"). */
+
   tableId: string | number;
-  /** Teléfono de contacto (opcional). */
+
   phone?: string;
-  /** Etiquetas: VIP, Cumpleaños, Ventana, Alergia… (opcional). */
+
   tags?: string[];
 }
 
 export interface FloorPlanDashboardProps {
   data: FloorPlanData;
   reservations: Reservation[];
-  /** Cambios de layout en Modo Diseñador (drag de mesas/estructuras). */
+
   onDataChange?: (data: FloorPlanData) => void;
-  /** Alto del dashboard en px. Default 750. */
+
   height?: number;
-  /** Paleta de estados (override). */
+
   palette?: StatusPaletteOverride;
-  /** Guardar paleta editada. */
+
   onPaletteChange?: (palette: StatusPaletteOverride) => void;
-  /** Translated status labels (e.g. from next-intl). Missing keys fall back to Spanish. */
+
   statusLabels?: Partial<StatusLabels>;
-  /** Translated UI strings. Missing keys fall back to Spanish defaults. */
+
   messages?: Partial<FloorPlanDashboardMessages>;
 }
 
@@ -120,19 +114,12 @@ const STATUS_BADGE: Record<ReservationStatus, string> = {
   Esperando: "bg-amber-50 text-amber-700 ring-amber-200",
 };
 
-/** Color de la barra de acento (izquierda) de cada tarjeta, por estado. */
 const STATUS_ACCENT: Record<ReservationStatus, string> = {
   Confirmado: "#10B981",
   Sentado: "#3B82F6",
   Esperando: "#F59E0B",
 };
 
-/**
- * Maqueta del panel de administración del plano (estilo Reseasy): split 70/30.
- * Izquierda: toggle "En Vivo" (viewer) / "Diseñador" (editor) + lienzo multi-zona.
- * Derecha: reservaciones de la ZONA ACTIVA (cambian al cambiar de pestaña), agrupadas
- * por hora. Click en mesa ↔ resalta su reservación (estado `selectedTableId`).
- */
 export function FloorPlanDashboard({ data, reservations, onDataChange, height = 750, palette, onPaletteChange, statusLabels, messages }: FloorPlanDashboardProps) {
   const colors = resolveStatusColors(palette);
   const labels = resolveStatusLabels(statusLabels);
@@ -145,12 +132,11 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
 
   const handleZoneChange = (id: string) => {
     setActiveZoneId(id);
-    setSelectedTableId(null); // la mesa seleccionada no pertenece a la nueva zona
+    setSelectedTableId(null);
   };
 
   const activeZoneName = data.zones.find((z) => z.zoneId === activeZoneId)?.zoneName ?? "";
 
-  // Reservaciones de la zona activa (filtradas por búsqueda), agrupadas por hora.
   const { groups, count, guests, zoneTotal } = useMemo(() => {
     const inZone = reservations.filter((r) => r.zoneId === activeZoneId);
     const q = query.trim().toLowerCase();
@@ -176,7 +162,6 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
     };
   }, [reservations, activeZoneId, query]);
 
-  // Marca las mesas que tienen reserva (cualquier zona) para pintarles el badge de reloj en el plano live.
   const liveData = useMemo<FloorPlanData>(() => {
     const reservedIds = new Set(reservations.map((r) => String(r.tableId)));
     if (reservedIds.size === 0) return data;
@@ -199,7 +184,7 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
       className="flex w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900"
       style={{ height }}
     >
-      {/* ── Columna izquierda (70%): lienzo ── */}
+
       <div className="flex w-[70%] flex-col">
         <div className="border-b border-slate-200">
           <div className="flex items-center justify-between px-4 py-3">
@@ -283,7 +268,6 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
           )}
         </div>
 
-        {/* Leyenda de estados */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-200 bg-slate-50/70 px-4 py-2">
           {LEGEND_STATUSES.map((s) => (
             <span key={s} className="flex items-center gap-1.5 text-[11px] text-slate-500">
@@ -302,7 +286,6 @@ export function FloorPlanDashboard({ data, reservations, onDataChange, height = 
         </div>
       </div>
 
-      {/* ── Columna derecha (30%): reservaciones de la zona activa ── */}
       <aside className="flex w-[30%] flex-col border-l border-slate-200 bg-slate-50">
         <div className="space-y-3 border-b border-slate-200 px-4 py-3">
           <div>

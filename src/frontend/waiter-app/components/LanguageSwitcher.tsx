@@ -1,5 +1,5 @@
 'use client';
-// LanguageSwitcher — selector de idioma (cookie LOCALE, sin cambiar la URL).
+
 import { useLocale } from 'next-intl';
 import { useTransition } from 'react';
 import { Globe } from 'lucide-react';

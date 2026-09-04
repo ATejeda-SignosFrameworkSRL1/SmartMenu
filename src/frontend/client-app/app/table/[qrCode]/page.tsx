@@ -19,12 +19,9 @@ export default function TablePage() {
   const { setTableId, setCustomerName, clearCart } = useCartStore();
   const [nameInput, setNameInput] = useState('');
 
-  // Determinar si es un ID numérico o un GUID
   const isNumericId = qrCode?.startsWith('table-');
   const tableId = isNumericId && qrCode ? parseInt(qrCode.replace('table-', '')) : null;
 
-  // Al escanear el QR siempre resetear: nombre, carrito y orden activa
-  // para que cada comensal ingrese su propio nombre
   useEffect(() => {
     setCustomerName(null);
     clearCart();
@@ -67,7 +64,7 @@ export default function TablePage() {
     if (error) {
       console.error('Error al cargar mesa:', error);
       toast.error(t('notFoundToast'));
-      // Guardar el id y limpiarlo al desmontar para no redirigir tras unmount
+
       const timeoutId = setTimeout(() => router.push('/'), 3000);
       return () => clearTimeout(timeoutId);
     }
@@ -104,25 +101,22 @@ export default function TablePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in">
-        {/* Selector de idioma */}
+
         <div className="flex justify-end mb-2">
           <LanguageSwitcher />
         </div>
 
-        {/* Icono de bienvenida */}
         <div className="flex justify-center mb-6">
           <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-secondary-100 rounded-full flex items-center justify-center">
             <Store className="w-12 h-12 text-primary-600" />
           </div>
         </div>
 
-        {/* Título */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('welcome')}</h1>
           <p className="text-gray-600">SmartMenu</p>
         </div>
 
-        {/* Table Info */}
         <div className="bg-gradient-to-r from-primary-100 to-secondary-100 rounded-xl p-6 mb-6">
           <div className="text-center">
             <p className="text-gray-600 text-sm mb-1">{t('tableLabel')}</p>
@@ -139,7 +133,6 @@ export default function TablePage() {
           </div>
         </div>
 
-        {/* Status */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -147,7 +140,6 @@ export default function TablePage() {
           </div>
         </div>
 
-        {/* Siempre pedir nombre — cada comensal debe identificarse */}
         {table ? (
           <form onSubmit={handleSubmitName} className="space-y-4">
             <div className="flex items-center justify-center gap-2 text-gray-700 mb-2">

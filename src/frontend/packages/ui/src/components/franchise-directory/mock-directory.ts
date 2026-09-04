@@ -1,8 +1,6 @@
-// Mock del marketplace: categorias de comida + 5 franquicias de un mismo dueno con sus
-// menus. dishId/restaurantId simulan las FKs reales (Dish → Category → Menu.RestaurantId).
+
 import type { DirectoryDish, FoodCategory, FranchiseSummary } from "./types";
 
-/** Grilla completa del modal "Ver todas"; el carrusel muestra las primeras ~10. */
 export const MOCK_FOOD_CATEGORIES: FoodCategory[] = [
   { slug: "pollo",      name: "Pollo",                 emoji: "🍗" },
   { slug: "carnes",     name: "Carnes",                emoji: "🥩" },
@@ -30,26 +28,26 @@ export const MOCK_FRANCHISES: FranchiseSummary[] = [
 ];
 
 export const MOCK_DIRECTORY_DISHES: DirectoryDish[] = [
-  // ── La Parrilla Criolla (1) ──
+
   { dishId: 101, restaurantId: 1, category: "Cortes",    name: "Ribeye Premium 12oz",      description: "Madurado 28 dias, termino a eleccion",     price: 985, bestSeller: true },
   { dishId: 102, restaurantId: 1, category: "Cortes",    name: "Churrasco 10oz",           description: "Con chimichurri de la casa",               price: 745 },
   { dishId: 103, restaurantId: 1, category: "Criollos",  name: "Pollo Marsala",            description: "Salsa de vino y champinones",              price: 485, bestSeller: true },
   { dishId: 105, restaurantId: 1, category: "Criollos",  name: "Mofongo con Chicharron",   description: "Platano majado, ajo, chicharron crujiente", price: 395 },
   { dishId: 104, restaurantId: 1, category: "Bebidas",   name: "Jugo de Chinola",          description: "Natural, sin azucar anadida",              price: 105 },
-  // ── Sushi Kai (2) ──
+
   { dishId: 201, restaurantId: 2, category: "Rolls",     name: "Roll Acevichado",          description: "Langostino, aguacate, salsa acevichada",   price: 495, bestSeller: true },
   { dishId: 202, restaurantId: 2, category: "Rolls",     name: "Dragon Roll",              description: "Anguila, pepino, tobiko",                  price: 545 },
   { dishId: 203, restaurantId: 2, category: "Nigiri",    name: "Combo Nigiri (12 pzas)",   description: "Seleccion del itamae",                     price: 990 },
   { dishId: 204, restaurantId: 2, category: "Entradas",  name: "Gyozas de Cerdo",          description: "5 piezas, salsa ponzu",                    price: 250 },
-  // ── Pizza Nostra (3) ──
+
   { dishId: 301, restaurantId: 3, category: "Pizzas",    name: "Margherita Familiar",      description: "San Marzano, fior di latte, albahaca",     price: 640, bestSeller: true },
   { dishId: 302, restaurantId: 3, category: "Pizzas",    name: "Pepperoni Personal",       description: "Doble pepperoni, oregano",                 price: 255 },
   { dishId: 303, restaurantId: 3, category: "Calzones",  name: "Calzone de Jamon",         description: "Ricotta, mozzarella, jamon serrano",       price: 300 },
-  // ── Verde Vivo (4) ──
+
   { dishId: 401, restaurantId: 4, category: "Bowls",     name: "Bowl Mediterraneo",        description: "Quinoa, falafel, hummus, tahini",          price: 425, bestSeller: true },
   { dishId: 402, restaurantId: 4, category: "Ensaladas", name: "Cesar con Pollo",          description: "Aderezo casero, crutones de masa madre",   price: 395 },
   { dishId: 403, restaurantId: 4, category: "Jugos",     name: "Green Detox",              description: "Pepino, apio, manzana verde, jengibre",    price: 185 },
-  // ── Dulce Alma (5) ──
+
   { dishId: 501, restaurantId: 5, category: "Postres",   name: "Tres Leches de la Casa",   description: "Receta de la abuela",                      price: 225, bestSeller: true },
   { dishId: 502, restaurantId: 5, category: "Postres",   name: "Copa de Helado Artesanal", description: "3 bolas, toppings a eleccion",             price: 265 },
   { dishId: 503, restaurantId: 5, category: "Cafe",      name: "Cappuccino Doble",         description: "Grano dominicano de altura",               price: 165 },

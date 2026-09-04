@@ -9,8 +9,7 @@ import toast from 'react-hot-toast';
 const DRINK_KEYWORDS = ['cerveza', 'vino', 'cóctel', 'refresco', 'agua', 'cafe', 'té', 'bebida', 'margarita', 'ron', 'whisky', 'colada', 'piña colada', 'mojito', 'daiquiri', 'soda', 'jugo', 'limonada', 'batido', 'smoothie', 'copa', 'trago', 'coca', 'pepsi'];
 function isDrinkItem(dishName: string): boolean {
   const name = (dishName || '').toLowerCase();
-  // Match por PALABRA completa (con plurales), no substring: 'agua' no debe matchear
-  // 'aguacate' ni 'ron' a 'macarrones'. Mantener en sync con KDS/waiter/admin y backend.
+
   const words = new Set(name.split(/[^a-záéíóúüñ]+/).filter(Boolean));
   return DRINK_KEYWORDS.some((k) =>
     k.includes(' ') ? name.includes(k) : words.has(k) || words.has(k + 's') || words.has(k + 'es')
@@ -35,7 +34,7 @@ export default function OrderStatusPage() {
     queryKey: ['order', orderId],
     queryFn: () => apiClient.getOrder(orderId!),
     enabled: !!orderId,
-    refetchInterval: 5000, // Actualizar cada 5 segundos
+    refetchInterval: 5000,
   });
 
   const handleCancel = async () => {
@@ -59,8 +58,7 @@ export default function OrderStatusPage() {
 
   const order = orderData?.data;
   const items = order?.items ?? [];
-  // FASE 2 RUTEO — el flag isDrink del backend (zona del plato) manda; el matcher
-  // por nombre queda como fallback para payloads sin el campo.
+
   const itemIsDrink = (item: any): boolean => {
     const flag = item?.isDrink ?? item?.IsDrink;
     return typeof flag === 'boolean' ? flag : isDrinkItem(item?.dishName ?? item?.DishName ?? '');
@@ -71,7 +69,6 @@ export default function OrderStatusPage() {
   const hasFood = kitchenItems.length > 0;
   const hasBar  = barItems.length > 0;
 
-  // Default: si solo hay bebidas → arrancar en 'bar', si no → 'general'
   const [statusView, setStatusView] = useState<'general' | 'bar'>(() =>
     !hasFood && hasBar ? 'bar' : 'general'
   );
@@ -82,15 +79,13 @@ export default function OrderStatusPage() {
   const barPreparing     = order?.barPreparing     ?? order?.BarPreparing     ?? false;
   const barServed        = order?.barServed        ?? order?.BarServed        ?? false;
 
-  // Sincronizar vista cuando cambien los ítems
   useEffect(() => {
     if (!hasBar && statusView === 'bar') setStatusView('general');
     if (!hasFood && hasBar && statusView === 'general') setStatusView('bar');
-    // Cocina terminó pero el bar sigue pendiente → enfocar la bebida automáticamente
+
     if (hasBar && !barServed && kitchenServed && statusView === 'general') setStatusView('bar');
   }, [hasFood, hasBar, kitchenServed, barServed, statusView]);
 
-  // Redirect to served page when order is served
   useEffect(() => {
     if (order && order.status === 'Served') {
       router.push(`/order-served/${orderId}`);
@@ -101,21 +96,19 @@ export default function OrderStatusPage() {
     ? statusSteps.findIndex((step) => step.status === order.status)
     : -1;
 
-  // Step general: el más avanzado entre status global y progreso real de cocina/bar
   const derivedGeneralStep = (() => {
     if (!order) return -1;
     const globalStep = currentStepIndex >= 0 ? currentStepIndex : 0;
-    // Servida completa: todas las partes servidas
+
     const allServed = (!hasFood || kitchenServed) && (!hasBar || barServed);
     if (allServed) return 4;
-    // Lista: al menos una parte lista
+
     if (kitchenReady || barReady) return 3;
-    // Preparando: al menos una parte preparando
+
     if (kitchenPreparing || barPreparing) return 2;
     return globalStep;
   })();
 
-  // Para la vista Bar: 0 Pendiente, 1 Confirmada, 2 Preparando, 3 Lista, 4 Servida
   const barStepIndex =
     order?.status === 'Served' || barServed
       ? 4
@@ -129,7 +122,6 @@ export default function OrderStatusPage() {
 
   const displayStepIndex = statusView === 'bar' ? barStepIndex : derivedGeneralStep;
 
-  // Etiqueta descriptiva para el estado actual
   const getGeneralLabel = () => {
     if (!order) return '';
     if (derivedGeneralStep >= 4) return 'Servida';
@@ -148,17 +140,15 @@ export default function OrderStatusPage() {
 
   const getTimeElapsed = () => {
     if (!order?.createdAt) return 0;
-    // Forzar interpretación UTC (el servidor devuelve sin 'Z')
+
     const utcStr = !order.createdAt.endsWith('Z') ? order.createdAt + 'Z' : order.createdAt;
     return Math.floor((new Date().getTime() - new Date(utcStr).getTime()) / 60000);
   };
 
-  // Mostrar "Solicitar Cuenta" cuando cocina sirvió (aunque bar aún no)
   const canRequestBill =
     order?.status === 'Served' ||
     (kitchenServed && (!hasBar || barServed)) ||
     (barServed && (!hasFood || kitchenServed));
-
 
   if (isLoading) {
     return (
@@ -190,7 +180,7 @@ export default function OrderStatusPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
+
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -199,7 +189,6 @@ export default function OrderStatusPage() {
             <p className="text-2xl font-bold text-primary-600">Pedido #{(order.orderNumber ?? '').split('-').pop()?.toUpperCase()}</p>
             <p className="text-gray-600 mt-2">Mesa {order.tableId}</p>
 
-            {/* Cancelar orden — solo antes de que la cocina empiece (Pending o Confirmed) */}
             {(order.status === 'Pending' || order.status === 'Confirmed') && (
               <button
                 onClick={handleCancel}
@@ -211,7 +200,6 @@ export default function OrderStatusPage() {
               </button>
             )}
 
-            {/* Selector debajo de #ORD: ver orden general o orden bar (5 estados) */}
             <div className="flex justify-center gap-2 mt-4">
               <button
                 type="button"
@@ -246,10 +234,9 @@ export default function OrderStatusPage() {
             </div>
           </div>
 
-          {/* Progress Steps (general o bar según statusView) */}
           <div className="mb-8">
             <div className="flex justify-between items-center relative">
-              {/* Progress Line */}
+
               <div className="absolute left-0 right-0 h-1 bg-gray-200 top-1/2 -translate-y-1/2 -z-10">
                 <div
                   className="h-full bg-primary-600 transition-all duration-500"
@@ -259,7 +246,6 @@ export default function OrderStatusPage() {
                 />
               </div>
 
-              {/* Steps */}
               {statusSteps.map((step, index) => {
                 const Icon = step.icon;
                 const isActive = index <= displayStepIndex;
@@ -294,7 +280,6 @@ export default function OrderStatusPage() {
             </div>
           </div>
 
-          {/* Current Status (general o bar) */}
           <div className="bg-gradient-to-r from-primary-100 to-secondary-100 rounded-xl p-6 text-center">
             <p className="text-gray-700 text-sm mb-1">
               {statusView === 'bar' ? 'Estado orden bar:' : 'Estado Actual:'}
@@ -319,7 +304,6 @@ export default function OrderStatusPage() {
           </div>
         </div>
 
-        {/* Cocina: como una orden aparte */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <ChefHat className="w-6 h-6 text-amber-600" />
@@ -354,7 +338,6 @@ export default function OrderStatusPage() {
           </div>
         </div>
 
-        {/* Bar: como una orden aparte */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <Wine className="w-6 h-6 text-sky-600" />
@@ -389,7 +372,6 @@ export default function OrderStatusPage() {
           </div>
         </div>
 
-        {/* Desglose de la orden */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <h2 className="text-lg font-bold text-gray-900 mb-5 border-b pb-3">Resumen de Cobro</h2>
           <div className="space-y-3 text-sm">
@@ -432,8 +414,6 @@ export default function OrderStatusPage() {
           </div>
         </div>
 
-
-        {/* Actions */}
         <div className="flex gap-4">
           <button
             onClick={() => router.push(`/menu?activeOrder=${order.id}`)}
